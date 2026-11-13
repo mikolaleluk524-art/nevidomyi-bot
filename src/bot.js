@@ -289,7 +289,7 @@ const kbAge = {
 };
 
 export async function tg(method, body) {
-  const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+  const res = await fetch(`https://api.telegram.org/bot\( {BOT_TOKEN}/ \){method}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body ?? {}),
@@ -328,7 +328,7 @@ async function send(chatId, text, reply_markup) {
 async function downloadFile(fileId) {
   const file = await tg("getFile", { file_id: fileId });
   if (!file.file_path || (file.file_size ?? 0) > 8_000_000) throw new Error("photo too large");
-  const res = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`, {
+  const res = await fetch(`https://api.telegram.org/file/bot\( {BOT_TOKEN}/ \){file.file_path}`, {
     signal: AbortSignal.timeout(20_000),
   });
   if (!res.ok) throw new Error("photo download");
@@ -350,7 +350,7 @@ async function sendPhoto(chatId, bytes, caption) {
 
 const exec = promisify(execFile);
 async function shrink(raw) {
-  const stamp = `${Date.now()}-${code(6)}`;
+  const stamp = `\( {Date.now()}- \){code(6)}`;
   const input = `/tmp/nv-in-${stamp}`;
   const output = `/tmp/nv-out-${stamp}.jpg`;
   await writeFile(input, raw);
@@ -432,7 +432,7 @@ async function sendMatch(to, body, bytes, premium) {
     return;
   }
   const locked = bytes?.length ? "\nФото є. Його видно лише з Premium." : "";
-  await send(to, `${body}${locked}\n\nПиши. «Наступний» шукає іншу анкету.`, menuKb());
+  await send(to, `\( {body} \){locked}\n\nПиши. «Наступний» шукає іншу анкету.`, menuKb());
 }
 
 function photoOf(userId) {
@@ -538,9 +538,9 @@ async function enqueue(id, mode) {
       const theirs = one("select * from users where id = ?", result.other);
       const intro = "Знайомство за анкетою. Ім’я, юзернейм і номер не передаю.\n\n";
       const line = (c) => `Стать: ${c?.gender ?? "—"}\nВік: ${c?.profile_age ?? "—"}\nМісто: ${c?.city ?? "—"}\nЦіль: ${c?.aim ?? "—"}`;
-      await sendMatch(id, `${intro}${line(theirs)}`, photoOf(result.other), premiumActive(mine?.premium_until));
+      await sendMatch(id, `\( {intro} \){line(theirs)}`, photoOf(result.other), premiumActive(mine?.premium_until));
       try {
-        await sendMatch(result.other, `${intro}${line(mine)}`, photoOf(id), premiumActive(theirs?.premium_until));
+        await sendMatch(result.other, `\( {intro} \){line(mine)}`, photoOf(id), premiumActive(theirs?.premium_until));
       } catch (err) {
         if (isGone(err)) await disconnect(id, "gone");
       }
@@ -606,7 +606,4 @@ async function disconnect(id, mode) {
       try {
         await showLobby(outcome.partner, "Співрозмовник завершив діалог.");
       } catch (err) {
-        if (!isGone(err)) console.error("[bot] notify", err.message);
-      }
-    }
-   
+        if (!isGone(err)) console.error("[bot] notify", err.mes
