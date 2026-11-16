@@ -1,6 +1,6 @@
 /**
  * Запуск бота 24/7. Логіка чату в src/bot.js.
- * Railway: один інстанс, том на DATA_DIR, команда node index.js
+ * Railway: один інстанс, том на DATA_DIR, команда node --experimental-sqlite index.js.
  */
 import { createServer } from "node:http";
 import { readFileSync, writeFileSync } from "node:fs";
