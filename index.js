@@ -92,19 +92,16 @@ function listen() {
       return;
     }
 
-    // Дашборд на головній
     if (req.url === "/" || req.url === "/admin" || req.url === "/admin/") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       res.end(DASHBOARD);
       return;
     }
 
-    // Адмін API
     if (req.url.startsWith("/admin/")) {
       if (adminRoutes(req, res)) return;
     }
 
-    // Health
     const fresh = Date.now() - beat < 90_000;
     res.writeHead(fresh ? 200 : 503, { "content-type": "text/plain; charset=utf-8" });
     res.end(fresh ? "ok" : "poll stalled");
@@ -124,8 +121,14 @@ async function main() {
   process.on("SIGTERM", stop);
   process.on("SIGINT", stop);
 
-  await tg("deleteWebhook", { drop_pending_updates: false });
-  try { await publishCommands(); } catch (err) {
+  try {
+    await tg("deleteWebhook", { drop_pending_updates: false });
+  } catch (err) {
+    console.error("[bot] deleteWebhook", err.message);
+  }
+  try {
+    await publishCommands();
+  } catch (err) {
     console.error("[bot] commands", err.message);
   }
   try {
