@@ -9,6 +9,7 @@
 import { createServer } from "node:http";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   backupDatabase,
   BOT_USERNAME,
@@ -19,6 +20,8 @@ import {
   tg,
 } from "./src/bot.js";
 import { adminRoutes } from "./admin.js";
+
+const DASHBOARD = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "dashboard.html"), "utf8");
 
 let beat = Date.now();
 let generation = 0;
@@ -81,12 +84,18 @@ function armWatchdog() {
 function listen() {
   const port = Number(process.env.PORT || 8080);
   createServer((req, res) => {
-    // CORS для дашборду
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Headers", "X-Admin-Key, Content-Type");
     if (req.method === "OPTIONS") {
       res.writeHead(204);
       res.end();
+      return;
+    }
+
+    // Дашборд на головній
+    if (req.url === "/" || req.url === "/admin" || req.url === "/admin/") {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(DASHBOARD);
       return;
     }
 
