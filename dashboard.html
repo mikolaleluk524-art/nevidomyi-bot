@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>НЕВІДОМИЙ — Адмін</title>
+<style>
+:root{--bg:#0c0b0a;--card:#161412;--border:#2a2622;--text:#f5f0ea;--muted:#a89f94;--accent:#d4a574;--ok:#6b9e78;--bad:#c45c4a}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);background:#0c0b0acc;position:sticky;top:0}
+.logo{display:flex;align-items:center;gap:10px}
+.logo h1{font-size:20px}
+.logo span{font-size:11px;color:var(--muted)}
+.stats{display:flex;gap:18px;font-size:13px}
+.stats .n{font-size:18px;font-weight:600;color:var(--accent)}
+.stats .l{font-size:10px;color:var(--muted);text-transform:uppercase}
+main{padding:18px 16px;max-width:1200px;margin:0 auto}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.kpi .v{font-size:22px;font-weight:600;margin:2px 0}
+.kpi .l{font-size:10px;color:var(--muted);text-transform:uppercase}
+.grid{display:grid;grid-template-columns:1fr;gap:12px}
+@media(min-width:800px){.grid{grid-template-columns:1.2fr 1fr}}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.ch{padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;font-weight:500}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;padding:6px 10px;color:var(--muted);font-size:10px;text-transform:uppercase}
+td{padding:8px 10px;border-top:1px solid #2a262244}
+.badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px}
+.bm{background:#1a3a5c;color:#7eb8e8}.bf{background:#5c2a3a;color:#e87eb0}.bp{background:#d4a57422;color:var(--accent)}
+.cfg{background:#1a1816;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:14px}
+.cfg input{background:#0c0b0a;border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:6px;width:100%;max-width:260px;margin:4px 6px 4px 0}
+.cfg button{background:var(--accent);color:#000;border:none;padding:7px 12px;border-radius:6px;font-weight:600;cursor:pointer}
+#st{margin-left:8px;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><div style="font-size:22px">🎭</div><div><h1>НЕВІДОМИЙ</h1><span>Адмін-панель</span></div></div>
+  <div class="stats">
+    <div><div class="n" id="ho">—</div><div class="l">онлайн</div></div>
+    <div><div class="n" id="hc">—</div><div class="l">діалогів</div></div>
+    <div><div class="n" id="hs">—</div><div class="l">пошук</div></div>
+  </div>
+</header>
+<main>
+  <div class="cfg">
+    Ключ: <input id="key" type="password" placeholder="ADMIN_KEY" />
+    <button onclick="go()">Оновити</button>
+    <span id="st"></span>
+  </div>
+  <div class="kpis">
+    <div class="kpi"><div class="l">Онлайн</div><div class="v" id="ko">—</div></div>
+    <div class="kpi"><div class="l">В діалозі</div><div class="v" id="kc">—</div></div>
+    <div class="kpi"><div class="l">В пошуку</div><div class="v" id="ks">—</div></div>
+    <div class="kpi"><div class="l">Premium</div><div class="v" id="kp">—</div></div>
+    <div class="kpi"><div class="l">Бани</div><div class="v" id="kb">—</div></div>
+    <div class="kpi"><div class="l">Всього</div><div class="v" id="kt">—</div></div>
+  </div>
+  <div class="grid">
+    <div class="card"><div class="ch">Діалоги</div><table><thead><tr><th>1</th><th>2</th></tr></thead><tbody id="tb-d"></tbody></table></div>
+    <div class="card"><div class="ch">Черга</div><table><thead><tr><th>ID</th><th>Стать</th><th>Вік</th><th>Місто</th></tr></thead><tbody id="tb-q"></tbody></table></div>
+  </div>
+  <div class="grid" style="margin-top:12px">
+    <div class="card"><div class="ch">Платежі</div><table><thead><tr><th>Юзер</th><th>Stars</th><th>Тип</th></tr></thead><tbody id="tb-p"></tbody></table></div>
+    <div class="card"><div class="ch">Скарги</div><table><thead><tr><th>Від</th><th>На</th><th>Час</th></tr></thead><tbody id="tb-r"></tbody></table></div>
+  </div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let KEY=localStorage.getItem("nvk")||"";
+if(KEY)$("key").value=KEY;
+function g(g){if(!g)return"";const m=/чол|male|^m/i.test(g);return `<span class="badge \( {m?"bm":"bf"}"> \){m?"ч":"ж"}</span>`}
+function p(u){return u&&u>Date.now()/1000?' <span class="badge bp">P</span>':""}
+async function api(p){
+  const r=await fetch(p,{headers:{"X-Admin-Key":KEY}});
+  const t=await r.text();
+  if(!r.ok)throw new Error(r.status+" "+t.slice(0,100));
+  return JSON.parse(t);
+}
+async function go(){
+  KEY=$("key").value.trim();
+  localStorage.setItem("nvk",KEY);
+  $("st").textContent="...";
+  try{
+    const [s,d,q,p,r]=await Promise.all([api("/admin/stats"),api("/admin/dialogs"),api("/admin/queue"),api("/admin/payments"),api("/admin/reports")]);
+    \( ("ho").textContent= \)("ko").textContent=s.online;
+    \( ("hc").textContent= \)("kc").textContent=s.inChat;
+    \( ("hs").textContent= \)("ks").textContent=s.inSearch;
+    $("kp").textContent=s.premium;
+    $("kb").textContent=s.banned;
+    $("kt").textContent=s.total;
+    \( ("tb-d").innerHTML=d.map(x=>`<tr><td>… \){x.user1_id.slice(-6)} \( {g(x.user1_gender)} \){p(x.user1_premium)}</td><td>…${x.user2_id.slice(-6)} \( {g(x.user2_gender)} \){p(x.user2_premium)}</td></tr>`).join("")||"<tr><td colspan=2>—</td></tr>";
+    \( ("tb-q").innerHTML=q.map(x=>`<tr><td>… \){x.id.slice(-6)}\( {p(x.premium_until)}</td><td> \){g(x.gender)}</td><td>\( {x.profile_age||"—"}</td><td> \){x.city||"—"}</td></tr>`).join("")||"<tr><td colspan=4>—</td></tr>";
+    \( ("tb-p").innerHTML=p.slice(0,12).map(x=>`<tr><td>… \){(x.user_id||"").slice(-6)} \( {g(x.gender)}</td><td> \){x.stars}</td><td>${x.payload||""}</td></tr>`).join("")||"<tr><td colspan=3>—</td></tr>";
+    \( ("tb-r").innerHTML=r.slice(0,12).map(x=>`<tr><td>… \){x.reporter_id.slice(-6)}</td><td>…\( {x.target_id.slice(-6)}</td><td> \){new Date(x.created_at*1000).toLocaleTimeString("uk")}</td></tr>`).join("")||"<tr><td colspan=3>—</td></tr>";
+    $("st").textContent="ок";
+    $("st").style.color="var(--ok)";
+  }catch(e){
+    $("st").textContent=e.message;
+    $("st").style.color="var(--bad)";
+  }
+}
+if(KEY)go();
+setInterval(()=>{if(KEY)go()},10000);
+</script>
+</body>
+</html>
