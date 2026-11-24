@@ -1,7 +1,11 @@
 /**
- * Запуск бота 24/7. Логіка чату в src/bot.js.
- * Railway: один інстанс, том на DATA_DIR, команда node --experimental-sqlite index.js.
+ * Запуск бота 24/7 + адмін API.
+ * Railway: один інстанс, том на DATA_DIR, команда node --experimental-sqlite index.js
+ *
+ * Змінні:
+ *   ADMIN_KEY — секрет для X-Admin-Key
  */
+
 import { createServer } from "node:http";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -14,6 +18,7 @@ import {
   publishCommands,
   tg,
 } from "./src/bot.js";
+import { adminRoutes } from "./admin.js";
 
 let beat = Date.now();
 let generation = 0;
@@ -42,12 +47,10 @@ async function loop(gen) {
       for (const update of updates) {
         try {
           await handleUpdate(update);
-          // offset рухаємо лише після успішної обробки
           offset = update.update_id + 1;
           saveOffset();
         } catch (err) {
           console.error("[bot] update", err.message);
-          // не рухаємо offset — Telegram надішле цей update ще раз
         }
       }
     } catch (err) {
@@ -78,20 +81,33 @@ function armWatchdog() {
 function listen() {
   const port = Number(process.env.PORT || 8080);
   createServer((req, res) => {
+    // CORS для дашборду
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Headers", "X-Admin-Key, Content-Type");
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    // Адмін API
+    if (req.url.startsWith("/admin/")) {
+      if (adminRoutes(req, res)) return;
+    }
+
+    // Health
     const fresh = Date.now() - beat < 90_000;
     res.writeHead(fresh ? 200 : 503, { "content-type": "text/plain; charset=utf-8" });
     res.end(fresh ? "ok" : "poll stalled");
   }).listen(port, "0.0.0.0", () => {
-    console.info(`[bot] health :${port}`);
+    console.info(`[bot] health + admin :${port}`);
   });
 }
 
 async function main() {
   listen();
   const stop = () => {
-    try {
-      checkpoint();
-    } catch (err) {
+    try { checkpoint(); } catch (err) {
       console.error("[bot] checkpoint", err.message);
     }
     process.exit(0);
@@ -100,9 +116,7 @@ async function main() {
   process.on("SIGINT", stop);
 
   await tg("deleteWebhook", { drop_pending_updates: false });
-  try {
-    await publishCommands();
-  } catch (err) {
+  try { await publishCommands(); } catch (err) {
     console.error("[bot] commands", err.message);
   }
   try {
