@@ -6,6 +6,7 @@ import { mkdirSync, readdirSync, statSync, unlinkSync, copyFileSync, existsSync 
 import { readFile, writeFile, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { L, LANGS, LANG_NAMES, guessLang, localizeMarkup, toUk } from "./i18n.js";
 
 // Секрети — лише зі змінних середовища, не в коді.
 // trim(): пробіл чи перенос рядка, скопійований разом із токеном, Telegram API
@@ -39,6 +40,7 @@ const BTN = {
   report: "⚠️ Поскаржитись",
   rules: "📜 Правила",
   help: "❓ Допомога",
+  lang: "🌐 Мова",
 };
 
 const ACTIONS = {
@@ -54,11 +56,19 @@ const ACTIONS = {
   [BTN.report]: "report",
   [BTN.rules]: "rules",
   [BTN.help]: "help",
+  [BTN.lang]: "language",
   "Шукати співрозмовника": "search",
   "Скасувати пошук": "stop",
   Наступний: "next",
   Зупинити: "stop",
 };
+
+// Ті самі кнопки іншими мовами.
+for (const [key, label] of Object.entries(BTN)) {
+  for (const lang of LANGS) ACTIONS[L(lang, label)] = key === "lang" ? "language" : key;
+}
+// Відповіді кнопками під час анкети: переклад → український оригінал, який зберігаємо в базі.
+const CHOICE_WORDS = ["Чоловік", "Жінка", "Інше", "Спілкування", "Дружба", "Стосунки", "Флірт", "Без фото"];
 
 const PLANS = {
   search: { stars: 1, searches: 1, title: "Пошук за анкетою", label: "1 пошук за анкетою" },
@@ -163,6 +173,8 @@ function newestGoodBackup() { return backupFiles().find(f => isHealthy(f.path))?
 function openDatabase() {
   const next = new DatabaseSync(DB_PATH);
   next.exec(SCHEMA);
+  // Міграція: обрана мова (uk, ru, en). Порожня — беремо з налаштувань Telegram.
+  if (!next.prepare("pragma table_info(users)").all().some((c) => c.name === "lang")) next.exec("alter table users add column lang text");
   return next;
 }
 function installCopy(src) {
@@ -227,7 +239,7 @@ function menuKb() {
       [{ text: BTN.photo }],
       [{ text: BTN.profile }, { text: BTN.premium }],
       [{ text: BTN.invite }, { text: BTN.report }],
-      [{ text: BTN.rules }, { text: BTN.help }],
+      [{ text: BTN.rules }, { text: BTN.help }, { text: BTN.lang }],
     ],
     resize_keyboard: true,
     is_persistent: true,
@@ -270,8 +282,16 @@ async function tgRetry(method, body) {
     }
   }
 }
+// Мова користувача: обрана, інакше з налаштувань Telegram.
+export function langOf(id) {
+  const row = one("select lang, language_code from users where id = ?", String(id));
+  return LANGS.includes(row?.lang) ? row.lang : guessLang(row?.language_code);
+}
+export const tr = (id, text) => L(langOf(id), text);
+
 async function send(chatId, text, reply_markup) {
-  await tgRetry("sendMessage", { chat_id: chatId, text, reply_markup: reply_markup ?? menuKb() });
+  const lang = langOf(chatId);
+  await tgRetry("sendMessage", { chat_id: chatId, text: L(lang, text), reply_markup: localizeMarkup(lang, reply_markup ?? menuKb()) });
 }
 async function downloadFile(fileId) {
   const file = await tg("getFile", { file_id: fileId });
@@ -283,7 +303,7 @@ async function downloadFile(fileId) {
 async function sendPhoto(chatId, bytes, caption) {
   const form = new FormData();
   form.set("chat_id", String(chatId));
-  form.set("caption", caption.slice(0, 1000));
+  form.set("caption", tr(chatId, caption).slice(0, 1000));
   form.set("photo", new Blob([bytes], { type: "image/jpeg" }), "photo.jpg");
   const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, { method: "POST", body: form, signal: AbortSignal.timeout(20_000) });
   const data = await res.json();
@@ -500,12 +520,12 @@ async function sendInvoice(id, planId) {
   if (!plan) return;
   const invoice = {
     chat_id: id,
-    title: plan.title,
-    description: "subscribe" in plan ? "Чат знайомств на 30 днів. Далі Telegram спише 1000⭐ знову, поки не скасуєш підписку." : `${plan.label} за ${plan.stars}⭐. Оплата зірками Telegram.`,
+    title: tr(id, plan.title),
+    description: tr(id, "subscribe" in plan ? "Чат знайомств на 30 днів. Далі Telegram спише 1000⭐ знову, поки не скасуєш підписку." : `${plan.label} за ${plan.stars}⭐. Оплата зірками Telegram.`),
     payload: `prem:${plan.id}`,
     currency: "XTR",
     provider_token: "",
-    prices: [{ label: plan.label, amount: plan.stars }],
+    prices: [{ label: tr(id, plan.label), amount: plan.stars }],
   };
   if ("subscribe" in plan) invoice.subscription_period = 2592000;
   await tg("sendInvoice", invoice);
@@ -514,7 +534,7 @@ async function sendInvoice(id, planId) {
 async function onPreCheckout(query) {
   const plan = planOf(query.invoice_payload);
   const ok = Boolean(plan && query.currency === "XTR" && query.total_amount === plan.stars);
-  await tg("answerPreCheckoutQuery", { pre_checkout_query_id: query.id, ok, error_message: ok ? undefined : "Тариф змінився. Відкрий Premium ще раз." });
+  await tg("answerPreCheckoutQuery", { pre_checkout_query_id: query.id, ok, error_message: ok ? undefined : tr(query.from.id, "Тариф змінився. Відкрий Premium ще раз.") });
 }
 
 async function onPaid(id, pay) {
@@ -544,13 +564,15 @@ async function onPaid(id, pay) {
 async function showInvite(id) {
   const p = one("select * from users where id = ?", id);
   const invites = one("select count(*) as n from users where invited_by = ?", id);
-  await send(id, `Надішли другу це посилання:\nhttps://t.me/${BOT_USERNAME}?start=${p?.invite_code ?? ""}\n\nУже запросили: ${invites?.n ?? 0}\nЗа кожного друга — 3 години Premium.`);
+  const link = `https://t.me/${BOT_USERNAME}?start=${p?.invite_code ?? ""}`;
+  const share = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(tr(id, "Анонімний чат і гра в бутилочку з подарунками. Заходь 👉"))}`;
+  await send(id, `Надішли другу це посилання:\n${link}\n\nУже запросили: ${invites?.n ?? 0}\nЗа кожного друга — 3 години Premium.`, { inline_keyboard: [[{ text: "📨 Поділитися посиланням", url: share }]] });
 }
 async function showRules(id) {
   await send(id, "📜 Правила\n• Лише 18+.\n• Не надсилай контакти, адресу, документи і посилання на свої профілі.\n• Не ображай співрозмовника.\n• «Завершити діалог» або /stop зупиняє розмову.\n• «Наступний» шукає іншу людину.\n• Скарга — кнопка під час діалогу.");
 }
 async function showHelp(id) {
-  await send(id, "❓ Допомога\n🔍 Знайти — випадково безкоштовно або за анкетою з Premium\n⏭ Наступний — інша людина\n⛔ Завершити діалог — вийти\n📝 Заповнити анкету — ім’я, стать, вік, місто, ціль\n📷 Завантажити фото — скріпка, видно лише з Premium\n👤 Мій профіль — що вже збережено\n💎 Premium — зірки за пошук за анкетою\n🎁 Запросити друзів — 3 години Premium\n⚠️ Поскаржитись — лише в діалозі\n📜 Правила\n\n/myid — твій Telegram ID\n/stopnews — без новин\n/startnews — знову новини");
+  await send(id, "❓ Допомога\n🍾 Гра в бутилочку — гра за столом із подарунками\n🔍 Знайти — випадково безкоштовно або за анкетою з Premium\n⏭ Наступний — інша людина\n⛔ Завершити діалог — вийти\n📝 Заповнити анкету — ім’я, стать, вік, місто, ціль\n📷 Завантажити фото — скріпка, видно лише з Premium\n👤 Мій профіль — що вже збережено\n💎 Premium — зірки за пошук за анкетою\n🎁 Запросити друзів — 3 години Premium\n⚠️ Поскаржитись — лише в діалозі\n📜 Правила\n🌐 Мова — українська, русский, English\n\n/myid — твій Telegram ID\n/stopnews — без новин\n/startnews — знову новини");
 }
 
 async function startForm(id) {
@@ -673,7 +695,7 @@ async function savePending(id, pending, text) {
   if (pending === "city" || pending === "look_city") {
     let value = text.trim().slice(0, 40);
     if (!value) return send(id, "Напиши назву міста.");
-    if (pending === "look_city" && (value === "." || value.toLowerCase() === "моє" || value.toLowerCase() === "мое")) {
+    if (pending === "look_city" && (value === "." || ["моє", "мое", "my"].includes(value.toLowerCase()))) {
       value = (one("select city from users where id = ?", id)?.city ?? "").trim();
       if (!value) return send(id, "Спочатку напиши своє місто.");
     }
@@ -773,10 +795,10 @@ async function acceptMeet(id, req, yes) {
 
 async function broadcast(adminChat, text) {
   const rows = q("select id from users where adult = 1 and banned = 0 and id not in (select id from optout)");
-  const footer = "\n\nЩоб відписатись від новин: /stopnews";
-  const full = text.slice(0, 4096 - footer.length) + footer; // футер не обрізається
   let sent = 0, blocked = 0, failed = 0;
   for (const row of rows) {
+    const footer = "\n\n" + tr(row.id, "Щоб відписатись від новин: /stopnews");
+    const full = text.slice(0, 4096 - footer.length) + footer; // футер не обрізається
     try { await tgRetry("sendMessage", { chat_id: row.id, text: full }); sent++; }
     catch (err) { if (isGone(err)) blocked++; else failed++; }
     await new Promise(r => setTimeout(r, 50));
@@ -792,7 +814,24 @@ async function stats(chatId) {
   await send(chatId, `Усього: ${s?.total ?? 0}\nПідтвердили 18+: ${s?.adults ?? 0}\nЗ Premium: ${s?.prem ?? 0}\nУ пошуку: ${s?.searching ?? 0}\nУ діалозі: ${s?.chatting ?? 0}\nЗаблоковані: ${s?.banned ?? 0}\nВідписані від новин: ${opt?.n ?? 0}`);
 }
 
+async function showLanguage(chatId) {
+  await send(chatId, "Обери мову / Выбери язык / Choose language", { inline_keyboard: LANGS.map((l) => [{ text: LANG_NAMES[l], callback_data: `lang:${l}` }]) });
+}
+
+async function setLanguage(id, lang, queryId) {
+  if (!LANGS.includes(lang)) return;
+  const me = ensure(id);
+  run("update users set lang = ? where id = ?", lang, id);
+  await tg("answerCallbackQuery", { callback_query_id: queryId, text: LANG_NAMES[lang] }).catch(() => {});
+  // Кнопка гри біля поля вводу — мовою користувача.
+  await tg("setChatMenuButton", { chat_id: Number(id), menu_button: { type: "web_app", text: L(lang, BTN.game), web_app: { url: GAME_URL } } }).catch(() => {});
+  if (me.banned) return send(id, "Доступ до бота обмежено.");
+  if (!me.adult) return showAge(id);
+  await showLobby(id, "Мову змінено: українська.");
+}
+
 async function onCommand(chatId, id, name, args, from) {
+  if (name === "language" || name === "lang") { ensure(id, from); return showLanguage(chatId); }
   if (name === "game") return send(chatId, "🍾 Запустити спільну гру:", { inline_keyboard: [[{ text: "ВІДКРИТИ ГРУ", web_app: { url: GAME_URL } }]] });
   run("update users set pending = null where id = ? and pending is not null", id);
   if (name !== "gender" && name !== "age") run("update users set goal = null where id = ? and goal = 'dating'", id);
@@ -832,6 +871,8 @@ async function onCommand(chatId, id, name, args, from) {
       }
     }
     if (me.banned) return send(chatId, "Доступ до бота обмежено.");
+    // Новачок спершу обирає мову.
+    if (!me.lang) return showLanguage(chatId);
     if (!me.adult) return showAge(chatId);
     if (me.status === "chat") return send(chatId, "Ти зараз у діалозі. «Завершити діалог» або /stop зупиняє його.");
     if (me.status === "search") return send(chatId, "Пошук ще триває.");
@@ -878,7 +919,7 @@ async function onText(message, id, text) {
   if (!me.adult) return showAge(id);
   const pending = one("select pending from users where id = ?", id)?.pending;
   // У діалозі текст завжди йде співрозмовнику, а не в анкету.
-  if (pending && me.status !== "chat") return savePending(id, pending, text);
+  if (pending && me.status !== "chat") return savePending(id, pending, ["form_gender", "form_aim", "form_photo", "gender"].includes(pending) ? toUk(text, CHOICE_WORDS) : text);
   if (me.status === "chat") return relay(message, id);
   if (me.status === "search") return send(id, "Пошук ще триває. «Завершити діалог» скасовує його.");
   await showLobby(id);
@@ -894,12 +935,12 @@ async function onAge(id, yes, queryId) {
   if (!yes) {
     if (me.status === "chat" || me.status === "search") await disconnect(id, "stop");
     run("update users set adult = 0, status = 'new' where id = ?", id);
-    await tg("answerCallbackQuery", { callback_query_id: queryId, text: "Бот лише для повнолітніх" });
+    await tg("answerCallbackQuery", { callback_query_id: queryId, text: tr(id, "Бот лише для повнолітніх") });
     await send(id, "Тоді цей бот не для тебе. Повертайся, коли виповниться 18.");
     return;
   }
   run("update users set adult = 1, status = 'lobby' where id = ? and status <> 'chat'", id);
-  await tg("answerCallbackQuery", { callback_query_id: queryId, text: "Вік підтверджено" });
+  await tg("answerCallbackQuery", { callback_query_id: queryId, text: tr(id, "Вік підтверджено") });
   await showLobby(id, "Вік підтверджено.");
 }
 
@@ -931,9 +972,10 @@ export async function handleUpdate(update) {
       else if (data === "age:no") await onAge(id, false, queryId);
       else if (data.startsWith("gender:")) {
         const gender = data.slice("gender:".length);
-        if (["Чоловік", "Жінка", "Інше"].includes(gender)) { ensure(id, from); await saveGender(id, gender); await tg("answerCallbackQuery", { callback_query_id: queryId, text: "Збережено" }); }
+        if (["Чоловік", "Жінка", "Інше"].includes(gender)) { ensure(id, from); await saveGender(id, gender); await tg("answerCallbackQuery", { callback_query_id: queryId, text: tr(id, "Збережено") }); }
         else await tg("answerCallbackQuery", { callback_query_id: queryId });
       }
+      else if (data.startsWith("lang:")) { ensure(id, from); await setLanguage(id, data.slice(5), queryId); }
       else if (data.startsWith("buy:")) { await tg("answerCallbackQuery", { callback_query_id: queryId }); await sendInvoice(id, data.slice(4)); }
       else if (data === "find:random") { await tg("answerCallbackQuery", { callback_query_id: queryId }); await enqueue(id, "random"); }
       else if (data === "find:dating") { await tg("answerCallbackQuery", { callback_query_id: queryId }); await startDating(id); }
@@ -978,27 +1020,37 @@ export async function handleUpdate(update) {
   } catch (err) { console.error("[bot] message", err.stack || err.message); }
 }
 
+const COMMANDS = [
+  ["start", "Почати"], ["game", "Гра в бутилочку"], ["search", "Знайти співрозмовника"], ["next", "Наступний співрозмовник"],
+  ["stop", "Завершити діалог"], ["profile", "Мій профіль"], ["form", "Заповнити анкету"], ["photo", "Завантажити фото"],
+  ["premium", "Premium"], ["invite", "Запросити друзів"], ["report", "Поскаржитись"], ["rules", "Правила"], ["help", "Допомога"],
+  ["language", "Змінити мову"], ["myid", "Мій Telegram ID"], ["stopnews", "Відписатись від новин"], ["startnews", "Знову отримувати новини"],
+];
+export const commandList = (lang) => COMMANDS.map(([command, description]) => ({ command, description: L(lang, description) }));
+
+// Опис, який люди бачать до /start і в пошуку Telegram.
+const ABOUT = {
+  uk: {
+    short: "Анонімний чат 18+ і гра в бутилочку з подарунками. Знайомся без імен і номерів.",
+    long: "Невідомий — анонімний чат для знайомств 18+.\n\n🔍 Випадковий співрозмовник — безкоштовно\n🍾 Гра в бутилочку: завдання, поцілунки, подарунки\n💞 Пошук за віком, статтю і містом\n\nСпіврозмовник не бачить твоє ім’я, юзернейм і номер.",
+  },
+  ru: {
+    short: "Анонимный чат 18+ и игра в бутылочку с подарками. Знакомься без имён и номеров.",
+    long: "Невідомий — анонимный чат для знакомств 18+.\n\n🔍 Случайный собеседник — бесплатно\n🍾 Игра в бутылочку: задания, поцелуи, подарки\n💞 Поиск по возрасту, полу и городу\n\nСобеседник не видит твоё имя, юзернейм и номер.",
+  },
+  en: {
+    short: "Anonymous 18+ chat and Spin the Bottle with gifts. Meet people without names or numbers.",
+    long: "Nevidomyi — anonymous dating chat, 18+.\n\n🔍 Random chat partner — free\n🍾 Spin the Bottle: dares, kisses, gifts\n💞 Search by age, gender and city\n\nYour partner never sees your name, username or phone number.",
+  },
+};
+
 export async function publishCommands() {
-  await tg("setMyCommands", {
-    commands: [
-      { command: "start", description: "Почати" },
-      { command: "game", description: "Гра в бутилочку" },
-      { command: "search", description: "Знайти співрозмовника" },
-      { command: "next", description: "Наступний співрозмовник" },
-      { command: "stop", description: "Завершити діалог" },
-      { command: "profile", description: "Мій профіль" },
-      { command: "form", description: "Заповнити анкету" },
-      { command: "photo", description: "Завантажити фото" },
-      { command: "premium", description: "Premium" },
-      { command: "invite", description: "Запросити друзів" },
-      { command: "report", description: "Поскаржитись" },
-      { command: "rules", description: "Правила" },
-      { command: "help", description: "Допомога" },
-      { command: "myid", description: "Мій Telegram ID" },
-      { command: "stopnews", description: "Відписатись від новин" },
-      { command: "startnews", description: "Знову отримувати новини" },
-    ],
-  });
+  for (const lang of LANGS) {
+    const scope = lang === "uk" ? {} : { language_code: lang };
+    await tg("setMyCommands", { commands: commandList(lang), ...scope });
+    await tg("setMyShortDescription", { short_description: ABOUT[lang].short, ...scope }).catch((err) => console.error("[bot] short description", err.message));
+    await tg("setMyDescription", { description: ABOUT[lang].long, ...scope }).catch((err) => console.error("[bot] description", err.message));
+  }
   await tg("setChatMenuButton", { menu_button: { type: "web_app", text: "🍾 Гра в бутилочку", web_app: { url: GAME_URL } } });
 }
 

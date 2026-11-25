@@ -12,7 +12,8 @@
 import { createHmac, createPublicKey, timingSafeEqual, verify } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { WebSocketServer, WebSocket } from "ws";
-import { BOT_TOKEN, DB_PATH, tg } from "./src/bot.js";
+import { BOT_TOKEN, BOT_USERNAME, DB_PATH, langOf, tg } from "./src/bot.js";
+import { L, guessLang } from "./src/i18n.js";
 import { GIFTS, createGiftInvoice, giftList, setGiftHooks } from "./gifts.js";
 
 const GAME_PATH = "/game";
@@ -196,7 +197,25 @@ function openDialog(a, b) {
   });
 }
 
-const send = (ws, payload) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload)); };
+// Кожен гравець отримує завдання, повідомлення й назви подарунків своєю мовою.
+// Тексти гравців (відповіді, чат) не перекладаємо.
+const fill = (lang, tpl, name) => L(lang, tpl).replaceAll("{name}", name);
+const anon = (lang, name) => (/^Анонім \d+$/.test(name) ? L(lang, name) : name);
+function localize(ws, payload) {
+  const lang = ws.lang || "uk";
+  const p = { ...payload };
+  if (p.type === "notice" && p.text) p.text = L(lang, p.text);
+  if (p.type === "error" && p.message) p.message = L(lang, p.message);
+  if (p.taskName !== undefined) { p.task = fill(lang, p.task, p.taskName); delete p.taskName; }
+  if (p.type === "table") {
+    p.players = p.players.map((x) => x && { ...x, name: anon(lang, x.name) });
+    if (p.task) p.task = { ...p.task, text: fill(lang, p.task.tpl, p.task.name) };
+  }
+  if (p.gifts) p.gifts = p.gifts.map((g) => ({ ...g, name: L(lang, g.name) }));
+  if (p.gift) p.gift = { ...p.gift, name: L(lang, p.gift.name) };
+  return p;
+}
+const send = (ws, payload) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(localize(ws, payload))); };
 const seated = (t) => t.players.filter(Boolean);
 const broadcast = (t, payload) => { for (const p of seated(t)) send(p.ws, payload); };
 const nextSeat = (t, from) => {
@@ -323,7 +342,7 @@ function onSpin(ws, msg) {
   const target = pick(opposite.length && Math.random() < 0.8 ? opposite : targets);
   const selected = CATS.includes(msg.selected) ? msg.selected : "all";
   const category = selected === "all" ? pick(CATS) : selected;
-  const task = pick(TASKS[category]).replaceAll("{name}", me.name);
+  const tpl = pick(TASKS[category]);
   clearTimeout(t.timers.turn);
   delete t.timers.turn;
   t.phase = "spin";
@@ -334,8 +353,8 @@ function onSpin(ws, msg) {
   t.timers.spin = setTimeout(safe(() => {
     if (t.phase !== "spin") return;
     t.phase = "answer";
-    t.task = { category, text: task, spinner: t.spinner, target: t.target, until: Date.now() + ANSWER_MS };
-    broadcast(t, { type: "spin_result", spinner: t.spinner, target: t.target, category, task });
+    t.task = { category, tpl, name: me.name, spinner: t.spinner, target: t.target, until: Date.now() + ANSWER_MS };
+    broadcast(t, { type: "spin_result", spinner: t.spinner, target: t.target, category, task: tpl, taskName: me.name });
     broadcast(t, snapshot(t));
     t.timers.answer = setTimeout(safe(() => finishAnswer(t, "")), ANSWER_MS);
   }), SPIN_MS + 200);
@@ -354,7 +373,7 @@ function finishAnswer(t, text) {
   delete t.timers.answer;
   const who = t.players[t.target];
   t.last = who ? { id: who.id, reacted: new Set() } : null;
-  broadcast(t, { type: "answer", seat: t.target, category: t.task.category, task: t.task.text, text });
+  broadcast(t, { type: "answer", seat: t.target, category: t.task.category, task: t.task.tpl, taskName: t.task.name, text });
   t.task = null;
   t.phase = "pair";
   t.pair = { seats: [t.spinner, t.target], answers: {} };
@@ -416,7 +435,7 @@ function goPrivate(t, pa, pb, text) {
     p.ws.seat = -1;
     t.invites.delete(p.id);
     send(p.ws, { type: "chat_opened" });
-    tg("sendMessage", { chat_id: p.id, text }).catch((err) => console.error("[game] notify", err.message));
+    tg("sendMessage", { chat_id: p.id, text: L(p.ws.lang || "uk", text) }).catch((err) => console.error("[game] notify", err.message));
   }
 }
 
@@ -518,9 +537,12 @@ export function attachBottleGame(server) {
   wss.on("connection", (ws, req) => {
     let userId;
     let profile;
+    // Мова до авторизації — з налаштувань Telegram у initData (для повідомлень про помилку).
+    try { ws.lang = guessLang(JSON.parse(new URLSearchParams(new URL(req.url, "http://localhost").searchParams.get("initData") || "").get("user") || "{}").language_code); } catch { ws.lang = "uk"; }
     try {
       userId = verifyInitData(new URL(req.url, "http://localhost").searchParams.get("initData") || "");
       profile = withDb((db) => db.prepare("select adult, banned, display_name, gender, profile_age from users where id = ?").get(userId));
+      ws.lang = langOf(userId);
     } catch (err) {
       send(ws, { type: "error", message: err.message || "Не вдалося авторизувати Telegram." });
       ws.close(4003, "Unauthorized");
@@ -539,6 +561,7 @@ export function attachBottleGame(server) {
     }
     ws.userId = userId;
     ws.profile = profile;
+    send(ws, { type: "hello", lang: ws.lang, bot: BOT_USERNAME, invite: withDb((db) => db.prepare("select invite_code from users where id = ?").get(userId))?.invite_code || "" });
     ws.alive = true;
     ws.window = 0;
     ws.count = 0;

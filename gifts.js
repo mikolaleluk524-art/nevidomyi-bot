@@ -7,7 +7,8 @@
  */
 
 import { DatabaseSync } from "node:sqlite";
-import { DB_PATH, tg } from "./src/bot.js";
+import { DB_PATH, langOf, tg } from "./src/bot.js";
+import { L, LANGS, localizeMarkup } from "./src/i18n.js";
 
 export const GIFTS = {
   rose: { emoji: "🌹", name: "Троянда", stars: 10 },
@@ -72,25 +73,28 @@ function isGone(err) {
 }
 
 async function say(chatId, text, reply_markup) {
+  const lang = langOf(chatId);
   try {
-    await tg("sendMessage", { chat_id: chatId, text, ...(reply_markup ? { reply_markup } : {}) });
+    await tg("sendMessage", { chat_id: chatId, text: L(lang, text), ...(reply_markup ? { reply_markup: localizeMarkup(lang, reply_markup) } : {}) });
   } catch (err) {
     if (!isGone(err)) console.error("[gift] send", err.message);
   }
 }
 
-const invoiceFields = (g) => ({
-  title: `Подарунок: ${g.name}`,
-  description: "Подарунок гравцю. Оплата зірками Telegram.",
+// Рахунок мовою того, хто платить.
+const invoiceFields = (g, lang = "uk") => ({
+  title: L(lang, `Подарунок: ${g.name}`),
+  description: L(lang, "Подарунок гравцю. Оплата зірками Telegram."),
   currency: "XTR",
-  prices: [{ label: g.name, amount: g.stars }],
+  prices: [{ label: L(lang, g.name), amount: g.stars }],
 });
+const giftLabel = (g, lang) => `${g.emoji} ${L(lang, g.name)}`;
 
 // Посилання на оплату для міні-застосунку. Кидає помилку, якщо дарувати не можна.
 export async function createGiftInvoice(from, to, giftId, kind) {
   if (!hasGift(giftId)) throw new Error("bad_gift");
   if (!allowed(kind, String(from), String(to))) throw new Error("not_allowed");
-  return tg("createInvoiceLink", { ...invoiceFields(GIFTS[giftId]), payload: `gift:${giftId}:${to}:${kind}` });
+  return tg("createInvoiceLink", { ...invoiceFields(GIFTS[giftId], langOf(from)), payload: `gift:${giftId}:${to}:${kind}` });
 }
 
 async function showGifts(userId) {
@@ -98,7 +102,8 @@ async function showGifts(userId) {
     await say(userId, "Подарунки в діалозі можна дарувати лише під час розмови. Натисни «Знайти співрозмовника». А за столом у грі можна дарувати гравцям, відкрий «🍾 Гра в бутилочку».");
     return;
   }
-  const rows = giftList().map((g) => [{ text: `${g.emoji} ${g.name} · ${g.stars}⭐`, callback_data: `gift:${g.id}` }]);
+  const lang = langOf(userId);
+  const rows = giftList().map((g) => [{ text: `${giftLabel(g, lang)} · ${g.stars}⭐`, callback_data: `gift:${g.id}` }]);
   await say(userId, "🎁 Обери подарунок для співрозмовника. Він отримає його анонімно.", { inline_keyboard: rows });
 }
 
@@ -114,7 +119,7 @@ async function onCallback(cb) {
   }
   await tg("sendInvoice", {
     chat_id: Number(from),
-    ...invoiceFields(GIFTS[giftId]),
+    ...invoiceFields(GIFTS[giftId], langOf(from)),
     payload: `gift:${giftId}:${partner}:c`,
     provider_token: "",
   });
@@ -127,7 +132,7 @@ async function onPreCheckout(query) {
   else if (!allowed(p.kind, String(query.from.id), p.to)) {
     error = p.kind === "t" ? "Гравець уже вийшов зі столу. Подарунок не надіслано." : "Діалог уже завершено, подарунок надіслати нікому.";
   }
-  await tg("answerPreCheckoutQuery", { pre_checkout_query_id: query.id, ok: !error, ...(error ? { error_message: error } : {}) });
+  await tg("answerPreCheckoutQuery", { pre_checkout_query_id: query.id, ok: !error, ...(error ? { error_message: L(langOf(query.from.id), error) } : {}) });
 }
 
 async function onPaid(from, pay) {
@@ -161,9 +166,11 @@ async function onPaid(from, pay) {
     return;
   }
   const { emoji, name } = p.gift;
-  const text = p.kind === "t" ? `🎁 ${nameOf(from)} подарував(ла) тобі: ${emoji} ${name}!` : `🎁 Співрозмовник подарував тобі: ${emoji} ${name}!`;
+  const toLang = langOf(p.to);
+  const label = giftLabel(p.gift, toLang);
+  const text = p.kind === "t" ? `🎁 ${nameOf(from)} подарував(ла) тобі: ${label}!` : `🎁 Співрозмовник подарував тобі: ${label}!`;
   try {
-    await tg("sendMessage", { chat_id: p.to, text });
+    await tg("sendMessage", { chat_id: p.to, text: L(toLang, text) });
   } catch {
     await refund("Не вдалося доставити подарунок. Зірки повернено.");
     return;
@@ -175,7 +182,7 @@ async function onPaid(from, pay) {
     db.prepare("insert into gifts (from_id, to_id, gift, stars, charge_id, created_at) values (?, ?, ?, ?, ?, ?) on conflict (charge_id) do nothing")
       .run(from, p.to, p.giftId, p.gift.stars, chargeId, Math.floor(Date.now() / 1000))
   );
-  await say(from, `🎁 Подарунок «${emoji} ${name}» надіслано. Дякую!`);
+  await say(from, `🎁 Подарунок «${giftLabel(p.gift, langOf(from))}» надіслано. Дякую!`);
 }
 
 // true — оновлення наше, bot.js його вже не обробляє.
@@ -207,8 +214,11 @@ export async function handleGiftUpdate(update) {
 
 // Додає /gift до списку команд, не стираючи наявні.
 export async function publishGiftCommand() {
-  const current = await tg("getMyCommands", {});
-  const list = current.filter((c) => c.command !== "gift");
-  list.push({ command: "gift", description: "Подарувати подарунок" });
-  await tg("setMyCommands", { commands: list });
+  for (const lang of LANGS) {
+    const scope = lang === "uk" ? {} : { language_code: lang };
+    const current = await tg("getMyCommands", scope);
+    const list = current.filter((c) => c.command !== "gift");
+    list.push({ command: "gift", description: L(lang, "Подарувати подарунок") });
+    await tg("setMyCommands", { commands: list, ...scope });
+  }
 }
