@@ -33,6 +33,29 @@
   }
 }
 
+/* ---- Готові стилі (перемикаються в кабінеті: Салон → Оформлення) ---- */
+:root { --g1: #b85c7a; --g2: #7a3653; --g3: #4c2236; }
+
+:root[data-theme="lavender"] { --accent: #8a63c9; --accent-soft: #ede6f8; --gold: #c39a5f; --g1: #9b77d6; --g2: #6a49a3; --g3: #3d2a66; }
+@media (prefers-color-scheme: light) { :root[data-theme="lavender"] { --bg: #f8f5fc; --line: #e9e2f2; } }
+@media (prefers-color-scheme: dark) { :root[data-theme="lavender"] { --bg: #15121c; --card: #1f1a29; --line: #2f2840; --accent: #b89cf0; --accent-ink: #1d1430; --accent-soft: #2d2541; } }
+
+:root[data-theme="mint"] { --accent: #2f8f7a; --accent-soft: #dff1eb; --gold: #c49a62; --g1: #3aa58c; --g2: #23705f; --g3: #164a3f; }
+@media (prefers-color-scheme: light) { :root[data-theme="mint"] { --bg: #f4f9f7; --line: #dfece7; } }
+@media (prefers-color-scheme: dark) { :root[data-theme="mint"] { --bg: #101816; --card: #182320; --line: #253532; --accent: #6fd0b8; --accent-ink: #0d2420; --accent-soft: #1f3530; } }
+
+/* «Чорне золото» — завжди темний, преміальний */
+:root[data-theme="gold"] {
+  --bg: #121010; --card: #1c1917; --ink: #f3ebde; --muted: #a39686; --line: #2e2925;
+  --accent: #c9a46a; --accent-ink: #1a1408; --accent-soft: #2e2618; --gold: #e0c08a;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.35); --g1: #d8b77f; --g2: #a37f45; --g3: #5e4520;
+  color-scheme: dark;
+}
+
+:root[data-theme="nude"] { --accent: #a2785c; --accent-soft: #f1e6dd; --gold: #b8925a; --g1: #c09a7d; --g2: #8a6248; --g3: #5a3d2b; }
+@media (prefers-color-scheme: light) { :root[data-theme="nude"] { --bg: #f9f5f1; --line: #ece2d9; } }
+@media (prefers-color-scheme: dark) { :root[data-theme="nude"] { --bg: #171310; --card: #221c18; --line: #352c25; --accent: #d9b394; --accent-ink: #2a1c12; --accent-soft: #3a2e25; } }
+
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; }
 body {
@@ -200,8 +223,8 @@ textarea { min-height: 80px; resize: vertical; }
 /* Профіль */
 .bonus-card {
   color: #fff; border-radius: 22px; padding: 20px;
-  background: linear-gradient(135deg, #b85c7a, #7a3653 60%, #4c2236);
-  box-shadow: 0 12px 30px rgba(122, 54, 83, 0.35);
+  background: linear-gradient(135deg, var(--g1), var(--g2) 60%, var(--g3));
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--g2) 35%, transparent);
 }
 .bonus-card .val { font-family: var(--serif); font-size: 46px; font-weight: 700; line-height: 1; }
 .refbox { display: flex; gap: 14px; align-items: center; }

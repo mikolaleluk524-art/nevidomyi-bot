@@ -165,6 +165,7 @@ export function tx(fn) {
 // ---- Налаштування салону ----
 export const DEFAULT_SETTINGS = {
   name: "Магія краси",
+  theme: "rose", // rose | lavender | gold | nude | mint
   tagline: "Манікюр · брови · вії",
   about: "Затишний кабінет, стерильні інструменти та майстер, якому довіряють. Запишіться онлайн у зручний час — без дзвінків.",
   phone: "+380000000000",

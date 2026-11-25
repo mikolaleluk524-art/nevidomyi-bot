@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { all, getSettings, one, run, tx } from "./db.js";
 import { addDays, hm, humanDate, kyivNow, kyivToUtc, toMin, weekday } from "./time.js";
 import { notifyOwner, pushClient } from "./notify.js";
-import { paymentsLive, refundInvoice } from "./payments.js";
+import { paymentsLive, refundPayment } from "./payments.js";
 
 const ACTIVE = "('pending','confirmed','done')";
 export const PENDING_MINUTES = 20;
@@ -258,7 +258,7 @@ export async function applyPayment(id, amount) {
       onConfirmed(nb);
       return nb;
     }
-    if (b.invoice_id && paymentsLive()) await refundInvoice(b.invoice_id).catch((e) => console.error("[refund]", e.message));
+    if (b.invoice_id && paymentsLive()) await refundPayment(b.invoice_id, amount).catch((e) => console.error("[refund]", e.message));
   }
   return getBooking(id);
 }
@@ -275,7 +275,7 @@ export async function cancelBooking(id, { byClient = false, refund = true } = {}
   let refunded = false;
   if (refund && b.paid && b.invoice_id && paymentsLive()) {
     try {
-      await refundInvoice(b.invoice_id);
+      await refundPayment(b.invoice_id, b.paid);
       refunded = true;
     } catch (e) {
       console.error("[refund]", e.message);

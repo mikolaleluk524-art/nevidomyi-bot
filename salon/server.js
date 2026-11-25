@@ -6,7 +6,8 @@
  *   DATA_DIR          — папка для бази й фото (на Railway — том, напр. /data)
  *   PUBLIC_URL        — адреса сайту, напр. https://salon.up.railway.app (інакше береться з RAILWAY_PUBLIC_DOMAIN)
  *   ADMIN_PASSWORD    — пароль кабінету власниці (якщо не задано — створюється під час першого входу в /admin)
- *   MONO_TOKEN        — токен monobank еквайрингу для передоплати (без нього — тестова оплата)
+ *   LIQPAY_PUBLIC_KEY, LIQPAY_PRIVATE_KEY — ключі LiqPay (ПриватБанк) для передоплати
+ *   MONO_TOKEN        — або токен monobank еквайрингу (без жодних ключів — тестова оплата)
  *   TG_BOT_TOKEN, TG_CHAT_ID — дублювати сповіщення про записи в Telegram
  */
 import { createServer } from "node:http";
@@ -17,7 +18,7 @@ import { fileURLToPath } from "node:url";
 import { all, getSecret, getSettings, one, run, setSecret, setSettings, UPLOAD_DIR } from "./lib/db.js";
 import { addDays, hm, humanDate, isDate, kyivNow, toMin } from "./lib/time.js";
 import { notifyOwner, pushClient, saveSubscription, VAPID_PUBLIC } from "./lib/notify.js";
-import { createInvoice, invoiceStatus, paymentsLive } from "./lib/payments.js";
+import { createPayment, liqpayCallback, paymentStatus, paymentsLive, provider } from "./lib/payments.js";
 import {
   addBonus,
   applyPayment,
@@ -212,28 +213,29 @@ function publicInfo() {
     rating: { avg: avg.avg ? Math.round(avg.avg * 10) / 10 : null, count: avg.n },
     nearest: nearestFree(),
     vapidPublicKey: VAPID_PUBLIC,
-    payments: paymentsLive() ? "mono" : "demo",
+    payments: provider(),
   };
 }
 
 async function startPayment(req, b) {
   if (!paymentsLive()) return { demoPay: true };
   const base = baseUrl(req);
-  const inv = await createInvoice({
+  const pay = await createPayment({
     amount: b.prepay,
-    reference: `booking-${b.id}`,
-    destination: `Передоплата: ${b.service_name}, ${b.date} ${hm(b.start)}`,
-    redirectUrl: `${base}/#/paid/${b.id}`,
-    webHookUrl: `${base}/api/mono/webhook`,
+    // Для кожної спроби оплати — новий номер замовлення (LiqPay не дозволяє повторювати).
+    orderId: `booking-${b.id}-${Date.now().toString(36)}`,
+    description: `Передоплата: ${b.service_name}, ${b.date} ${hm(b.start)}`,
+    resultUrl: `${base}/#/paid/${b.id}`,
+    serverUrl: `${base}/api/pay/webhook`,
   });
-  run("UPDATE bookings SET invoice_id = ? WHERE id = ?", inv.invoiceId, b.id);
-  return { payUrl: inv.pageUrl };
+  run("UPDATE bookings SET invoice_id = ? WHERE id = ?", pay.ref, b.id);
+  return { payUrl: pay.pageUrl };
 }
 
 async function syncPayment(b) {
   if (!b?.invoice_id || b.paid || !paymentsLive()) return b;
-  const st = await invoiceStatus(b.invoice_id);
-  if (st.status === "success") return applyPayment(b.id, Math.round((st.finalAmount ?? st.amount) / 100));
+  const st = await paymentStatus(b.invoice_id);
+  if (st.paid) return applyPayment(b.id, st.amount || b.prepay);
   return b;
 }
 
@@ -415,10 +417,17 @@ async function api(req, res, url) {
     return send(res, 200, { ok: true });
   }
 
-  if (m === "POST" && p === "/api/mono/webhook") {
-    // Не довіряємо тілу запиту: перепитуємо статус у monobank напряму.
-    const body = await json(req).catch(() => ({}));
-    const b = body.invoiceId ? one("SELECT * FROM bookings WHERE invoice_id = ?", String(body.invoiceId)) : null;
+  if (m === "POST" && (p === "/api/pay/webhook" || p === "/api/mono/webhook")) {
+    // Не довіряємо тілу запиту: для LiqPay перевіряємо підпис, і в обох випадках перепитуємо статус у банку.
+    const raw = (await readBody(req)).toString("utf8");
+    let ref = null;
+    if (provider() === "liqpay") ref = liqpayCallback(Object.fromEntries(new URLSearchParams(raw)))?.order_id;
+    else {
+      try {
+        ref = JSON.parse(raw).invoiceId;
+      } catch {}
+    }
+    const b = ref ? one("SELECT * FROM bookings WHERE invoice_id = ?", String(ref)) : null;
     if (b) await syncPayment(b).catch((e) => console.error("[webhook]", e.message));
     return send(res, 200, { ok: true });
   }
@@ -474,7 +483,7 @@ async function adminApi(req, res, p, m, q) {
       clients: r("SELECT COUNT(*) n FROM clients").n,
       newClients: r("SELECT COUNT(*) n FROM clients WHERE created_at >= ?", Date.now() - 30 * 86400_000).n,
       pendingReviews: r("SELECT COUNT(*) n FROM reviews WHERE status = 'pending'").n,
-      payments: paymentsLive() ? "mono" : "demo",
+      payments: provider(),
       telegram: Boolean(process.env.TG_BOT_TOKEN && process.env.TG_CHAT_ID),
     });
   }

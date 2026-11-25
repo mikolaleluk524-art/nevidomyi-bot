@@ -491,7 +491,7 @@ async function renderConfirm(back) {
 
 function demoPay(b) {
   sheet(`<div class="center"><div style="font-size:44px">💳</div><h2>Передоплата ${money(b.prepay)}</h2>
-    <p class="muted small">Тестовий режим: справжня оплата увімкнеться, щойно салон підключить monobank-еквайринг. Зараз гроші не списуються.</p></div>
+    <p class="muted small">Тестовий режим: справжня оплата увімкнеться, щойно салон підключить LiqPay. Зараз гроші не списуються.</p></div>
     <button class="btn block big" id="dp">Сплатити (тест)</button>
     <button class="btn line block" style="margin-top:8px" id="later">Пізніше</button>`, (el, close) => {
     $("#dp", el).onclick = async () => {
@@ -506,7 +506,7 @@ function demoPay(b) {
   });
 }
 
-// Повернення зі сторінки оплати monobank
+// Повернення зі сторінки оплати (LiqPay / monobank)
 async function paid(id) {
   header("Оплата");
   view.innerHTML = '<div class="spinner"></div><p class="center muted">Перевіряємо оплату…</p>';
@@ -888,6 +888,14 @@ async function route() {
   location.hash = "#/";
 }
 
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t || "rose";
+  store.set("theme", t);
+  const bg = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", bg));
+}
+applyTheme(store.get("theme")); // одразу, щоб не блимало при запуску
+
 async function boot() {
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
   try {
@@ -902,6 +910,7 @@ async function boot() {
     info = JSON.parse(cached);
   }
   document.title = `${info.settings.name} — онлайн-запис`;
+  applyTheme(info.settings.theme);
   addEventListener("hashchange", route);
   route();
 }

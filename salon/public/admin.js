@@ -122,7 +122,7 @@ async function bookings(box) {
   const strip = Array.from({ length: 14 }, (_, i) => addDays(curDay, i - 3));
   const items = [...day.map((b) => ({ t: Number(b.time.replace(":", "").slice(0, 2)) * 60 + Number(b.time.slice(3)), b })), ...blocks.map((k) => ({ t: k.start, k }))].sort((a, b) => a.t - b.t);
   box.innerHTML = `
-    ${stats.payments === "demo" ? `<div class="card small" style="background:var(--accent-soft)">💳 Оплата працює в <b>тестовому режимі</b>. Щоб приймати справжню передоплату — підключіть monobank-еквайринг (див. «Салон»).</div>` : ""}
+    ${stats.payments === "demo" ? `<div class="card small" style="background:var(--accent-soft)">💳 Оплата працює в <b>тестовому режимі</b>. Щоб приймати справжню передоплату — підключіть LiqPay від ПриватБанку (див. «Салон»).</div>` : ""}
     <div class="stats" style="margin-top:10px">
       <div class="stat"><b>${stats.today}</b><span>сьогодні</span></div>
       <div class="stat"><b>${stats.upcoming}</b><span>майбутніх</span></div>
@@ -456,10 +456,21 @@ async function qr(box) {
 }
 
 // ---------- налаштування ----------
+const THEMES = [
+  ["rose", "Пудрова троянда", "#b85c7a", "#f6e4ea", "#faf6f3"],
+  ["lavender", "Лавандова магія", "#8a63c9", "#ede6f8", "#f8f5fc"],
+  ["gold", "Чорне золото", "#c9a46a", "#2e2618", "#121010"],
+  ["nude", "Нюдовий беж", "#a2785c", "#f1e6dd", "#f9f5f1"],
+  ["mint", "Мʼятна свіжість", "#2f8f7a", "#dff1eb", "#f4f9f7"],
+];
 async function settings(box) {
   const [s, stats] = await Promise.all([api("/api/admin/settings"), api("/api/admin/stats")]);
   const f = (k, label, type = "text", extra = "") => `<label class="f"><span>${label}</span>${type === "area" ? `<textarea data-k="${k}">${esc(s[k])}</textarea>` : `<input data-k="${k}" type="${type}" value="${esc(s[k])}" ${extra}>`}</label>`;
   box.innerHTML = `
+    <div class="card"><h3>Оформлення</h3><p class="small muted">Як виглядатиме застосунок у клієнток.</p>
+      <div class="themes">${THEMES.map(([k, n, c1, c2, bg]) => `<label class="theme ${s.theme === k ? "on" : ""}"><input type="radio" name="theme" value="${k}" ${s.theme === k ? "checked" : ""} hidden>
+        <span class="sw" style="background:${bg}"><i style="background:${c1}"></i><i style="background:${c2}"></i></span>${n}</label>`).join("")}</div>
+      <input type="hidden" data-k="theme" value="${esc(s.theme)}"></div>
     <div class="card"><h3>Салон</h3>
       ${f("name", "Назва")}${f("tagline", "Коротко про послуги")}${f("about", "Про салон", "area")}
       ${f("phone", "Телефон", "tel")}${f("instagram", "Instagram (без @)")}${f("telegram", "Telegram (без @)")}${f("viber", "Viber (номер)")}
@@ -474,7 +485,7 @@ async function settings(box) {
       <div class="two">${f("prepayPercent", "Передоплата, %", "number")}${f("cancelHours", "Безкошт. скасування, год", "number")}</div>
       <div class="two">${f("slotStep", "Крок запису, хв", "number")}${f("minNoticeHours", "Запис мінімум за, год", "number")}</div>
       ${f("bookingDays", "Запис наперед, днів", "number")}
-      <p class="small" style="margin-top:10px">Оплата: <b>${stats.payments === "mono" ? "monobank підключено ✓" : "тестовий режим"}</b>${stats.payments === "mono" ? "" : ". Щоб увімкнути справжню передоплату: у web.monobank.ua → «Еквайринг» отримайте токен і додайте його в Railway як змінну <code>MONO_TOKEN</code>."}</p></div>
+      <p class="small" style="margin-top:10px">Оплата: <b>${{ liqpay: "LiqPay підключено ✓", mono: "monobank підключено ✓" }[stats.payments] || "тестовий режим"}</b>${stats.payments === "demo" ? ". Щоб увімкнути справжню передоплату — зареєструйте магазин на liqpay.ua і додайте ключі в Railway: <code>LIQPAY_PUBLIC_KEY</code> і <code>LIQPAY_PRIVATE_KEY</code>." : ""}</p></div>
     <div class="card"><h3>Бонуси і рефералка</h3>
       <div class="two">${f("refBonus", "Бонус тій, що привела", "number")}${f("refDiscount", "Знижка подрузі, грн", "number")}</div>
       <div class="two">${f("cashbackPercent", "Кешбек з візиту, %", "number")}${f("maxBonusPercent", "Макс. оплата бонусами, %", "number")}</div>
@@ -493,6 +504,11 @@ async function settings(box) {
 
     <button class="btn line block" style="margin-top:20px" id="logout">Вийти з кабінету</button>`;
 
+  box.querySelectorAll('input[name="theme"]').forEach((r) => (r.onchange = () => {
+    $('[data-k="theme"]').value = r.value;
+    box.querySelectorAll(".theme").forEach((l) => l.classList.toggle("on", l.contains(r)));
+    document.documentElement.dataset.theme = r.value;
+  }));
   $("#save").onclick = async () => {
     const body = {};
     box.querySelectorAll("[data-k]").forEach((i) => (body[i.dataset.k] = i.value));
