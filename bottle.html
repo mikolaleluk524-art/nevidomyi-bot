@@ -2,167 +2,208 @@
 <html lang="uk">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Гра в бутилочку</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-:root{--bg:#0c0b0a;--card:#191613;--border:#302923;--text:#f5f0ea;--muted:#a89f94;--accent:#d4a574;--pink:#e87eb0;--ok:#6b9e78;--bad:#c45c4a}
+:root{
+  --bg1:#1d1238;--bg2:#0e0a1c;--card:#ffffff10;--card2:#ffffff1a;--line:#ffffff22;
+  --text:#fff;--muted:#cfc6e8;--faint:#9a90b8;
+  --pink:#ff5fa2;--pink2:#ff8a5c;--violet:#8b5cf6;--gold:#ffd166;--blue:#5aa9ff;
+  --ok:#34d399;--bad:#ff6b6b;
+}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min-height:100vh;padding:14px 14px 28px;text-align:center}
-.wrap{max-width:400px;margin:0 auto}
-h1{font-size:21px;margin-bottom:4px}
-.status{font-size:13px;color:var(--accent);min-height:20px;margin-bottom:10px}
-.table{position:relative;width:min(92vw,360px);height:min(92vw,360px);margin:0 auto 14px;border-radius:50%;border:2px solid var(--border);background:radial-gradient(circle,#24201b,#14110f);box-shadow:0 0 30px #0008}
-.seat{position:absolute;width:62px;transform:translate(-50%,-50%);cursor:pointer}
-.seat.empty{opacity:.22;cursor:default}
-.av{width:44px;height:44px;margin:0 auto;border-radius:50%;background:var(--card);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:23px}
-.nm{font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.seat.m .av{border-color:#5b8def;background:#18222f}
-.seat.f .av{border-color:var(--pink);background:#2f1823}
-.seat.me .av{box-shadow:0 0 0 2px var(--accent)}
-.hb{position:absolute;top:-6px;right:4px;font-size:10px;background:#3a1626;color:#ffb3d1;border-radius:8px;padding:0 4px;line-height:15px}
-.gb{position:absolute;top:26px;left:4px;font-size:15px}
-.hb:empty,.crown:empty,.gb:empty{display:none}
-.crown{position:absolute;top:-17px;left:50%;transform:translateX(-50%);font-size:15px}
-.fly{position:absolute;font-size:26px;transform:translate(-50%,-50%);pointer-events:none;animation:fly 1.4s ease-out forwards;z-index:3}
-@keyframes fly{to{transform:translate(-50%,-160%) scale(1.4);opacity:0}}
-.seat.turn .av{box-shadow:0 0 0 3px #d4a574aa}
-.seat.paired .av{box-shadow:0 0 0 3px #e87eb0aa,0 0 14px #e87eb066}
-#bottle{position:absolute;left:50%;top:50%;width:32px;height:122px;margin:-61px 0 0 -16px;transform:rotate(0deg)}
-.chips{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px}
-.cat{padding:9px 2px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:10px;font-size:12px}
-.cat.on{background:#493724;border-color:var(--accent);color:var(--accent)}
-button{font-family:inherit;cursor:pointer}
+html,body{height:100%}
+body{background:radial-gradient(120% 80% at 50% 0%,#3a1d6e 0%,var(--bg1) 45%,var(--bg2) 100%) fixed;color:var(--text);
+  font-family:-apple-system,"Segoe UI",Roboto,system-ui,sans-serif;font-size:16px;line-height:1.35;text-align:center;
+  padding:calc(8px + env(safe-area-inset-top)) 14px calc(96px + env(safe-area-inset-bottom));overflow-x:hidden}
+.wrap{max-width:440px;margin:0 auto}
+button{font-family:inherit;cursor:pointer;border:0;color:inherit}
 button:disabled{opacity:.45;cursor:default}
-.main{width:100%;padding:15px;border:0;border-radius:13px;background:var(--accent);color:#17110c;font-size:16px;font-weight:800}
-.pair{margin-top:12px;padding:12px;border-radius:14px;background:#2a1820;border:1px solid var(--pink)}
-.pair .t{font-size:14px;margin-bottom:10px}
-.row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
-.row button{padding:11px 4px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px}
-.wait{font-size:12px;color:var(--muted);margin-top:8px}
-.result{margin-top:12px;min-height:8px}
-.card{padding:16px 14px;border-radius:14px;background:var(--card);border:1px solid var(--border);font-size:16px;line-height:1.45}
-.who{font-size:13px;color:var(--pink);margin-bottom:8px}
-.tag{color:var(--accent);font-size:11px;letter-spacing:2px;margin-bottom:6px}
-.feed{margin-top:12px;font-size:13px;color:var(--muted);text-align:left;max-height:190px;overflow-y:auto;padding:4px 8px;background:var(--card);border:1px solid var(--border);border-radius:12px 12px 0 0}
-.feed div{padding:5px 0;border-top:1px solid #2a262244;line-height:1.35}
-.feed div:first-child{border-top:0}
-.feed .me{color:var(--accent);font-weight:600}
-.feed b{font-weight:700;color:var(--text)}
-.feed b.m{color:#8fb2f5}.feed b.f{color:#f2a2c8}
-.feed .msg{color:var(--text)}
-.chatf{display:flex;gap:6px;padding:6px;background:var(--card);border:1px solid var(--border);border-top:0;border-radius:0 0 12px 12px}
-.chatf input{flex:1;min-width:0;padding:10px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;font-family:inherit}
-.chatf button{padding:0 14px;border:0;border-radius:9px;background:var(--accent);color:#17110c;font-weight:800;font-size:16px}
-.answer{margin-top:12px;padding:12px;border-radius:14px;background:#1d1a2c;border:1px solid #8c7ae6;text-align:left}
-.answer .t{font-size:15px;margin-bottom:8px;line-height:1.4}
-.answer textarea{width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:15px;font-family:inherit;resize:none}
-.answer .main{margin-top:8px}
-.reacts{display:flex;gap:8px;justify-content:center;margin-top:10px}
-.reacts button{font-size:22px;padding:6px 12px;border-radius:12px;border:1px solid var(--border);background:var(--bg)}
-.said{font-size:17px;color:var(--text)}
-.note{color:var(--muted);font-size:11px;margin:16px auto 0;max-width:320px}
 .hidden{display:none!important}
-.sheet,.over{position:fixed;inset:0;background:#000a;display:flex;align-items:flex-end;justify-content:center;z-index:5}
-.over{align-items:center;background:#000d}
-.box{width:100%;max-width:400px;background:var(--card);border:1px solid var(--border);border-radius:18px 18px 0 0;padding:16px}
-.over .box{border-radius:18px;margin:0 14px}
-.box h2{font-size:17px;margin-bottom:6px}
-.box p{font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.4}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
-.gift{padding:12px 6px;background:var(--bg);border:1px solid var(--border);border-radius:12px;color:var(--text)}
-.gift b{display:block;font-size:28px;font-weight:400}
-.gift span{display:block;font-size:13px}
-.gift i{display:block;font-size:12px;font-style:normal;color:var(--accent);margin-top:2px}
-.giftBtn{width:100%;margin-top:8px;padding:12px;border-radius:13px;border:1px solid var(--pink);background:#2a1820;color:var(--text);font-size:15px;font-weight:700}
-.who-btn{padding:12px 6px;background:var(--bg);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:14px}
-.days{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin:2px 0 12px}
-.day{padding:7px 1px;border-radius:9px;background:var(--bg);border:1px solid var(--border);font-size:9px;color:var(--muted);line-height:1.3}
-.day b{display:block;font-size:12px;color:var(--text);font-weight:400;margin-top:2px}
+
+/* верх */
+.top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.top h1{flex:1;text-align:left;font-size:19px;font-weight:800;letter-spacing:-.01em}
+.chip{background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:6px 11px;font-size:14px;font-weight:600;white-space:nowrap}
+.help{width:36px;height:36px;border-radius:50%;background:var(--card2);border:1px solid var(--line);font-size:17px;font-weight:800}
+.event{margin:4px 0 6px;padding:9px 12px;border-radius:14px;background:linear-gradient(90deg,#ff5fa233,#8b5cf633);border:1px solid #ff5fa277;font-size:14px;font-weight:700}
+
+/* стіл */
+.table{position:relative;width:min(92vw,400px,47vh);aspect-ratio:1;margin:8px auto 10px;border-radius:50%;
+  background:radial-gradient(circle at 50% 45%,#5b2a9e 0%,#3a1a6b 55%,#26124a 100%);
+  box-shadow:0 0 0 6px #ffffff10,0 0 0 7px #ffffff22,0 18px 50px #000a,inset 0 0 60px #0006}
+.table::after{content:"";position:absolute;inset:18%;border-radius:50%;border:2px dashed #ffffff18}
+.seat{position:absolute;width:74px;transform:translate(-50%,-50%);transition:left .4s,top .4s;z-index:2}
+.seat .av{width:54px;height:54px;margin:0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:29px;
+  background:linear-gradient(160deg,#ffffff2a,#ffffff10);border:3px solid #ffffff55;box-shadow:0 4px 12px #0007;transition:box-shadow .3s,transform .3s}
+.seat.empty .av{width:30px;height:30px;font-size:0;border:2px dashed #ffffff30;background:transparent;box-shadow:none}
+.seat.m .av{border-color:var(--blue)}
+.seat.f .av{border-color:var(--pink)}
+.seat.me .av{outline:3px solid var(--gold);outline-offset:2px}
+.seat.turn .av{animation:pulse 1.4s ease-in-out infinite}
+.seat.paired .av{box-shadow:0 0 0 4px #ff5fa2aa,0 0 22px #ff5fa2;transform:scale(1.08)}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 #ffd16699}50%{box-shadow:0 0 0 9px #ffd16600}}
+.seat .nm{margin-top:3px;font-size:12px;font-weight:700;background:#0008;border-radius:8px;padding:1px 6px;display:inline-block;max-width:74px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.seat.empty .nm{display:none}
+.seat .hb{position:absolute;top:-6px;right:2px;font-size:11px;font-weight:800;background:var(--pink);color:#fff;border-radius:9px;padding:0 5px;line-height:17px}
+.seat .crown{position:absolute;top:-19px;left:50%;transform:translateX(-50%);font-size:18px}
+.seat .gb{position:absolute;top:30px;left:2px;font-size:17px}
+.seat .hb:empty,.seat .crown:empty,.seat .gb:empty{display:none}
+#bottle{position:absolute;left:50%;top:50%;width:13%;height:40%;transform:translate(-50%,-50%) rotate(0deg);filter:drop-shadow(0 8px 10px #0009);z-index:1}
+.fly{position:absolute;font-size:30px;transform:translate(-50%,-50%);pointer-events:none;animation:fly 1.5s ease-out forwards;z-index:5}
+@keyframes fly{to{transform:translate(-50%,-180%) scale(1.5);opacity:0}}
+
+/* сцена: що робити зараз */
+.stage{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:14px;backdrop-filter:blur(6px)}
+.stage .title{font-size:19px;font-weight:800}
+.stage .sub{font-size:14px;color:var(--muted);margin-top:4px}
+.cats{display:flex;gap:6px;overflow-x:auto;margin:12px -2px 2px;padding:2px;scrollbar-width:none}
+.cats::-webkit-scrollbar{display:none}
+.cat{flex:none;padding:9px 13px;border-radius:999px;background:var(--card2);border:1px solid var(--line);font-size:14px;font-weight:700}
+.cat.on{background:#fff;color:#2a124e;border-color:#fff}
+.big{width:100%;margin-top:12px;padding:16px;border-radius:18px;font-size:19px;font-weight:900;letter-spacing:.02em;color:#fff;
+  background:linear-gradient(90deg,var(--pink),var(--pink2));box-shadow:0 8px 24px #ff5fa255}
+.big:active{transform:scale(.98)}
+.soft{width:100%;margin-top:8px;padding:13px;border-radius:16px;font-size:16px;font-weight:700;background:var(--card2);border:1px solid var(--line)}
+.task{margin-top:10px;padding:14px;border-radius:18px;background:#fff;color:#22113f;text-align:left}
+.task .tag{font-size:12px;font-weight:900;letter-spacing:.12em;color:var(--violet)}
+.task .q{font-size:18px;font-weight:700;margin-top:4px;line-height:1.35}
+.task .a{margin-top:10px;padding:10px 12px;border-radius:12px;background:#f3eefe;font-size:17px;font-weight:600}
+.stage textarea,.sheetbox textarea{width:100%;margin-top:10px;padding:12px;border-radius:14px;border:2px solid #ffffff33;background:#0006;color:#fff;font-size:17px;font-family:inherit;resize:none}
+.stage textarea:focus,.sheetbox textarea:focus{outline:none;border-color:var(--pink)}
+.reacts{display:flex;gap:8px;justify-content:center;margin-top:12px}
+.reacts button{flex:1;max-width:72px;font-size:26px;padding:8px 0;border-radius:16px;background:var(--card2);border:1px solid var(--line)}
+.choices{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.choices button{padding:14px 4px;border-radius:18px;font-size:15px;font-weight:800;background:var(--card2);border:2px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:4px}
+.choices button b{font-size:30px;font-weight:400;line-height:1}
+.choices button.kiss{border-color:#ff5fa2aa}
+.choices button.alone{border-color:#8b5cf6cc}
+.choices button.on{background:#fff;color:#2a124e}
+.wishstrip{display:block;width:100%;margin-top:10px;padding:12px 14px;border-radius:16px;text-align:left;font-size:15px;font-weight:700;
+  background:linear-gradient(90deg,#ffd16633,#ff8a5c22);border:1px solid #ffd16688;color:#fff}
+
+/* нижня панель */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:6;padding:8px 10px calc(8px + env(safe-area-inset-bottom));
+  background:#120b25ee;border-top:1px solid var(--line);backdrop-filter:blur(10px)}
+.tabbar .in{max-width:440px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.tab{position:relative;padding:7px 2px 6px;border-radius:14px;background:transparent;font-size:12px;font-weight:700;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px}
+.tab b{font-size:24px;font-weight:400;line-height:1.1}
+.tab:active{background:var(--card2)}
+.badge{position:absolute;top:2px;right:calc(50% - 26px);min-width:19px;height:19px;border-radius:10px;background:var(--pink);color:#fff;font-size:11px;font-weight:900;line-height:19px;padding:0 5px}
+.badge:empty{display:none}
+
+/* тости */
+.toasts{position:fixed;left:0;right:0;top:calc(8px + env(safe-area-inset-top));z-index:8;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;padding:0 14px}
+.toast{max-width:420px;background:#fff;color:#22113f;border-radius:16px;padding:10px 14px;font-size:15px;font-weight:700;box-shadow:0 8px 24px #0008;animation:tin .25s ease-out}
+.toast.me{background:linear-gradient(90deg,var(--pink),var(--pink2));color:#fff}
+@keyframes tin{from{transform:translateY(-10px);opacity:0}}
+
+/* шторки і вікна */
+.sheet,.over{position:fixed;inset:0;z-index:7;display:flex;align-items:flex-end;justify-content:center;background:#000a}
+.over{align-items:center;z-index:9;padding:16px}
+.sheetbox{width:100%;max-width:460px;max-height:86vh;overflow:auto;background:#22143f;border:1px solid var(--line);border-radius:26px 26px 0 0;
+  padding:16px 16px calc(16px + env(safe-area-inset-bottom));animation:sup .22s ease-out}
+.over .sheetbox{border-radius:26px;padding-bottom:16px;animation:none}
+@keyframes sup{from{transform:translateY(40px);opacity:.4}}
+.grab{width:42px;height:5px;border-radius:3px;background:#ffffff33;margin:-4px auto 12px}
+.sheetbox h2{font-size:21px;font-weight:900;margin-bottom:6px}
+.sheetbox p{font-size:15px;color:var(--muted);margin-bottom:12px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.gift{padding:14px 6px;border-radius:18px;background:var(--card2);border:1px solid var(--line)}
+.gift b{display:block;font-size:34px;font-weight:400}
+.gift span{display:block;font-size:15px;font-weight:700;margin-top:2px}
+.gift i{display:block;font-size:13px;font-style:normal;color:var(--gold);margin-top:3px;font-weight:700}
+.gift.free{background:linear-gradient(160deg,#ff5fa244,#ff8a5c22);border-color:var(--pink)}
+.who{padding:14px 8px;border-radius:16px;background:var(--card2);border:1px solid var(--line);font-size:16px;font-weight:700}
+.menu{display:flex;flex-direction:column;gap:8px}
+.menu button{display:flex;align-items:center;gap:12px;padding:14px;border-radius:16px;background:var(--card2);border:1px solid var(--line);font-size:16px;font-weight:700;text-align:left}
+.menu button b{font-size:24px;font-weight:400;width:30px;text-align:center}
+.menu button span{flex:1}
+.menu button i{font-style:normal;font-size:13px;color:var(--gold)}
+.close{width:100%;margin-top:12px;padding:13px;border-radius:16px;font-size:16px;font-weight:700;background:transparent;border:1px solid var(--line);color:var(--muted)}
+.ovbtn{width:100%;margin-top:8px;padding:15px;border-radius:16px;font-size:17px;font-weight:800;background:linear-gradient(90deg,var(--pink),var(--pink2));color:#fff}
+.ovbtn.sec{background:var(--card2);border:1px solid var(--line)}
+.steps{display:flex;flex-direction:column;gap:10px;text-align:left;margin:6px 0 4px}
+.step{display:flex;gap:12px;align-items:center;padding:12px;border-radius:16px;background:var(--card2)}
+.step b{font-size:30px;font-weight:400}
+.step span{font-size:16px;font-weight:600}
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin:4px 0 12px}
+.day{padding:7px 1px;border-radius:10px;background:var(--card2);font-size:10px;color:var(--faint);line-height:1.3}
+.day b{display:block;font-size:12px;color:#fff;font-weight:400;margin-top:2px}
 .day.done{opacity:.45}
-.day.now{border-color:var(--accent);background:#3a2a1a;color:var(--accent);box-shadow:0 0 12px #d4a57455}
-.gift.free{border-color:var(--pink);background:#2a1820}
-.event{margin:0 0 10px;padding:8px 10px;border-radius:12px;background:linear-gradient(90deg,#3a1626,#2a1820);border:1px solid var(--pink);font-size:13px;font-weight:600}
-.wishbtn{width:100%;margin-top:6px;padding:12px;border-radius:13px;border:1px solid #c9a227;background:linear-gradient(90deg,#2b2412,#1f1a0e);color:#f3d77a;font-size:15px;font-weight:700}
-.wish{margin-top:12px;padding:12px;border-radius:14px;background:linear-gradient(160deg,#2b2412,#191613 70%);border:1px solid #c9a227;text-align:left}
-.wish .h{font-size:13px;color:#f3d77a;font-weight:700}
-.wish .w{font-size:17px;margin:6px 0 4px;line-height:1.35}
-.wish .p{font-size:12px;color:var(--muted)}
-.wish .ans{margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--bg);border:1px solid var(--border);font-size:14px;display:flex;gap:8px;align-items:center}
-.wish .ans span{flex:1}
-.wish .ans b{color:var(--accent);font-weight:600}
-.wish .pick{padding:6px 10px;border-radius:9px;border:0;background:#c9a227;color:#17110c;font-weight:800;font-size:12px}
-.wish textarea{width:100%;margin-top:8px;padding:9px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;resize:none}
-.wish .main{margin-top:6px;padding:11px;font-size:14px}
-.ghost{width:100%;padding:11px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);margin-top:6px}
+.day.now{background:#fff;color:#2a124e}
+.day.now b{color:#2a124e}
+
+/* чат і стрічка */
+.feed{height:46vh;overflow-y:auto;text-align:left;padding:4px 2px;display:flex;flex-direction:column;gap:6px}
+.feed div{padding:8px 11px;border-radius:14px;background:var(--card2);font-size:15px;line-height:1.35;align-self:flex-start;max-width:92%}
+.feed div.sys{background:transparent;color:var(--faint);font-size:13px;padding:2px 4px;align-self:center;text-align:center}
+.feed div.me{border:1px solid var(--pink)}
+.feed b{font-weight:800}
+.feed b.m{color:#9cc8ff}.feed b.f{color:#ffb0d0}
+.feed .empty{background:transparent;color:var(--faint);align-self:center}
+.chatf{display:flex;gap:8px;margin-top:10px}
+.chatf input{flex:1;min-width:0;padding:13px;border-radius:14px;border:2px solid #ffffff33;background:#0006;color:#fff;font-size:16px;font-family:inherit}
+.chatf input:focus{outline:none;border-color:var(--pink)}
+.chatf button{padding:0 18px;border-radius:14px;background:linear-gradient(90deg,var(--pink),var(--pink2));font-size:20px;font-weight:900}
+.wishcard{text-align:left}
+.wishcard .w{font-size:19px;font-weight:700;margin:4px 0 8px}
+.ans{margin-top:8px;padding:10px 12px;border-radius:14px;background:var(--card2);font-size:16px;display:flex;gap:8px;align-items:center}
+.ans span{flex:1}
+.ans b{color:var(--gold)}
+.pick{padding:8px 12px;border-radius:12px;background:var(--gold);color:#2a124e;font-weight:900;font-size:14px}
 </style>
 </head>
 <body>
+<div class="toasts" id="toasts"></div>
 <div class="wrap">
-  <h1 data-t="🍾 Гра в бутилочку">🍾 Гра в бутилочку</h1>
+  <div class="top">
+    <h1 data-t="🍾 Гра в бутилочку">🍾 Гра в бутилочку</h1>
+    <span class="chip" id="count">👥 0/10</span>
+    <button class="help" id="helpBtn" aria-label="?">?</button>
+  </div>
   <div class="event hidden" id="eventBar"></div>
-  <div class="status" id="status" data-t="Підключення до столу...">Підключення до столу...</div>
 
   <div class="table" id="table">
-    <svg id="bottle" viewBox="0 0 56 210">
-      <rect x="22" y="2" width="12" height="16" rx="3" fill="#d4a574"/>
-      <path d="M22 18 H34 V70 C34 82 52 92 52 120 V196 C52 204 46 208 40 208 H16 C10 208 4 204 4 196 V120 C4 92 22 82 22 70 Z" fill="#3b6b4f" stroke="#6b9e78" stroke-width="2"/>
-      <rect x="12" y="130" width="32" height="46" rx="4" fill="#f5f0ea" opacity=".85"/>
+    <svg id="bottle" viewBox="0 0 60 200" aria-hidden="true">
+      <defs>
+        <linearGradient id="glass" x1="0" x2="1">
+          <stop offset="0" stop-color="#1f7a4d"/><stop offset=".45" stop-color="#43c17f"/><stop offset="1" stop-color="#155c39"/>
+        </linearGradient>
+      </defs>
+      <rect x="23" y="0" width="14" height="18" rx="4" fill="#ffd166"/>
+      <path d="M24 18 H36 V62 C36 76 55 86 55 116 V188 C55 195 49 200 42 200 H18 C11 200 5 195 5 188 V116 C5 86 24 76 24 62 Z" fill="url(#glass)" stroke="#ffffff66" stroke-width="2"/>
+      <rect x="12" y="122" width="36" height="44" rx="6" fill="#fff"/>
+      <text x="30" y="150" text-anchor="middle" font-size="18">💋</text>
+      <path d="M13 110 C13 96 20 88 24 82" stroke="#ffffffaa" stroke-width="4" fill="none" stroke-linecap="round"/>
     </svg>
   </div>
 
-  <div class="chips" id="chips">
-    <button class="cat on" data-cat="all" data-t="🎲 Усе">🎲 Усе</button>
-    <button class="cat" data-cat="truth" data-t="💬 Правда">💬 Правда</button>
-    <button class="cat" data-cat="action" data-t="🔥 Дія">🔥 Дія</button>
-    <button class="cat" data-cat="kiss" data-t="💋 Цьом">💋 Цьом</button>
-    <button class="cat" data-cat="adult">🔞 18+</button>
-  </div>
-  <button class="main" id="spin" disabled>Підключення...</button>
-  <button class="giftBtn" id="giftBtn" data-t="🎁 Подарунок">🎁 Подарунок</button>
-  <button class="wishbtn" id="wishBtn" data-t="✨ Загадати бажання · 👑 100⭐">✨ Загадати бажання · 👑 100⭐</button>
-  <button class="ghost" id="aimBtn" data-t="🎯 На кого покаже пляшка · 5⭐">🎯 На кого покаже пляшка · 5⭐</button>
-  <button class="ghost" id="shareBtn" data-t="📨 Покликати друзів">📨 Покликати друзів</button>
-
-  <div class="pair hidden" id="pair">
-    <div class="t" id="pairTitle"></div>
-    <div class="row">
-      <button data-choice="kiss" data-t="💋 Поцілувати">💋 Поцілувати</button>
-      <button data-choice="push" data-t="👋 Відштовхнути">👋 Відштовхнути</button>
-      <button data-choice="alone" data-t="🔒 Наодинці">🔒 Наодинці</button>
-    </div>
-    <div class="wait" id="pairWait"></div>
-  </div>
-
-  <div class="answer hidden" id="answerBox">
-    <div class="t" id="answerTask"></div>
-    <textarea id="answerText" rows="3" maxlength="200" placeholder="Твоя відповідь..." data-tp="Твоя відповідь..."></textarea>
-    <button class="main" id="answerSend" data-t="Відповісти">Відповісти</button>
-    <button class="ghost" id="answerSkip" data-t="Пропустити 🤐">Пропустити 🤐</button>
-    <div class="wait" data-t="На відповідь є хвилина. Її побачать усі за столом.">На відповідь є хвилина. Її побачать усі за столом.</div>
-  </div>
-
-  <div class="wish hidden" id="wishBox"></div>
-  <div class="result" id="result"></div>
-  <div class="feed" id="feed"></div>
-  <form class="chatf" id="chatForm">
-    <input id="chatText" maxlength="150" autocomplete="off" placeholder="Написати за столом..." data-tp="Написати за столом...">
-    <button type="submit">➤</button>
-  </form>
-  <div class="note" data-t="Відповідай на завдання, став реакції — вони дають ❤ гравцю, а найпопулярніший отримує 👑. Подарунок дає ❤ і запрошення побути наодинці: натисни «🎁 Подарунок» або тапни на гравця. Без подарунка наодинці можна, лише якщо пара обере це обоє. Не надсилай контакти й особисті дані.">Відповідай на завдання, став реакції — вони дають ❤ гравцю, а найпопулярніший отримує 👑. Подарунок дає ❤ і запрошення побути наодинці: натисни «🎁 Подарунок» або тапни на гравця. Без подарунка наодинці можна, лише якщо пара обере це обоє. Не надсилай контакти й особисті дані.</div>
+  <div class="stage" id="stage"></div>
 </div>
 
+<nav class="tabbar">
+  <div class="in">
+    <button class="tab" id="tabGift"><b>🎁</b><span data-t="Подарунок">Подарунок</span><i class="badge" id="badgeGift"></i></button>
+    <button class="tab" id="tabWish"><b>✨</b><span data-t="Бажання">Бажання</span><i class="badge" id="badgeWish"></i></button>
+    <button class="tab" id="tabChat"><b>💬</b><span data-t="Чат">Чат</span><i class="badge" id="badgeChat"></i></button>
+    <button class="tab" id="tabMore"><b>☰</b><span data-t="Ще">Ще</span><i class="badge" id="badgeMore"></i></button>
+  </div>
+</nav>
+
 <div class="sheet hidden" id="sheet">
-  <div class="box">
+  <div class="sheetbox">
+    <div class="grab"></div>
     <h2 id="sheetTitle"></h2>
     <p id="sheetText"></p>
-    <div class="grid" id="gifts"></div>
-    <button class="ghost" id="sheetClose" data-t="Закрити">Закрити</button>
+    <div id="sheetBody"></div>
+    <button class="close" id="sheetClose" data-t="Закрити">Закрити</button>
   </div>
 </div>
 
 <div class="over hidden" id="over">
-  <div class="box">
+  <div class="sheetbox">
     <h2 id="overTitle"></h2>
     <p id="overText"></p>
     <div id="overBtns"></div>
@@ -172,14 +213,16 @@ button:disabled{opacity:.45;cursor:default}
 <script>
 const $ = (id) => document.getElementById(id);
 const tg = window.Telegram && window.Telegram.WebApp;
-try { tg && tg.ready(); tg && tg.expand(); } catch (e) {}
+try { tg && tg.ready(); tg && tg.expand(); tg && tg.setHeaderColor && tg.setHeaderColor("#1d1238"); tg && tg.setBackgroundColor && tg.setBackgroundColor("#0e0a1c"); } catch (e) {}
 const buzz = (kind, name) => { try { tg.HapticFeedback[kind](name); } catch (e) {} };
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+};
 
 /* ---------- мова: українська, русский, English ---------- */
 // Ключ — український текст; {0}, {1} — підстановки.
-const I18N = {
-  ru: {}, en: {},
-};
+const I18N = { ru: {}, en: {} };
 [
   ["Гра в бутилочку", "Игра в бутылочку", "Spin the Bottle"],
   ["🍾 Гра в бутилочку", "🍾 Игра в бутылочку", "🍾 Spin the Bottle"],
@@ -298,6 +341,38 @@ const I18N = {
   ["Гру відкрито в іншому вікні.", "Игра открыта в другом окне.", "The game is open in another window."],
   ["Перевір інтернет і підключись знову.", "Проверь интернет и подключись снова.", "Check your connection and reconnect."],
   ["Підключитись знову", "Подключиться снова", "Reconnect"],
+  ["Подарунок", "Подарок", "Gift"],
+  ["Бажання", "Желание", "Wish"],
+  ["Чат", "Чат", "Chat"],
+  ["Ще", "Ещё", "More"],
+  ["Для гри потрібно хоча б двоє. Поклич друзів — за кожного отримаєш Premium.", "Для игры нужно хотя бы двое. Позови друзей — за каждого получишь Premium.", "You need at least two to play. Invite friends — you get Premium for each one."],
+  ["Твоя черга!", "Твоя очередь!", "Your turn!"],
+  ["Обери тему й крути пляшку", "Выбери тему и крути бутылочку", "Pick a topic and spin the bottle"],
+  ["🍾 КРУТИТИ", "🍾 КРУТИТЬ", "🍾 SPIN"],
+  ["Зараз крутить {0}", "Сейчас крутит {0}", "{0} is spinning now"],
+  ["Тапни на гравця, щоб подарувати подарунок", "Тапни на игрока, чтобы подарить подарок", "Tap a player to send a gift"],
+  ["На кого ж вона покаже? 👀", "На кого же она укажет? 👀", "Who will it point at? 👀"],
+  ["Твоє завдання!", "Твоё задание!", "Your dare!"],
+  ["Від {0}", "От {0}", "From {0}"],
+  ["{0} відповідає на завдання…", "{0} отвечает на задание…", "{0} is answering…"],
+  ["Пара {0} обирає…", "Пара {0} выбирает…", "{0} are choosing…"],
+  ["Поцілувати", "Поцеловать", "Kiss"],
+  ["Відштовхнути", "Оттолкнуть", "Push away"],
+  ["Наодинці", "Наедине", "Alone"],
+  ["✨ Твоє бажання: відповідей {0}", "✨ Твоё желание: ответов {0}", "✨ Your wish: {0} answers"],
+  ["✨ {0} загадав(ла) бажання — виконай і отримай 👑", "✨ {0} загадал(а) желание — исполни и получи 👑", "✨ {0} made a wish — grant it to win 👑"],
+  ["Як грати", "Как играть", "How to play"],
+  ["Крути пляшку, коли твоя черга", "Крути бутылочку, когда твоя очередь", "Spin the bottle when it's your turn"],
+  ["Відповідай на завдання — інші ставлять реакції й дарують ❤", "Отвечай на задания — другие ставят реакции и дарят ❤", "Answer the dare — others react and give you ❤"],
+  ["Пара обирає: 💋 поцілувати, 👋 відштовхнути або 🔒 побути наодинці", "Пара выбирает: 💋 поцеловать, 👋 оттолкнуть или 🔒 побыть наедине", "The pair chooses: 💋 kiss, 👋 push away or 🔒 be alone"],
+  ["Подарунки й ✨ бажання — у панелі внизу", "Подарки и ✨ желания — в панели внизу", "Gifts and ✨ wishes are in the bar below"],
+  ["Зрозуміло, граємо!", "Понятно, играем!", "Got it, let's play!"],
+  ["Тут поки тихо. Привітайся!", "Здесь пока тихо. Поздоровайся!", "It's quiet here. Say hi!"],
+  ["💬 Чат столу", "💬 Чат стола", "💬 Table chat"],
+  ["На кого покаже пляшка", "На кого укажет бутылочка", "Choose who the bottle picks"],
+  ["безкоштовно ×{0}", "бесплатно ×{0}", "free ×{0}"],
+  ["Покликати друзів", "Позвать друзей", "Invite friends"],
+  ["+Premium", "+Premium", "+Premium"],
 ].forEach(([uk, ru, en]) => { I18N.ru[uk] = ru; I18N.en[uk] = en; });
 
 function guessLang(code) {
@@ -315,42 +390,20 @@ function applyLang() {
   document.documentElement.lang = LANG;
   document.title = T("Гра в бутилочку");
   document.querySelectorAll("[data-t]").forEach((el) => { el.textContent = T(el.dataset.t); });
-  document.querySelectorAll("[data-tp]").forEach((el) => { el.placeholder = T(el.dataset.tp); });
-  updateWalletLabels();
-}
-// Безкоштовні 🌹 / 🎯 зі щоденної винагороди — видно прямо на кнопках.
-function updateWalletLabels() {
-  const w = S.wallet;
-  $("giftBtn").textContent = w.roses > 0 ? T("🎁 Подарунок · 🌹×{0} безкоштовно", w.roses) : T("🎁 Подарунок");
-  $("aimBtn").textContent = w.aims > 0 ? T("🎯 На кого покаже пляшка · безкоштовно ×{0}", w.aims) : T("🎯 На кого покаже пляшка · 5⭐");
-}
-const rewardText = (r) => [r.roses ? "🌹×" + r.roses : "", r.aims ? "🎯×" + r.aims : "", r.premium ? T("💎 {0} день Premium", r.premium) : ""].filter(Boolean).join("  ");
-function showDaily(m) {
-  showOver(T("🎁 Щоденна винагорода · день {0}", m.day), T("Заходь щодня: що довша серія, то кращі подарунки. Пропустиш день — серія почнеться спочатку."), [
-    [T("Забрати"), () => { ws.send(JSON.stringify({ type: "daily_claim" })); hideOver(); }],
-  ]);
-  const days = document.createElement("div");
-  days.className = "days";
-  m.rewards.forEach((r, i) => {
-    const d = document.createElement("div");
-    d.className = "day" + (i + 1 < m.day ? " done" : i + 1 === m.day ? " now" : "");
-    d.textContent = T("День {0}", i + 1);
-    const b = document.createElement("b");
-    b.textContent = (r.roses > 1 ? r.roses + "🌹" : "🌹") + (r.aims ? "🎯" : "") + (r.premium ? "💎" : "");
-    d.appendChild(b);
-    days.appendChild(d);
-  });
-  $("overBtns").prepend(days);
+  renderStage();
+  updateBadges();
 }
 
+/* ---------- стан ---------- */
 const N = 10;
 const CAT_NAMES = { truth: "ПРАВДА", action: "ДІЯ", kiss: "ПОЦІЛУНОК", adult: "18+" };
-const S = { wallet: { roses: 0, aims: 0 }, seat: -1, players: [], turn: -1, phase: "wait", spinner: -1, pair: null, task: null, answered: [], gifts: [], selected: "all", myChoice: null, fatal: false };
+const CATS = [["all", "🎲 Усе"], ["truth", "💬 Правда"], ["action", "🔥 Дія"], ["kiss", "💋 Цьом"], ["adult", "🔞 18+"]];
+const S = { wallet: { roses: 0, aims: 0 }, seat: -1, players: [], turn: -1, phase: "wait", spinner: -1, pair: null, task: null, gifts: [], selected: "all", myChoice: null, fatal: false, last: null, unread: 0, wish: null, doubleUntil: 0 };
 const FACE = { m: "👨", f: "👩" };
 const giftHearts = (stars) => Math.max(1, Math.round(stars / 5));
 let ws = null;
 let rot = 0;
-let giftSeat = -1;
+const send = (m) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
 
 /* ---------- стіл ---------- */
 const seatEls = [];
@@ -362,80 +415,29 @@ for (let i = 0; i < N; i++) {
   $("table").appendChild(el);
   seatEls.push(el);
 }
-// Кут місця на колі: ти завжди внизу.
+// Ти завжди внизу столу.
 const angleOf = (i) => ((i - S.seat + N) % N) / N * 360 + 180;
 const nameOf = (i) => (S.players[i] && S.players[i].name) || T("Хтось");
+const others = () => S.players.map((p, i) => (p && i !== S.seat ? i : -1)).filter((i) => i >= 0);
 
-function render() {
-  const me = S.seat;
+function renderTable() {
   const top = Math.max(0, ...S.players.map((p) => (p ? p.hearts || 0 : 0)));
   seatEls.forEach((el, i) => {
     const p = S.players[i];
     const a = angleOf(i) * Math.PI / 180;
-    el.style.left = 50 + 39 * Math.sin(a) + "%";
-    el.style.top = 50 - 39 * Math.cos(a) + "%";
-    const active = (S.phase === "idle" && i === S.turn) || ((S.phase === "spin" || S.phase === "pair") && i === S.spinner);
+    el.style.left = 50 + 40 * Math.sin(a) + "%";
+    el.style.top = 50 - 40 * Math.cos(a) + "%";
+    const active = (S.phase === "idle" && i === S.turn) || (S.phase === "spin" && i === S.spinner);
     const inRound = (S.pair && S.pair.includes(i)) || (S.task && (S.task.target === i || S.task.spinner === i));
-    el.className = "seat" + (p ? "" : " empty") + (p && p.g ? " " + p.g : "") + (i === me ? " me" : "") + (active ? " turn" : "") + (inRound ? " paired" : "");
-    el.querySelector(".av").textContent = p ? FACE[p.g] || "🙂" : "·";
+    el.className = "seat" + (p ? "" : " empty") + (p && p.g ? " " + p.g : "") + (i === S.seat ? " me" : "") + (active ? " turn" : "") + (inRound ? " paired" : "");
+    el.querySelector(".av").textContent = p ? FACE[p.g] || "🙂" : "";
     el.querySelector(".nm").textContent = p ? p.name + (p.age ? ", " + p.age : "") : "";
-    el.querySelector(".hb").textContent = p && p.hearts ? "❤ " + p.hearts : "";
+    el.querySelector(".hb").textContent = p && p.hearts ? "❤" + p.hearts : "";
     el.querySelector(".crown").textContent = p && top > 0 && p.hearts === top ? "👑" : "";
     el.querySelector(".gb").textContent = p && p.badge ? p.badge : "";
   });
-
-  const n = S.players.filter(Boolean).length;
-  const myTurn = S.phase === "idle" && S.turn === me;
-  $("status").textContent = S.phase === "wait" ? T("За столом {0} з {1}. Для гри потрібно хоча б двоє.", n, N) : T("За столом {0} з {1}", n, N) + (myTurn ? T(" · твоя черга") : "");
-  const spin = $("spin");
-  spin.disabled = !myTurn;
-  spin.textContent = S.phase === "wait" ? T("Чекаємо гравців...") : S.phase === "spin" ? T("Пляшка крутиться...") : S.phase === "answer" ? T("Відповідає: {0}", nameOf(S.task ? S.task.target : -1)) : S.phase === "pair" ? T("Пара обирає...") : myTurn ? T("КРУТИТИ") : T("Крутить: {0}", nameOf(S.turn));
-
-  const answering = S.phase === "answer" && S.task && S.task.target === me && !S.sent;
-  const box = $("answerBox");
-  if (answering && box.classList.contains("hidden")) {
-    $("answerTask").textContent = T("{0} від {1}: {2}", T(CAT_NAMES[S.task.category] || "ЗАВДАННЯ"), nameOf(S.task.spinner), S.task.text);
-    $("answerText").value = "";
-    box.classList.remove("hidden");
-    setTimeout(() => { try { $("answerText").focus(); } catch (e) {} }, 100);
-  } else if (!answering) box.classList.add("hidden");
-
-  const inPair = S.phase === "pair" && S.pair && S.pair.includes(me);
-  $("pair").classList.toggle("hidden", !inPair);
-  if (inPair) {
-    const other = S.pair.find((s) => s !== me);
-    $("pairTitle").textContent = T("💞 Ви в парі з {0}. Що далі?", nameOf(other));
-    document.querySelectorAll("#pair button").forEach((b) => { b.disabled = Boolean(S.myChoice); });
-    $("pairWait").textContent = S.myChoice ? T("Чекаємо, що обере {0}...", nameOf(other)) : T("«Наодинці» — приватний чат у боті, якщо обоє його оберуть.");
-  }
+  $("count").textContent = "👥 " + S.players.filter(Boolean).length + "/" + N;
 }
-
-function pushFeed(d) {
-  const f = $("feed");
-  const stick = f.scrollHeight - f.scrollTop - f.clientHeight < 40;
-  f.appendChild(d);
-  while (f.children.length > 60) f.firstChild.remove();
-  if (stick) f.scrollTop = f.scrollHeight;
-}
-function addFeed(text, mine) {
-  const d = document.createElement("div");
-  d.textContent = text;
-  if (mine) d.className = "me";
-  pushFeed(d);
-}
-function addChat(seat, text) {
-  const d = document.createElement("div");
-  const b = document.createElement("b");
-  const p = S.players[seat];
-  b.textContent = (p ? (FACE[p.g] || "🙂") + " " + p.name : T("Хтось")) + ": ";
-  if (p && p.g) b.className = p.g;
-  const t = document.createElement("span");
-  t.className = "msg";
-  t.textContent = text;
-  d.append(b, t);
-  pushFeed(d);
-}
-// Емоджі злітає над місцем гравця.
 function fly(seat, emoji) {
   const el = seatEls[seat];
   if (!el) return;
@@ -445,28 +447,162 @@ function fly(seat, emoji) {
   f.style.left = el.style.left;
   f.style.top = el.style.top;
   $("table").appendChild(f);
-  setTimeout(() => f.remove(), 1500);
+  setTimeout(() => f.remove(), 1600);
 }
 
-function showResult(tag, text, who) {
-  const box = $("result");
-  box.innerHTML = '<div class="who"></div><div class="card"><div class="tag"></div><div class="txt"></div></div>';
-  box.querySelector(".who").textContent = who || "";
-  box.querySelector(".tag").textContent = tag;
-  box.querySelector(".txt").textContent = text;
+/* ---------- сцена: лише те, що треба зробити зараз ---------- */
+const h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+function taskCard(category, text, answer) {
+  const c = h("div", "task");
+  c.append(h("div", "tag", T(CAT_NAMES[category] || "ЗАВДАННЯ")), h("div", "q", text));
+  if (answer !== undefined) c.appendChild(h("div", "a", answer ? "«" + answer + "»" : "🤐"));
+  return c;
+}
+let draft = "";
+function renderStage() {
+  const st = $("stage");
+  const keep = st.querySelector("textarea");
+  if (keep) draft = keep.value;
+  st.replaceChildren();
+  const me = S.seat;
+  const n = S.players.filter(Boolean).length;
+
+  if (S.seat < 0) {
+    st.append(h("div", "title", T("Підключення до столу...")));
+  } else if (S.phase === "wait" || n < 2) {
+    st.append(h("div", "title", T("Чекаємо гравців...")), h("div", "sub", T("Для гри потрібно хоча б двоє. Поклич друзів — за кожного отримаєш Premium.")));
+    const b = h("button", "big", T("📨 Покликати друзів"));
+    b.addEventListener("click", share);
+    st.append(b);
+  } else if (S.phase === "idle" && S.turn === me) {
+    st.append(h("div", "title", T("Твоя черга!")), h("div", "sub", T("Обери тему й крути пляшку")));
+    const cats = h("div", "cats");
+    CATS.forEach(([id, label]) => {
+      const c = h("button", "cat" + (S.selected === id ? " on" : ""), T(label));
+      c.addEventListener("click", () => { S.selected = id; buzz("selectionChanged"); renderStage(); });
+      cats.appendChild(c);
+    });
+    const b = h("button", "big", T("🍾 КРУТИТИ"));
+    b.addEventListener("click", () => { b.disabled = true; send({ type: "spin", selected: S.selected }); });
+    st.append(cats, b);
+  } else if (S.phase === "idle") {
+    st.append(h("div", "title", T("Зараз крутить {0}", nameOf(S.turn))), h("div", "sub", T("Тапни на гравця, щоб подарувати подарунок")));
+    if (S.last) st.append(S.last());
+  } else if (S.phase === "spin") {
+    st.append(h("div", "title", T("Пляшка крутиться...")), h("div", "sub", T("На кого ж вона покаже? 👀")));
+  } else if (S.phase === "answer" && S.task) {
+    const mine = S.task.target === me;
+    if (mine && !S.sent) {
+      st.append(h("div", "title", T("Твоє завдання!")), h("div", "sub", T("Від {0}", nameOf(S.task.spinner))), taskCard(S.task.category, S.task.text));
+      const ta = h("textarea"); ta.rows = 3; ta.maxLength = 200; ta.placeholder = T("Твоя відповідь..."); ta.value = draft;
+      const go = h("button", "big", T("Відповісти"));
+      go.addEventListener("click", () => {
+        const text = ta.value.trim();
+        if (!text) { ta.focus(); return; }
+        send({ type: "answer", text }); S.sent = true; draft = ""; renderStage();
+      });
+      const skip = h("button", "soft", T("Пропустити 🤐"));
+      skip.addEventListener("click", () => { send({ type: "answer", skip: true }); S.sent = true; draft = ""; renderStage(); });
+      st.append(ta, go, skip);
+    } else {
+      st.append(h("div", "title", T("{0} відповідає на завдання…", nameOf(S.task.target))), taskCard(S.task.category, S.task.text));
+    }
+  } else if (S.phase === "pair" && S.pair) {
+    const inPair = S.pair.includes(me);
+    if (inPair) {
+      // Головна дія — вибір пари, тому кнопки вгорі, а відповідь під ними.
+      const other = S.pair.find((s) => s !== me);
+      st.append(h("div", "title", T("💞 Ви в парі з {0}. Що далі?", nameOf(other))));
+      const row = h("div", "choices");
+      [["kiss", "💋", "Поцілувати"], ["push", "👋", "Відштовхнути"], ["alone", "🔒", "Наодинці"]].forEach(([id, em, label]) => {
+        const b = h("button", id + (S.myChoice === id ? " on" : ""));
+        b.append(h("b", "", em), h("span", "", T(label)));
+        b.disabled = Boolean(S.myChoice);
+        b.addEventListener("click", () => { if (S.myChoice) return; S.myChoice = id; send({ type: "pair", choice: id }); buzz("impactOccurred", "medium"); renderStage(); });
+        row.appendChild(b);
+      });
+      st.append(row, h("div", "sub", S.myChoice ? T("Чекаємо, що обере {0}...", nameOf(other)) : T("«Наодинці» — приватний чат у боті, якщо обоє його оберуть.")));
+      if (S.last) st.append(S.last());
+    } else {
+      st.append(h("div", "title", T("Пара {0} обирає…", T("{0} і {1}", nameOf(S.pair[0]), nameOf(S.pair[1])))));
+      if (S.last) st.append(S.last());
+    }
+  }
+
+  // Бажання за столом — помітна смужка.
+  if (S.wish) {
+    const mine = S.wish.from === me;
+    const b = h("button", "wishstrip", mine ? T("✨ Твоє бажання: відповідей {0}", S.wish.answers.length) : T("✨ {0} загадав(ла) бажання — виконай і отримай 👑", nameOf(S.wish.from)));
+    b.addEventListener("click", openWish);
+    st.appendChild(b);
+  }
 }
 
-/* ---------- вікна ---------- */
-function showOver(title, text, buttons) {
+// Остання відповідь із реакціями (показується до наступного оберту).
+function showAnswer(m) {
+  let reacted = false;
+  S.last = () => {
+    const box = h("div");
+    box.appendChild(h("div", "sub", T(m.text ? "💬 {0} відповідає:" : "🤐 {0} промовчав(ла)", nameOf(m.seat))));
+    box.appendChild(taskCard(m.category, m.task, m.text || ""));
+    if (m.text && m.seat !== S.seat) {
+      const row = h("div", "reacts");
+      ["❤️", "😂", "🔥", "😮"].forEach((e) => {
+        const b = h("button", "", e);
+        b.disabled = reacted;
+        b.addEventListener("click", () => { reacted = true; send({ type: "react", emoji: e }); buzz("impactOccurred", "light"); renderStage(); });
+        row.appendChild(b);
+      });
+      box.appendChild(row);
+    }
+    return box;
+  };
+  renderStage();
+}
+
+/* ---------- стрічка, тости, лічильники ---------- */
+const feed = [];
+function addFeed(text, mine, opts = {}) {
+  feed.push({ text, mine, chat: opts.chat, seat: opts.seat });
+  if (feed.length > 80) feed.shift();
+  if (!opts.chat && !opts.quiet) toast(text, mine);
+  if (opts.chat && !chatOpen) { S.unread++; updateBadges(); }
+  if (chatOpen) renderChat();
+}
+function toast(text, mine) {
+  const t = h("div", "toast" + (mine ? " me" : ""), text);
+  $("toasts").appendChild(t);
+  while ($("toasts").children.length > 3) $("toasts").firstChild.remove();
+  setTimeout(() => t.remove(), 3500);
+}
+function updateBadges() {
+  $("badgeGift").textContent = S.wallet.roses > 0 ? String(S.wallet.roses) : "";
+  $("badgeChat").textContent = S.unread > 0 ? (S.unread > 9 ? "9+" : String(S.unread)) : "";
+  $("badgeWish").textContent = S.wish ? "!" : "";
+  $("badgeMore").textContent = S.wallet.aims > 0 ? String(S.wallet.aims) : "";
+}
+
+/* ---------- шторки ---------- */
+let chatOpen = false;
+function openSheet(title, text, body) {
+  $("sheetTitle").textContent = title;
+  $("sheetText").textContent = text || "";
+  $("sheetText").classList.toggle("hidden", !text);
+  $("sheetBody").replaceChildren(...(body || []));
+  $("sheet").classList.remove("hidden");
+}
+function closeSheet() { $("sheet").classList.add("hidden"); chatOpen = false; wishOpen = false; }
+$("sheetClose").addEventListener("click", closeSheet);
+$("sheet").addEventListener("click", (e) => { if (e.target === $("sheet")) closeSheet(); });
+
+function showOver(title, text, buttons, before) {
   $("overTitle").textContent = title;
   $("overText").textContent = text;
   const box = $("overBtns");
-  box.innerHTML = "";
-  (buttons || []).forEach(([label, fn]) => {
-    const b = document.createElement("button");
-    b.className = "main";
-    b.style.marginTop = "8px";
-    b.textContent = label;
+  box.replaceChildren();
+  if (before) box.appendChild(before);
+  (buttons || []).forEach(([label, fn], i) => {
+    const b = h("button", "ovbtn" + (i > 0 ? " sec" : ""), label);
     b.addEventListener("click", fn);
     box.appendChild(b);
   });
@@ -474,176 +610,175 @@ function showOver(title, text, buttons) {
 }
 const hideOver = () => $("over").classList.add("hidden");
 
+function showHowTo() {
+  const steps = h("div", "steps");
+  [["🍾", "Крути пляшку, коли твоя черга"], ["💬", "Відповідай на завдання — інші ставлять реакції й дарують ❤"], ["💋", "Пара обирає: 💋 поцілувати, 👋 відштовхнути або 🔒 побути наодинці"], ["🎁", "Подарунки й ✨ бажання — у панелі внизу"]].forEach(([em, text]) => {
+    const s = h("div", "step"); s.append(h("b", "", em), h("span", "", T(text))); steps.appendChild(s);
+  });
+  showOver(T("Як грати"), "", [[T("Зрозуміло, граємо!"), () => { store.set("howto", "1"); hideOver(); }]], steps);
+}
+$("helpBtn").addEventListener("click", showHowTo);
+
+/* ---------- 🎁 подарунки ---------- */
 function openGift(i) {
-  if (!S.players[i] || i === S.seat || !ws || ws.readyState !== 1) return;
-  giftSeat = i;
-  $("sheetTitle").textContent = T("🎁 Подарунок для {0}", S.players[i].name);
-  $("sheetText").textContent = T("💌 Разом із подарунком {0} отримає запрошення побути з тобою наодинці. Подарунок дає ❤ (у кого найбільше — той носить 👑) і видно на аватарці. Оплата зірками Telegram.", S.players[i].name);
-  const grid = $("gifts");
-  grid.innerHTML = "";
+  if (!S.players[i] || i === S.seat) return;
+  const grid = h("div", "grid");
   if (S.wallet.roses > 0) {
-    const f = document.createElement("button");
-    f.className = "gift free";
-    f.innerHTML = "<b>🌹</b><span></span><i></i>";
-    f.querySelector("span").textContent = T("Безкоштовно");
-    f.querySelector("i").textContent = T("ще {0} · +2 ❤", S.wallet.roses);
-    f.addEventListener("click", () => {
-      ws.send(JSON.stringify({ type: "free_gift", toSeat: giftSeat }));
-      $("sheet").classList.add("hidden");
-    });
+    const f = h("button", "gift free");
+    f.append(h("b", "", "🌹"), h("span", "", T("Безкоштовно")), h("i", "", T("ще {0} · +2 ❤", S.wallet.roses)));
+    f.addEventListener("click", () => { send({ type: "free_gift", toSeat: i }); closeSheet(); });
     grid.appendChild(f);
   }
   S.gifts.forEach((g) => {
-    const b = document.createElement("button");
-    b.className = "gift";
-    b.innerHTML = "<b></b><span></span><i></i>";
-    b.querySelector("b").textContent = g.emoji;
-    b.querySelector("span").textContent = g.name;
-    b.querySelector("i").textContent = g.stars + " ⭐ · +" + giftHearts(g.stars) + " ❤";
-    b.addEventListener("click", () => {
-      ws.send(JSON.stringify({ type: "gift_invoice", toSeat: giftSeat, gift: g.id }));
-      $("sheet").classList.add("hidden");
-      addFeed(T("Готую оплату..."));
-    });
+    const b = h("button", "gift");
+    b.append(h("b", "", g.emoji), h("span", "", g.name), h("i", "", g.stars + " ⭐ · +" + giftHearts(g.stars) + " ❤"));
+    b.addEventListener("click", () => { send({ type: "gift_invoice", toSeat: i, gift: g.id }); closeSheet(); addFeed(T("Готую оплату..."), false, { quiet: true }); });
     grid.appendChild(b);
   });
-  $("sheet").classList.remove("hidden");
+  openSheet(T("🎁 Подарунок для {0}", S.players[i].name), T("💌 Разом із подарунком {0} отримає запрошення побути з тобою наодинці. Подарунок дає ❤ (у кого найбільше — той носить 👑) і видно на аватарці. Оплата зірками Telegram.", S.players[i].name), [grid]);
 }
-// Кнопка «🎁 Подарунок»: обрати, кому дарувати.
+function pickPlayer(title, text, onPick) {
+  const grid = h("div", "grid");
+  others().forEach((i) => {
+    const b = h("button", "who", (FACE[S.players[i].g] || "🙂") + " " + S.players[i].name);
+    b.addEventListener("click", () => onPick(i));
+    grid.appendChild(b);
+  });
+  openSheet(title, text, [grid]);
+}
 function pickGiftTarget() {
-  if (!ws || ws.readyState !== 1) return;
-  const others = [];
-  S.players.forEach((p, i) => { if (p && i !== S.seat) others.push(i); });
-  const grid = $("gifts");
-  grid.innerHTML = "";
-  if (!others.length) {
-    $("sheetTitle").textContent = T("🎁 Подарунок");
-    $("sheetText").textContent = T("Зачекай, поки хтось сяде за стіл. Подарувати можна будь-кому з гравців.");
-  } else if (others.length === 1) {
-    return openGift(others[0]);
-  } else {
-    $("sheetTitle").textContent = T("🎁 Кому подарувати?");
-    $("sheetText").textContent = T("Обери гравця за столом.");
-    others.forEach((i) => {
-      const b = document.createElement("button");
-      b.className = "who-btn";
-      b.textContent = S.players[i].name;
-      b.addEventListener("click", () => openGift(i));
-      grid.appendChild(b);
-    });
-  }
-  $("sheet").classList.remove("hidden");
+  const o = others();
+  if (!o.length) return openSheet(T("🎁 Подарунок"), T("Зачекай, поки хтось сяде за стіл. Подарувати можна будь-кому з гравців."), []);
+  if (o.length === 1) return openGift(o[0]);
+  pickPlayer(T("🎁 Кому подарувати?"), T("Обери гравця за столом."), openGift);
 }
-$("giftBtn").addEventListener("click", pickGiftTarget);
+$("tabGift").addEventListener("click", pickGiftTarget);
 
-// 🎯 Обрати, на кого покаже пляшка наступного твого ходу (за зірки).
+/* ---------- 🎯 на кого покаже пляшка ---------- */
 function pickAimTarget() {
-  if (!ws || ws.readyState !== 1) return;
-  const others = [];
-  S.players.forEach((p, i) => { if (p && i !== S.seat) others.push(i); });
-  const grid = $("gifts");
-  grid.innerHTML = "";
-  $("sheetTitle").textContent = T("🎯 На кого покаже пляшка?");
-  if (others.length < 2) {
-    $("sheetText").textContent = T("Це має сенс, коли за столом хоча б двоє інших гравців. Зараз пляшка й так покаже на єдиного суперника.");
-  } else {
-    const free = S.wallet.aims > 0;
-    $("sheetText").textContent = free ? T("У тебе є безкоштовні 🎯: {0}. Обери гравця.", S.wallet.aims) : T("Наступного твого ходу пляшка покаже на обраного гравця. Оплата зірками Telegram.");
-    others.forEach((i) => {
-      const b = document.createElement("button");
-      b.className = "who-btn";
-      b.textContent = (FACE[S.players[i].g] || "🙂") + " " + S.players[i].name;
-      b.addEventListener("click", () => {
-        ws.send(JSON.stringify({ type: free ? "free_aim" : "aim_invoice", toSeat: i }));
-        $("sheet").classList.add("hidden");
-        if (!free) addFeed(T("Готую оплату..."));
-      });
-      grid.appendChild(b);
-    });
-  }
-  $("sheet").classList.remove("hidden");
+  if (others().length < 2) return openSheet(T("🎯 На кого покаже пляшка?"), T("Це має сенс, коли за столом хоча б двоє інших гравців. Зараз пляшка й так покаже на єдиного суперника."), []);
+  const free = S.wallet.aims > 0;
+  pickPlayer(T("🎯 На кого покаже пляшка?"), free ? T("У тебе є безкоштовні 🎯: {0}. Обери гравця.", S.wallet.aims) : T("Наступного твого ходу пляшка покаже на обраного гравця. Оплата зірками Telegram."), (i) => {
+    send({ type: free ? "free_aim" : "aim_invoice", toSeat: i });
+    closeSheet();
+    if (!free) addFeed(T("Готую оплату..."), false, { quiet: true });
+  });
 }
-$("aimBtn").addEventListener("click", pickAimTarget);
 
 /* ---------- ✨ бажання ---------- */
-function askWish() {
-  if (!ws || ws.readyState !== 1) return;
-  const grid = $("gifts");
-  grid.innerHTML = "";
-  $("sheetTitle").textContent = T("✨ Загадай бажання");
-  if (S.wish) {
-    $("sheetText").textContent = T("За столом уже є бажання. Зачекай, поки його виконають.");
-  } else if (S.players.filter(Boolean).length < 2) {
-    $("sheetText").textContent = T("Потрібен хоча б ще один гравець за столом.");
-  } else {
-    $("sheetText").textContent = T("Напиши, чого хочеш: вірш, комплімент, зізнання, смішну історію… Бажання побачить увесь стіл. Хто виконає найкраще — отримає від тебе 👑 Корону бажань (+40 ❤). Якщо ніхто не відповість за 5 хвилин, зірки повернуться.");
-    const ta = document.createElement("textarea");
-    ta.maxLength = 150; ta.rows = 3; ta.placeholder = T("Моє бажання…");
-    ta.style.cssText = "grid-column:1/-1;width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:15px;font-family:inherit;resize:none";
-    const go = document.createElement("button");
-    go.className = "main"; go.style.gridColumn = "1/-1";
-    go.textContent = T("✨ Загадати · 100⭐");
+let wishOpen = false;
+function openWish() {
+  wishOpen = true;
+  const w = S.wish;
+  if (!w) {
+    if (others().length < 1) return openSheet(T("✨ Загадай бажання"), T("Потрібен хоча б ще один гравець за столом."), []);
+    const ta = h("textarea"); ta.maxLength = 150; ta.rows = 3; ta.placeholder = T("Моє бажання…");
+    const go = h("button", "big", T("✨ Загадати · 100⭐"));
     go.addEventListener("click", () => {
       const text = ta.value.trim();
       if (text.length < 3) { ta.focus(); return; }
-      ws.send(JSON.stringify({ type: "wish_invoice", text }));
-      $("sheet").classList.add("hidden");
-      addFeed(T("Готую оплату..."));
+      send({ type: "wish_invoice", text });
+      closeSheet();
+      addFeed(T("Готую оплату..."), false, { quiet: true });
     });
-    grid.append(ta, go);
-    setTimeout(() => { try { ta.focus(); } catch (e) {} }, 100);
+    openSheet(T("✨ Загадай бажання"), T("Напиши, чого хочеш: вірш, комплімент, зізнання, смішну історію… Бажання побачить увесь стіл. Хто виконає найкраще — отримає від тебе 👑 Корону бажань (+40 ❤). Якщо ніхто не відповість за 5 хвилин, зірки повернуться."), [ta, go]);
+    setTimeout(() => { try { ta.focus(); } catch (e) {} }, 150);
+    return;
   }
-  $("sheet").classList.remove("hidden");
-}
-$("wishBtn").addEventListener("click", askWish);
-
-let wishTimer = null;
-function renderWish() {
-  const box = $("wishBox");
-  const w = S.wish;
-  clearInterval(wishTimer);
-  if (!w) { box.classList.add("hidden"); box.replaceChildren(); return; }
   const mine = w.from === S.seat;
   const answered = w.answers.some((a) => a.seat === S.seat);
-  // Чернетка відповіді не має зникати, коли приходять чужі відповіді.
-  const draft = box.querySelector("textarea")?.value || "";
-  box.replaceChildren();
-  const h = document.createElement("div"); h.className = "h";
-  h.textContent = T("✨ Бажання від {0}", nameOf(w.from));
-  const t = document.createElement("div"); t.className = "w"; t.textContent = "«" + w.text + "»";
-  const p = document.createElement("div"); p.className = "p";
-  const tick = () => { const left = Math.max(0, Math.ceil((w.endsAt - Date.now()) / 60000)); p.textContent = T("Хто виконає найкраще — отримає 👑 Корону бажань (+{0} ❤). Лишилось ~{1} хв.", w.hearts, left); };
-  tick(); wishTimer = setInterval(tick, 15000);
-  box.append(h, t, p);
+  const old = $("sheetBody").querySelector("textarea");
+  const keepText = old ? old.value : "";
+  const body = h("div", "wishcard");
+  body.appendChild(h("div", "w", "«" + w.text + "»"));
+  const left = Math.max(0, Math.ceil((w.endsAt - Date.now()) / 60000));
+  body.appendChild(h("div", "sub", T("Хто виконає найкраще — отримає 👑 Корону бажань (+{0} ❤). Лишилось ~{1} хв.", w.hearts, left)));
   w.answers.forEach((a, i) => {
-    const row = document.createElement("div"); row.className = "ans";
-    const sp = document.createElement("span");
-    const nm = document.createElement("b"); nm.textContent = (a.seat >= 0 ? nameOf(a.seat) : a.name) + ": ";
-    sp.append(nm, document.createTextNode(a.text));
+    const row = h("div", "ans");
+    const sp = h("span");
+    sp.append(h("b", "", (a.seat >= 0 ? nameOf(a.seat) : a.name) + ": "), document.createTextNode(a.text));
     row.appendChild(sp);
     if (mine) {
-      const b = document.createElement("button"); b.className = "pick"; b.textContent = T("👑 Обрати");
-      b.addEventListener("click", () => ws.send(JSON.stringify({ type: "wish_pick", idx: i })));
+      const b = h("button", "pick", T("👑 Обрати"));
+      b.addEventListener("click", () => { send({ type: "wish_pick", idx: i }); closeSheet(); });
       row.appendChild(b);
     }
-    box.appendChild(row);
+    body.appendChild(row);
   });
-  if (mine && !w.answers.length) {
-    const e = document.createElement("div"); e.className = "p"; e.style.marginTop = "8px";
-    e.textContent = T("Чекаємо, хто виконає твоє бажання…");
-    box.appendChild(e);
-  }
+  if (mine && !w.answers.length) body.appendChild(h("div", "sub", T("Чекаємо, хто виконає твоє бажання…")));
   if (!mine && !answered) {
-    const ta = document.createElement("textarea"); ta.rows = 2; ta.maxLength = 150; ta.placeholder = T("Виконай бажання тут…"); ta.value = draft;
-    const go = document.createElement("button"); go.className = "main"; go.textContent = T("✨ Виконати");
+    const ta = h("textarea"); ta.rows = 2; ta.maxLength = 150; ta.placeholder = T("Виконай бажання тут…"); ta.value = keepText;
+    const go = h("button", "big", T("✨ Виконати"));
     go.addEventListener("click", () => {
       const text = ta.value.trim();
       if (!text) { ta.focus(); return; }
-      ws.send(JSON.stringify({ type: "wish_answer", text }));
+      send({ type: "wish_answer", text });
     });
-    box.append(ta, go);
+    body.append(ta, go);
   }
-  box.classList.remove("hidden");
+  openSheet(T("✨ Бажання від {0}", nameOf(w.from)), "", [body]);
+}
+$("tabWish").addEventListener("click", openWish);
+
+/* ---------- 💬 чат ---------- */
+function renderChat() {
+  const list = h("div", "feed");
+  if (!feed.length) list.appendChild(h("div", "empty", T("Тут поки тихо. Привітайся!")));
+  feed.forEach((f) => {
+    if (f.chat) {
+      const d = h("div", f.seat === S.seat ? "me" : "");
+      const p = S.players[f.seat];
+      const b = h("b", p && p.g ? p.g : "", (p ? (FACE[p.g] || "🙂") + " " + p.name : T("Хтось")) + ": ");
+      d.append(b, document.createTextNode(f.text));
+      list.appendChild(d);
+    } else list.appendChild(h("div", "sys", f.text));
+  });
+  const form = h("form", "chatf");
+  const input = h("input"); input.maxLength = 150; input.autocomplete = "off"; input.placeholder = T("Написати за столом...");
+  const go = h("button", "", "➤"); go.type = "submit";
+  form.append(input, go);
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    send({ type: "chat", text });
+    input.value = "";
+  });
+  const prev = $("sheetBody").querySelector(".chatf input");
+  const keep = prev ? prev.value : "";
+  openSheet(T("💬 Чат столу"), "", [list, form]);
+  input.value = keep;
+  list.scrollTop = list.scrollHeight;
+}
+$("tabChat").addEventListener("click", () => { chatOpen = true; S.unread = 0; updateBadges(); renderChat(); });
+
+/* ---------- ☰ ще ---------- */
+function share() {
+  const link = "https://t.me/" + (S.bot || "nevidomyi_chat_bot") + (S.invite ? "?start=" + S.invite : "");
+  const url = "https://t.me/share/url?url=" + encodeURIComponent(link) + "&text=" + encodeURIComponent(T("Грай зі мною в бутилочку 🍾"));
+  try { tg.openTelegramLink(url); } catch (e) { window.open(url, "_blank"); }
+}
+$("tabMore").addEventListener("click", () => {
+  const menu = h("div", "menu");
+  const item = (em, label, note, fn) => { const b = h("button"); b.append(h("b", "", em), h("span", "", label), h("i", "", note || "")); b.addEventListener("click", fn); menu.appendChild(b); };
+  item("🎯", T("На кого покаже пляшка"), S.wallet.aims > 0 ? T("безкоштовно ×{0}", S.wallet.aims) : "5⭐", pickAimTarget);
+  item("📨", T("Покликати друзів"), T("+Premium"), () => { closeSheet(); share(); });
+  item("❓", T("Як грати"), "", () => { closeSheet(); showHowTo(); });
+  openSheet(T("Ще"), "", [menu]);
+});
+
+/* ---------- щоденна винагорода ---------- */
+const rewardText = (r) => [r.roses ? "🌹×" + r.roses : "", r.aims ? "🎯×" + r.aims : "", r.premium ? T("💎 {0} день Premium", r.premium) : ""].filter(Boolean).join("  ");
+function showDaily(m) {
+  const days = h("div", "days");
+  m.rewards.forEach((r, i) => {
+    const d = h("div", "day" + (i + 1 < m.day ? " done" : i + 1 === m.day ? " now" : ""), T("День {0}", i + 1));
+    d.appendChild(h("b", "", (r.roses > 1 ? r.roses + "🌹" : "🌹") + (r.aims ? "🎯" : "") + (r.premium ? "💎" : "")));
+    days.appendChild(d);
+  });
+  showOver(T("🎁 Щоденна винагорода · день {0}", m.day), T("Заходь щодня: що довша серія, то кращі подарунки. Пропустиш день — серія почнеться спочатку."), [
+    [T("Забрати"), () => { send({ type: "daily_claim" }); hideOver(); }],
+  ], days);
 }
 
 /* ---------- 💖 подія ---------- */
@@ -659,14 +794,6 @@ function renderEvent() {
   };
   tick(); eventTimer = setInterval(tick, 30000);
 }
-// Запрошення друзів: посилання з кодом гравця (за друга — 3 години Premium).
-$("shareBtn").addEventListener("click", () => {
-  const link = "https://t.me/" + (S.bot || "nevidomyi_chat_bot") + (S.invite ? "?start=" + S.invite : "");
-  const url = "https://t.me/share/url?url=" + encodeURIComponent(link) + "&text=" + encodeURIComponent(T("Грай зі мною в бутилочку 🍾"));
-  try { tg.openTelegramLink(url); } catch (e) { window.open(url, "_blank"); }
-});
-$("sheetClose").addEventListener("click", () => $("sheet").classList.add("hidden"));
-$("sheet").addEventListener("click", (e) => { if (e.target === $("sheet")) $("sheet").classList.add("hidden"); });
 
 /* ---------- повідомлення від сервера ---------- */
 function handle(m) {
@@ -675,77 +802,58 @@ function handle(m) {
     S.bot = m.bot || "";
     S.invite = m.invite || "";
     applyLang();
-    render();
   } else if (m.type === "joined") {
     S.seat = m.seat;
     S.gifts = m.gifts || [];
     hideOver();
+    if (!store.get("howto")) showHowTo();
   } else if (m.type === "need_gender") {
     showOver(T("Хто ти?"), T("Так за столом видно, хто хлопець, а хто дівчина. Збережемо в анкету, більше не питатимемо."), [
-      [T("👨 Я хлопець"), () => { ws.send(JSON.stringify({ type: "gender", gender: "Чоловік" })); hideOver(); }],
-      [T("👩 Я дівчина"), () => { ws.send(JSON.stringify({ type: "gender", gender: "Жінка" })); hideOver(); }],
+      [T("👨 Я хлопець"), () => { send({ type: "gender", gender: "Чоловік" }); hideOver(); }],
+      [T("👩 Я дівчина"), () => { send({ type: "gender", gender: "Жінка" }); hideOver(); }],
     ]);
   } else if (m.type === "table") {
+    const wasMyTurn = S.phase === "idle" && S.turn === S.seat;
     S.players = m.players;
     S.task = m.task || null;
     S.turn = m.turn;
     S.phase = m.phase;
     S.pair = m.pair;
-    S.answered = m.answered || [];
     if (m.phase !== "pair") S.myChoice = null;
-    render();
+    renderTable();
+    renderStage();
+    if (!wasMyTurn && S.phase === "idle" && S.turn === S.seat) buzz("notificationOccurred", "success");
   } else if (m.type === "spin_start") {
     S.phase = "spin";
     S.spinner = m.spinner;
     S.pair = null;
     S.myChoice = null;
-    $("result").innerHTML = "";
+    S.last = null;
     const cur = ((rot % 360) + 360) % 360;
     rot += m.turns * 360 + ((((angleOf(m.target) - cur) % 360) + 360) % 360);
     const bottle = $("bottle");
     bottle.style.transition = "transform " + m.duration + "ms cubic-bezier(.12,.72,.18,1)";
-    bottle.style.transform = "rotate(" + rot + "deg)";
-    render();
+    bottle.style.transform = "translate(-50%,-50%) rotate(" + rot + "deg)";
+    renderTable();
+    renderStage();
     buzz("impactOccurred", "medium");
   } else if (m.type === "spin_result") {
     S.sent = false;
     S.phase = "answer";
     S.spinner = m.spinner;
     S.pair = [m.spinner, m.target];
-    showResult(T(CAT_NAMES[m.category] || "ЗАВДАННЯ"), m.task, T(m.target === S.seat ? "🍾 {0} → {1} (це ти!)" : "🍾 {0} → {1} · чекаємо відповідь", nameOf(m.spinner), nameOf(m.target)));
-    render();
+    renderTable();
+    renderStage();
+    addFeed(T(m.target === S.seat ? "🍾 {0} → {1} (це ти!)" : "🍾 {0} → {1} · чекаємо відповідь", nameOf(m.spinner), nameOf(m.target)), m.target === S.seat, { quiet: m.target !== S.seat });
     buzz("notificationOccurred", "success");
   } else if (m.type === "answer") {
-    const who = nameOf(m.seat);
-    showResult(T(CAT_NAMES[m.category] || "ЗАВДАННЯ"), m.task, T(m.text ? "💬 {0} відповідає:" : "🤐 {0} промовчав(ла)", who));
-    if (m.text) {
-      const said = document.createElement("div");
-      said.className = "said";
-      said.style.marginTop = "10px";
-      said.textContent = "«" + m.text + "»";
-      $("result").querySelector(".card").appendChild(said);
-      if (m.seat !== S.seat) {
-        const row = document.createElement("div");
-        row.className = "reacts";
-        ["❤️", "😂", "🔥", "😮"].forEach((e) => {
-          const b = document.createElement("button");
-          b.textContent = e;
-          b.addEventListener("click", () => {
-            ws.send(JSON.stringify({ type: "react", emoji: e }));
-            row.querySelectorAll("button").forEach((x) => { x.disabled = true; });
-            buzz("impactOccurred", "light");
-          });
-          row.appendChild(b);
-        });
-        $("result").appendChild(row);
-      }
-    }
+    showAnswer(m);
   } else if (m.type === "react") {
     fly(m.to, m.emoji);
-    addFeed(m.emoji + " " + nameOf(m.from) + " → " + nameOf(m.to), m.to === S.seat);
+    addFeed(m.emoji + " " + nameOf(m.from) + " → " + nameOf(m.to), m.to === S.seat, { quiet: m.to !== S.seat });
     if (m.to === S.seat) buzz("notificationOccurred", "success");
   } else if (m.type === "chat") {
-    addChat(m.seat, m.text);
+    addFeed(m.text, false, { chat: true, seat: m.seat });
   } else if (m.type === "pair_done") {
     const pair = T("{0} і {1}", nameOf(m.a), nameOf(m.b));
     let line = { alone: T("🔒 {0} пішли побути наодинці", pair), kiss: T("💋 {0} поцілувались (+1 ❤ кожному)", pair), busy: T("🔒 Не вийшло: хтось уже в іншому діалозі"), none: T("🤷 {0} розгубились", pair) }[m.outcome];
@@ -767,14 +875,14 @@ function handle(m) {
           T("Розтопи серце подарунком: {0} отримає його разом із запрошенням побути з тобою наодинці.", nm), [
             [T("🎁 Подарувати {0}", nm), () => { hideOver(); openGift(other); }],
             [T("Пізніше"), hideOver],
-          ]), 600);
+          ]), 700);
       }
     }
   } else if (m.type === "chat_opened") {
     S.pair = null;
     showOver(T("🔒 Ви наодинці"), T("Пиши співрозмовнику в чаті з ботом. Гру можна закрити, а потім повернутись за стіл."), [
       [T("Закрити гру"), () => { try { tg.close(); } catch (e) { hideOver(); } }],
-      [T("Повернутись за стіл"), () => { ws.send(JSON.stringify({ type: "join" })); hideOver(); }],
+      [T("Повернутись за стіл"), () => { send({ type: "join" }); hideOver(); }],
     ]);
   } else if (m.type === "gift") {
     const from = m.from >= 0 ? nameOf(m.from) : T("Хтось");
@@ -784,12 +892,12 @@ function handle(m) {
   } else if (m.type === "gift_invite") {
     const nm = nameOf(m.from);
     showOver(T("🎁 {0} дарує тобі {1}", nm, m.gift.emoji + " " + m.gift.name), T("{0} запрошує тебе побути наодинці: це приватний чат у боті, без імен і контактів.", nm), [
-      [T("🔒 Побути наодинці"), () => { ws.send(JSON.stringify({ type: "invite", yes: true })); hideOver(); }],
-      [T("Дякую, лишусь за столом"), () => { ws.send(JSON.stringify({ type: "invite", yes: false })); hideOver(); }],
+      [T("🔒 Побути наодинці"), () => { send({ type: "invite", yes: true }); hideOver(); }],
+      [T("Дякую, лишусь за столом"), () => { send({ type: "invite", yes: false }); hideOver(); }],
     ]);
   } else if (m.type === "wallet") {
     S.wallet = { roses: m.roses || 0, aims: m.aims || 0 };
-    updateWalletLabels();
+    updateBadges();
   } else if (m.type === "daily") {
     showDaily(m);
   } else if (m.type === "daily_done") {
@@ -797,11 +905,17 @@ function handle(m) {
     fly(S.seat, "🎁");
     buzz("notificationOccurred", "success");
   } else if (m.type === "wish") {
+    const had = Boolean(S.wish);
     S.wish = m.wish ? { ...m.wish, endsAt: Date.now() + m.wish.left } : null;
-    renderWish();
+    if (S.wish && !had && S.wish.from !== S.seat) toast(T("✨ {0} загадав(ла) бажання — виконай і отримай 👑", nameOf(S.wish.from)), true);
+    updateBadges();
+    renderStage();
+    if (wishOpen && !$("sheet").classList.contains("hidden")) openWish();
   } else if (m.type === "wish_done") {
     S.wish = null;
-    renderWish();
+    if (wishOpen) closeSheet();
+    updateBadges();
+    renderStage();
     if (m.to >= 0) {
       addFeed(T("👑 {0} виконав(ла) бажання {1} і отримує Корону бажань!", nameOf(m.to), nameOf(m.from)), m.to === S.seat);
       fly(m.to, "👑");
@@ -817,7 +931,7 @@ function handle(m) {
     addFeed(m.text);
   } else if (m.type === "invoice") {
     if (tg && tg.openInvoice) {
-      tg.openInvoice(m.link, (st) => addFeed(T(st === "paid" ? "✅ Оплачено, подарунок летить" : st === "cancelled" ? "Оплату скасовано" : "Оплата не пройшла")));
+      tg.openInvoice(m.link, (st) => addFeed(T(st === "paid" ? "✅ Оплачено, подарунок летить" : st === "cancelled" ? "Оплату скасовано" : "Оплата не пройшла"), st === "paid"));
     } else addFeed(T("Відкрий гру з Telegram, щоб оплатити."));
   } else if (m.type === "error") {
     if (m.code === "need_start") {
@@ -845,44 +959,8 @@ function connect() {
   });
 }
 
-$("chips").addEventListener("click", (e) => {
-  const b = e.target.closest(".cat");
-  if (!b) return;
-  document.querySelectorAll(".cat").forEach((x) => x.classList.remove("on"));
-  b.classList.add("on");
-  S.selected = b.dataset.cat;
-  buzz("selectionChanged");
-});
-$("spin").addEventListener("click", () => ws && ws.send(JSON.stringify({ type: "spin", selected: S.selected })));
-document.querySelectorAll("#pair button").forEach((b) => b.addEventListener("click", () => {
-  if (S.myChoice) return;
-  S.myChoice = b.dataset.choice;
-  ws.send(JSON.stringify({ type: "pair", choice: S.myChoice }));
-  render();
-}));
-
-$("answerSend").addEventListener("click", () => {
-  const text = $("answerText").value.trim();
-  if (!text) { $("answerText").focus(); return; }
-  ws.send(JSON.stringify({ type: "answer", text }));
-  S.sent = true;
-  $("answerBox").classList.add("hidden");
-});
-$("answerSkip").addEventListener("click", () => {
-  ws.send(JSON.stringify({ type: "answer", skip: true }));
-  S.sent = true;
-  $("answerBox").classList.add("hidden");
-});
-$("chatForm").addEventListener("submit", (e) => {
-  e.preventDefault();
-  const text = $("chatText").value.trim();
-  if (!text || !ws || ws.readyState !== 1) return;
-  ws.send(JSON.stringify({ type: "chat", text }));
-  $("chatText").value = "";
-});
-
 applyLang();
-render();
+renderTable();
 connect();
 </script>
 </body>
