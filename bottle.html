@@ -81,8 +81,8 @@ button:disabled{opacity:.45;cursor:default}
 </head>
 <body>
 <div class="wrap">
-  <h1>🍾 Гра в бутилочку</h1>
-  <div class="status" id="status">Підключення до столу...</div>
+  <h1 data-t="🍾 Гра в бутилочку">🍾 Гра в бутилочку</h1>
+  <div class="status" id="status" data-t="Підключення до столу...">Підключення до столу...</div>
 
   <div class="table" id="table">
     <svg id="bottle" viewBox="0 0 56 210">
@@ -93,40 +93,42 @@ button:disabled{opacity:.45;cursor:default}
   </div>
 
   <div class="chips" id="chips">
-    <button class="cat on" data-cat="all">🎲 Усе</button>
-    <button class="cat" data-cat="truth">💬 Правда</button>
-    <button class="cat" data-cat="action">🔥 Дія</button>
-    <button class="cat" data-cat="kiss">💋 Цьом</button>
+    <button class="cat on" data-cat="all" data-t="🎲 Усе">🎲 Усе</button>
+    <button class="cat" data-cat="truth" data-t="💬 Правда">💬 Правда</button>
+    <button class="cat" data-cat="action" data-t="🔥 Дія">🔥 Дія</button>
+    <button class="cat" data-cat="kiss" data-t="💋 Цьом">💋 Цьом</button>
     <button class="cat" data-cat="adult">🔞 18+</button>
   </div>
   <button class="main" id="spin" disabled>Підключення...</button>
-  <button class="giftBtn" id="giftBtn">🎁 Подарунок</button>
+  <button class="giftBtn" id="giftBtn" data-t="🎁 Подарунок">🎁 Подарунок</button>
+  <button class="ghost" id="aimBtn" data-t="🎯 На кого покаже пляшка · 5⭐">🎯 На кого покаже пляшка · 5⭐</button>
+  <button class="ghost" id="shareBtn" data-t="📨 Покликати друзів">📨 Покликати друзів</button>
 
   <div class="pair hidden" id="pair">
     <div class="t" id="pairTitle"></div>
     <div class="row">
-      <button data-choice="kiss">💋 Поцілувати</button>
-      <button data-choice="push">👋 Відштовхнути</button>
-      <button data-choice="alone">🔒 Наодинці</button>
+      <button data-choice="kiss" data-t="💋 Поцілувати">💋 Поцілувати</button>
+      <button data-choice="push" data-t="👋 Відштовхнути">👋 Відштовхнути</button>
+      <button data-choice="alone" data-t="🔒 Наодинці">🔒 Наодинці</button>
     </div>
     <div class="wait" id="pairWait"></div>
   </div>
 
   <div class="answer hidden" id="answerBox">
     <div class="t" id="answerTask"></div>
-    <textarea id="answerText" rows="3" maxlength="200" placeholder="Твоя відповідь..."></textarea>
-    <button class="main" id="answerSend">Відповісти</button>
-    <button class="ghost" id="answerSkip">Пропустити 🤐</button>
-    <div class="wait">На відповідь є хвилина. Її побачать усі за столом.</div>
+    <textarea id="answerText" rows="3" maxlength="200" placeholder="Твоя відповідь..." data-tp="Твоя відповідь..."></textarea>
+    <button class="main" id="answerSend" data-t="Відповісти">Відповісти</button>
+    <button class="ghost" id="answerSkip" data-t="Пропустити 🤐">Пропустити 🤐</button>
+    <div class="wait" data-t="На відповідь є хвилина. Її побачать усі за столом.">На відповідь є хвилина. Її побачать усі за столом.</div>
   </div>
 
   <div class="result" id="result"></div>
   <div class="feed" id="feed"></div>
   <form class="chatf" id="chatForm">
-    <input id="chatText" maxlength="150" autocomplete="off" placeholder="Написати за столом...">
+    <input id="chatText" maxlength="150" autocomplete="off" placeholder="Написати за столом..." data-tp="Написати за столом...">
     <button type="submit">➤</button>
   </form>
-  <div class="note">Відповідай на завдання, став реакції — вони дають ❤ гравцю, а найпопулярніший отримує 👑. Подарунок дає ❤ і запрошення побути наодинці: натисни «🎁 Подарунок» або тапни на гравця. Без подарунка наодинці можна, лише якщо пара обере це обоє. Не надсилай контакти й особисті дані.</div>
+  <div class="note" data-t="Відповідай на завдання, став реакції — вони дають ❤ гравцю, а найпопулярніший отримує 👑. Подарунок дає ❤ і запрошення побути наодинці: натисни «🎁 Подарунок» або тапни на гравця. Без подарунка наодинці можна, лише якщо пара обере це обоє. Не надсилай контакти й особисті дані.">Відповідай на завдання, став реакції — вони дають ❤ гравцю, а найпопулярніший отримує 👑. Подарунок дає ❤ і запрошення побути наодинці: натисни «🎁 Подарунок» або тапни на гравця. Без подарунка наодинці можна, лише якщо пара обере це обоє. Не надсилай контакти й особисті дані.</div>
 </div>
 
 <div class="sheet hidden" id="sheet">
@@ -134,7 +136,7 @@ button:disabled{opacity:.45;cursor:default}
     <h2 id="sheetTitle"></h2>
     <p id="sheetText"></p>
     <div class="grid" id="gifts"></div>
-    <button class="ghost" id="sheetClose">Закрити</button>
+    <button class="ghost" id="sheetClose" data-t="Закрити">Закрити</button>
   </div>
 </div>
 
@@ -151,6 +153,122 @@ const $ = (id) => document.getElementById(id);
 const tg = window.Telegram && window.Telegram.WebApp;
 try { tg && tg.ready(); tg && tg.expand(); } catch (e) {}
 const buzz = (kind, name) => { try { tg.HapticFeedback[kind](name); } catch (e) {} };
+
+/* ---------- мова: українська, русский, English ---------- */
+// Ключ — український текст; {0}, {1} — підстановки.
+const I18N = {
+  ru: {}, en: {},
+};
+[
+  ["Гра в бутилочку", "Игра в бутылочку", "Spin the Bottle"],
+  ["🍾 Гра в бутилочку", "🍾 Игра в бутылочку", "🍾 Spin the Bottle"],
+  ["Підключення до столу...", "Подключение к столу...", "Joining a table..."],
+  ["🎲 Усе", "🎲 Всё", "🎲 All"],
+  ["💬 Правда", "💬 Правда", "💬 Truth"],
+  ["🔥 Дія", "🔥 Действие", "🔥 Dare"],
+  ["💋 Цьом", "💋 Чмок", "💋 Kiss"],
+  ["Підключення...", "Подключение...", "Connecting..."],
+  ["🎁 Подарунок", "🎁 Подарок", "🎁 Gift"],
+  ["📨 Покликати друзів", "📨 Позвать друзей", "📨 Invite friends"],
+  ["🎯 На кого покаже пляшка · 5⭐", "🎯 На кого укажет бутылочка · 5⭐", "🎯 Choose who the bottle picks · 5⭐"],
+  ["🎯 На кого покаже пляшка?", "🎯 На кого укажет бутылочка?", "🎯 Who should the bottle pick?"],
+  ["Це має сенс, коли за столом хоча б двоє інших гравців. Зараз пляшка й так покаже на єдиного суперника.", "Это имеет смысл, когда за столом хотя бы двое других игроков. Сейчас бутылочка и так укажет на единственного соперника.", "This makes sense when there are at least two other players. Right now the bottle will pick your only opponent anyway."],
+  ["Наступного твого ходу пляшка покаже на обраного гравця. Оплата зірками Telegram.", "В твой следующий ход бутылочка укажет на выбранного игрока. Оплата звёздами Telegram.", "On your next turn the bottle will pick the player you choose. Paid with Telegram Stars."],
+  ["🎯 Наступного твого ходу пляшка покаже на {0}", "🎯 В твой следующий ход бутылочка укажет на {0}", "🎯 On your next turn the bottle will pick {0}"],
+  ["Грай зі мною в бутилочку 🍾", "Играй со мной в бутылочку 🍾", "Play Spin the Bottle with me 🍾"],
+  ["💋 Поцілувати", "💋 Поцеловать", "💋 Kiss"],
+  ["👋 Відштовхнути", "👋 Оттолкнуть", "👋 Push away"],
+  ["🔒 Наодинці", "🔒 Наедине", "🔒 Alone"],
+  ["Твоя відповідь...", "Твой ответ...", "Your answer..."],
+  ["Відповісти", "Ответить", "Answer"],
+  ["Пропустити 🤐", "Пропустить 🤐", "Skip 🤐"],
+  ["На відповідь є хвилина. Її побачать усі за столом.", "На ответ есть минута. Его увидят все за столом.", "You have a minute to answer. Everyone at the table will see it."],
+  ["Написати за столом...", "Написать за столом...", "Message the table..."],
+  ["Відповідай на завдання, став реакції — вони дають ❤ гравцю, а найпопулярніший отримує 👑. Подарунок дає ❤ і запрошення побути наодинці: натисни «🎁 Подарунок» або тапни на гравця. Без подарунка наодинці можна, лише якщо пара обере це обоє. Не надсилай контакти й особисті дані.", "Отвечай на задания, ставь реакции — они дают ❤ игроку, а самый популярный получает 👑. Подарок даёт ❤ и приглашение побыть наедине: нажми «🎁 Подарок» или тапни на игрока. Без подарка наедине можно, только если пара выберет это оба. Не отправляй контакты и личные данные.", "Answer dares and react — reactions give a player ❤, and the most popular one wears 👑. A gift gives ❤ and an invitation to be alone: tap “🎁 Gift” or tap a player. Without a gift, you can only be alone if both in the pair choose it. Don't share contacts or personal data."],
+  ["Закрити", "Закрыть", "Close"],
+  ["ПРАВДА", "ПРАВДА", "TRUTH"],
+  ["ДІЯ", "ДЕЙСТВИЕ", "DARE"],
+  ["ПОЦІЛУНОК", "ПОЦЕЛУЙ", "KISS"],
+  ["ЗАВДАННЯ", "ЗАДАНИЕ", "TASK"],
+  ["Хтось", "Кто-то", "Someone"],
+  ["За столом {0} з {1}. Для гри потрібно хоча б двоє.", "За столом {0} из {1}. Для игры нужно хотя бы двое.", "{0} of {1} at the table. You need at least two to play."],
+  ["За столом {0} з {1}", "За столом {0} из {1}", "{0} of {1} at the table"],
+  [" · твоя черга", " · твоя очередь", " · your turn"],
+  ["Чекаємо гравців...", "Ждём игроков...", "Waiting for players..."],
+  ["Пляшка крутиться...", "Бутылочка крутится...", "The bottle is spinning..."],
+  ["Відповідає: {0}", "Отвечает: {0}", "Answering: {0}"],
+  ["Пара обирає...", "Пара выбирает...", "The pair is choosing..."],
+  ["КРУТИТИ", "КРУТИТЬ", "SPIN"],
+  ["Крутить: {0}", "Крутит: {0}", "Spinning: {0}"],
+  ["{0} від {1}: {2}", "{0} от {1}: {2}", "{0} from {1}: {2}"],
+  ["💞 Ви в парі з {0}. Що далі?", "💞 Вы в паре с {0}. Что дальше?", "💞 You're paired with {0}. What next?"],
+  ["Чекаємо, що обере {0}...", "Ждём, что выберет {0}...", "Waiting for {0} to choose..."],
+  ["«Наодинці» — приватний чат у боті, якщо обоє його оберуть.", "«Наедине» — приватный чат в боте, если оба его выберут.", "“Alone” opens a private chat in the bot if you both choose it."],
+  ["🎁 Подарунок для {0}", "🎁 Подарок для {0}", "🎁 Gift for {0}"],
+  ["💌 Разом із подарунком {0} отримає запрошення побути з тобою наодинці. Подарунок дає ❤ (у кого найбільше — той носить 👑) і видно на аватарці. Оплата зірками Telegram.", "💌 Вместе с подарком {0} получит приглашение побыть с тобой наедине. Подарок даёт ❤ (у кого больше всех — тот носит 👑) и виден на аватарке. Оплата звёздами Telegram.", "💌 Along with the gift, {0} gets an invitation to be alone with you. A gift gives ❤ (whoever has the most wears 👑) and shows on their avatar. Paid with Telegram Stars."],
+  ["Готую оплату...", "Готовлю оплату...", "Preparing payment..."],
+  ["Зачекай, поки хтось сяде за стіл. Подарувати можна будь-кому з гравців.", "Подожди, пока кто-то сядет за стол. Подарить можно любому из игроков.", "Wait until someone joins the table. You can gift any player."],
+  ["🎁 Кому подарувати?", "🎁 Кому подарить?", "🎁 Who gets the gift?"],
+  ["Обери гравця за столом.", "Выбери игрока за столом.", "Pick a player at the table."],
+  ["Хто ти?", "Кто ты?", "Who are you?"],
+  ["Так за столом видно, хто хлопець, а хто дівчина. Збережемо в анкету, більше не питатимемо.", "Так за столом видно, кто парень, а кто девушка. Сохраним в анкету, больше не спросим.", "This shows who's a guy and who's a girl at the table. We'll save it to your profile and won't ask again."],
+  ["👨 Я хлопець", "👨 Я парень", "👨 I'm a guy"],
+  ["👩 Я дівчина", "👩 Я девушка", "👩 I'm a girl"],
+  ["🍾 {0} → {1} (це ти!)", "🍾 {0} → {1} (это ты!)", "🍾 {0} → {1} (that's you!)"],
+  ["🍾 {0} → {1} · чекаємо відповідь", "🍾 {0} → {1} · ждём ответ", "🍾 {0} → {1} · waiting for the answer"],
+  ["💬 {0} відповідає:", "💬 {0} отвечает:", "💬 {0} answers:"],
+  ["🤐 {0} промовчав(ла)", "🤐 {0} промолчал(а)", "🤐 {0} stayed silent"],
+  ["{0} і {1}", "{0} и {1}", "{0} and {1}"],
+  ["🔒 {0} пішли побути наодинці", "🔒 {0} ушли побыть наедине", "🔒 {0} went off to be alone"],
+  ["💋 {0} поцілувались (+1 ❤ кожному)", "💋 {0} поцеловались (+1 ❤ каждому)", "💋 {0} kissed (+1 ❤ each)"],
+  ["🔒 Не вийшло: хтось уже в іншому діалозі", "🔒 Не получилось: кто-то уже в другом диалоге", "🔒 Didn't work: someone is already in another chat"],
+  ["🤷 {0} розгубились", "🤷 {0} растерялись", "🤷 {0} hesitated"],
+  ["👋 {0} відштовхнули одне одного", "👋 {0} оттолкнули друг друга", "👋 {0} pushed each other away"],
+  ["👋 {0} відштовхнув(ла) {1}", "👋 {0} оттолкнул(а) {1}", "👋 {0} pushed {1} away"],
+  ["💔 {0} тебе відштовхнув(ла)", "💔 {0} тебя оттолкнул(а)", "💔 {0} pushed you away"],
+  ["🔒 {0} поки не готовий(а) наодинці", "🔒 {0} пока не готов(а) наедине", "🔒 {0} isn't ready to be alone yet"],
+  ["Розтопи серце подарунком: {0} отримає його разом із запрошенням побути з тобою наодинці.", "Растопи сердце подарком: {0} получит его вместе с приглашением побыть с тобой наедине.", "Melt their heart with a gift: {0} gets it along with an invitation to be alone with you."],
+  ["🎁 Подарувати {0}", "🎁 Подарить {0}", "🎁 Gift {0}"],
+  ["Пізніше", "Позже", "Later"],
+  ["🔒 Ви наодинці", "🔒 Вы наедине", "🔒 You're alone together"],
+  ["Пиши співрозмовнику в чаті з ботом. Гру можна закрити, а потім повернутись за стіл.", "Пиши собеседнику в чате с ботом. Игру можно закрыть, а потом вернуться за стол.", "Message your partner in the bot chat. You can close the game and come back to the table later."],
+  ["Закрити гру", "Закрыть игру", "Close game"],
+  ["Повернутись за стіл", "Вернуться за стол", "Back to the table"],
+  ["🎁 {0} дарує тобі {1}", "🎁 {0} дарит тебе {1}", "🎁 {0} gives you {1}"],
+  ["{0} запрошує тебе побути наодинці: це приватний чат у боті, без імен і контактів.", "{0} приглашает тебя побыть наедине: это приватный чат в боте, без имён и контактов.", "{0} invites you to be alone together: a private chat in the bot, with no names or contacts."],
+  ["🔒 Побути наодинці", "🔒 Побыть наедине", "🔒 Be alone together"],
+  ["Дякую, лишусь за столом", "Спасибо, останусь за столом", "Thanks, I'll stay at the table"],
+  ["✅ Оплачено, подарунок летить", "✅ Оплачено, подарок летит", "✅ Paid, the gift is on its way"],
+  ["Оплату скасовано", "Оплата отменена", "Payment cancelled"],
+  ["Оплата не пройшла", "Оплата не прошла", "Payment failed"],
+  ["Відкрий гру з Telegram, щоб оплатити.", "Открой игру из Telegram, чтобы оплатить.", "Open the game from Telegram to pay."],
+  ["Спершу в бота", "Сначала в бота", "Go to the bot first"],
+  ["Помилка гри", "Ошибка игры", "Game error"],
+  ["Відкрий через Telegram", "Открой через Telegram", "Open via Telegram"],
+  ["Ця гра працює лише всередині бота.", "Эта игра работает только внутри бота.", "This game only works inside the bot."],
+  ["З'єднання втрачено", "Соединение потеряно", "Connection lost"],
+  ["Гру відкрито в іншому вікні.", "Игра открыта в другом окне.", "The game is open in another window."],
+  ["Перевір інтернет і підключись знову.", "Проверь интернет и подключись снова.", "Check your connection and reconnect."],
+  ["Підключитись знову", "Подключиться снова", "Reconnect"],
+].forEach(([uk, ru, en]) => { I18N.ru[uk] = ru; I18N.en[uk] = en; });
+
+function guessLang(code) {
+  const c = String(code || "").toLowerCase();
+  if (c.startsWith("uk") || !c) return "uk";
+  if (["ru", "be", "kk", "ky", "uz", "tg", "hy", "az"].some((x) => c.startsWith(x))) return "ru";
+  return "en";
+}
+let LANG = (() => { try { return guessLang(tg.initDataUnsafe.user.language_code); } catch (e) { return "uk"; } })();
+function T(key, ...args) {
+  const s = (I18N[LANG] && I18N[LANG][key]) || key;
+  return s.replace(/\{(\d)\}/g, (_, n) => (args[n] !== undefined ? args[n] : ""));
+}
+function applyLang() {
+  document.documentElement.lang = LANG;
+  document.title = T("Гра в бутилочку");
+  document.querySelectorAll("[data-t]").forEach((el) => { el.textContent = T(el.dataset.t); });
+  document.querySelectorAll("[data-tp]").forEach((el) => { el.placeholder = T(el.dataset.tp); });
+}
 
 const N = 10;
 const CAT_NAMES = { truth: "ПРАВДА", action: "ДІЯ", kiss: "ПОЦІЛУНОК", adult: "18+" };
@@ -173,7 +291,7 @@ for (let i = 0; i < N; i++) {
 }
 // Кут місця на колі: ти завжди внизу.
 const angleOf = (i) => ((i - S.seat + N) % N) / N * 360 + 180;
-const nameOf = (i) => (S.players[i] && S.players[i].name) || "Хтось";
+const nameOf = (i) => (S.players[i] && S.players[i].name) || T("Хтось");
 
 function render() {
   const me = S.seat;
@@ -195,15 +313,15 @@ function render() {
 
   const n = S.players.filter(Boolean).length;
   const myTurn = S.phase === "idle" && S.turn === me;
-  $("status").textContent = S.phase === "wait" ? "За столом " + n + " з " + N + ". Для гри потрібно хоча б двоє." : "За столом " + n + " з " + N + (myTurn ? " · твоя черга" : "");
+  $("status").textContent = S.phase === "wait" ? T("За столом {0} з {1}. Для гри потрібно хоча б двоє.", n, N) : T("За столом {0} з {1}", n, N) + (myTurn ? T(" · твоя черга") : "");
   const spin = $("spin");
   spin.disabled = !myTurn;
-  spin.textContent = S.phase === "wait" ? "Чекаємо гравців..." : S.phase === "spin" ? "Пляшка крутиться..." : S.phase === "answer" ? "Відповідає: " + nameOf(S.task ? S.task.target : -1) : S.phase === "pair" ? "Пара обирає..." : myTurn ? "КРУТИТИ" : "Крутить: " + nameOf(S.turn);
+  spin.textContent = S.phase === "wait" ? T("Чекаємо гравців...") : S.phase === "spin" ? T("Пляшка крутиться...") : S.phase === "answer" ? T("Відповідає: {0}", nameOf(S.task ? S.task.target : -1)) : S.phase === "pair" ? T("Пара обирає...") : myTurn ? T("КРУТИТИ") : T("Крутить: {0}", nameOf(S.turn));
 
   const answering = S.phase === "answer" && S.task && S.task.target === me && !S.sent;
   const box = $("answerBox");
   if (answering && box.classList.contains("hidden")) {
-    $("answerTask").textContent = (CAT_NAMES[S.task.category] || "ЗАВДАННЯ") + " від " + nameOf(S.task.spinner) + ": " + S.task.text;
+    $("answerTask").textContent = T("{0} від {1}: {2}", T(CAT_NAMES[S.task.category] || "ЗАВДАННЯ"), nameOf(S.task.spinner), S.task.text);
     $("answerText").value = "";
     box.classList.remove("hidden");
     setTimeout(() => { try { $("answerText").focus(); } catch (e) {} }, 100);
@@ -213,9 +331,9 @@ function render() {
   $("pair").classList.toggle("hidden", !inPair);
   if (inPair) {
     const other = S.pair.find((s) => s !== me);
-    $("pairTitle").textContent = "💞 Ви в парі з " + nameOf(other) + ". Що далі?";
+    $("pairTitle").textContent = T("💞 Ви в парі з {0}. Що далі?", nameOf(other));
     document.querySelectorAll("#pair button").forEach((b) => { b.disabled = Boolean(S.myChoice); });
-    $("pairWait").textContent = S.myChoice ? "Чекаємо, що обере " + nameOf(other) + "..." : "«Наодинці» — приватний чат у боті, якщо обоє його оберуть.";
+    $("pairWait").textContent = S.myChoice ? T("Чекаємо, що обере {0}...", nameOf(other)) : T("«Наодинці» — приватний чат у боті, якщо обоє його оберуть.");
   }
 }
 
@@ -236,7 +354,7 @@ function addChat(seat, text) {
   const d = document.createElement("div");
   const b = document.createElement("b");
   const p = S.players[seat];
-  b.textContent = (p ? (FACE[p.g] || "🙂") + " " + p.name : "Хтось") + ": ";
+  b.textContent = (p ? (FACE[p.g] || "🙂") + " " + p.name : T("Хтось")) + ": ";
   if (p && p.g) b.className = p.g;
   const t = document.createElement("span");
   t.className = "msg";
@@ -286,8 +404,8 @@ const hideOver = () => $("over").classList.add("hidden");
 function openGift(i) {
   if (!S.players[i] || i === S.seat || !ws || ws.readyState !== 1) return;
   giftSeat = i;
-  $("sheetTitle").textContent = "🎁 Подарунок для " + S.players[i].name;
-  $("sheetText").textContent = "💌 Разом із подарунком " + S.players[i].name + " отримає запрошення побути з тобою наодинці. Подарунок дає ❤ (у кого найбільше — той носить 👑) і видно на аватарці. Оплата зірками Telegram.";
+  $("sheetTitle").textContent = T("🎁 Подарунок для {0}", S.players[i].name);
+  $("sheetText").textContent = T("💌 Разом із подарунком {0} отримає запрошення побути з тобою наодинці. Подарунок дає ❤ (у кого найбільше — той носить 👑) і видно на аватарці. Оплата зірками Telegram.", S.players[i].name);
   const grid = $("gifts");
   grid.innerHTML = "";
   S.gifts.forEach((g) => {
@@ -300,7 +418,7 @@ function openGift(i) {
     b.addEventListener("click", () => {
       ws.send(JSON.stringify({ type: "gift_invoice", toSeat: giftSeat, gift: g.id }));
       $("sheet").classList.add("hidden");
-      addFeed("Готую оплату...");
+      addFeed(T("Готую оплату..."));
     });
     grid.appendChild(b);
   });
@@ -314,13 +432,13 @@ function pickGiftTarget() {
   const grid = $("gifts");
   grid.innerHTML = "";
   if (!others.length) {
-    $("sheetTitle").textContent = "🎁 Подарунок";
-    $("sheetText").textContent = "Зачекай, поки хтось сяде за стіл. Подарувати можна будь-кому з гравців.";
+    $("sheetTitle").textContent = T("🎁 Подарунок");
+    $("sheetText").textContent = T("Зачекай, поки хтось сяде за стіл. Подарувати можна будь-кому з гравців.");
   } else if (others.length === 1) {
     return openGift(others[0]);
   } else {
-    $("sheetTitle").textContent = "🎁 Кому подарувати?";
-    $("sheetText").textContent = "Обери гравця за столом.";
+    $("sheetTitle").textContent = T("🎁 Кому подарувати?");
+    $("sheetText").textContent = T("Обери гравця за столом.");
     others.forEach((i) => {
       const b = document.createElement("button");
       b.className = "who-btn";
@@ -332,19 +450,59 @@ function pickGiftTarget() {
   $("sheet").classList.remove("hidden");
 }
 $("giftBtn").addEventListener("click", pickGiftTarget);
+
+// 🎯 Обрати, на кого покаже пляшка наступного твого ходу (за зірки).
+function pickAimTarget() {
+  if (!ws || ws.readyState !== 1) return;
+  const others = [];
+  S.players.forEach((p, i) => { if (p && i !== S.seat) others.push(i); });
+  const grid = $("gifts");
+  grid.innerHTML = "";
+  $("sheetTitle").textContent = T("🎯 На кого покаже пляшка?");
+  if (others.length < 2) {
+    $("sheetText").textContent = T("Це має сенс, коли за столом хоча б двоє інших гравців. Зараз пляшка й так покаже на єдиного суперника.");
+  } else {
+    $("sheetText").textContent = T("Наступного твого ходу пляшка покаже на обраного гравця. Оплата зірками Telegram.");
+    others.forEach((i) => {
+      const b = document.createElement("button");
+      b.className = "who-btn";
+      b.textContent = (FACE[S.players[i].g] || "🙂") + " " + S.players[i].name;
+      b.addEventListener("click", () => {
+        ws.send(JSON.stringify({ type: "aim_invoice", toSeat: i }));
+        $("sheet").classList.add("hidden");
+        addFeed(T("Готую оплату..."));
+      });
+      grid.appendChild(b);
+    });
+  }
+  $("sheet").classList.remove("hidden");
+}
+$("aimBtn").addEventListener("click", pickAimTarget);
+// Запрошення друзів: посилання з кодом гравця (за друга — 3 години Premium).
+$("shareBtn").addEventListener("click", () => {
+  const link = "https://t.me/" + (S.bot || "nevidomyi_chat_bot") + (S.invite ? "?start=" + S.invite : "");
+  const url = "https://t.me/share/url?url=" + encodeURIComponent(link) + "&text=" + encodeURIComponent(T("Грай зі мною в бутилочку 🍾"));
+  try { tg.openTelegramLink(url); } catch (e) { window.open(url, "_blank"); }
+});
 $("sheetClose").addEventListener("click", () => $("sheet").classList.add("hidden"));
 $("sheet").addEventListener("click", (e) => { if (e.target === $("sheet")) $("sheet").classList.add("hidden"); });
 
 /* ---------- повідомлення від сервера ---------- */
 function handle(m) {
-  if (m.type === "joined") {
+  if (m.type === "hello") {
+    if (I18N[m.lang] || m.lang === "uk") LANG = m.lang;
+    S.bot = m.bot || "";
+    S.invite = m.invite || "";
+    applyLang();
+    render();
+  } else if (m.type === "joined") {
     S.seat = m.seat;
     S.gifts = m.gifts || [];
     hideOver();
   } else if (m.type === "need_gender") {
-    showOver("Хто ти?", "Так за столом видно, хто хлопець, а хто дівчина. Збережемо в анкету, більше не питатимемо.", [
-      ["👨 Я хлопець", () => { ws.send(JSON.stringify({ type: "gender", gender: "Чоловік" })); hideOver(); }],
-      ["👩 Я дівчина", () => { ws.send(JSON.stringify({ type: "gender", gender: "Жінка" })); hideOver(); }],
+    showOver(T("Хто ти?"), T("Так за столом видно, хто хлопець, а хто дівчина. Збережемо в анкету, більше не питатимемо."), [
+      [T("👨 Я хлопець"), () => { ws.send(JSON.stringify({ type: "gender", gender: "Чоловік" })); hideOver(); }],
+      [T("👩 Я дівчина"), () => { ws.send(JSON.stringify({ type: "gender", gender: "Жінка" })); hideOver(); }],
     ]);
   } else if (m.type === "table") {
     S.players = m.players;
@@ -373,12 +531,12 @@ function handle(m) {
     S.phase = "answer";
     S.spinner = m.spinner;
     S.pair = [m.spinner, m.target];
-    showResult(CAT_NAMES[m.category] || "ЗАВДАННЯ", m.task, "🍾 " + nameOf(m.spinner) + " → " + nameOf(m.target) + (m.target === S.seat ? " (це ти!)" : " · чекаємо відповідь"));
+    showResult(T(CAT_NAMES[m.category] || "ЗАВДАННЯ"), m.task, T(m.target === S.seat ? "🍾 {0} → {1} (це ти!)" : "🍾 {0} → {1} · чекаємо відповідь", nameOf(m.spinner), nameOf(m.target)));
     render();
     buzz("notificationOccurred", "success");
   } else if (m.type === "answer") {
     const who = nameOf(m.seat);
-    showResult(CAT_NAMES[m.category] || "ЗАВДАННЯ", m.task, m.text ? "💬 " + who + " відповідає:" : "🤐 " + who + " промовчав(ла)");
+    showResult(T(CAT_NAMES[m.category] || "ЗАВДАННЯ"), m.task, T(m.text ? "💬 {0} відповідає:" : "🤐 {0} промовчав(ла)", who));
     if (m.text) {
       const said = document.createElement("div");
       said.className = "said";
@@ -408,11 +566,11 @@ function handle(m) {
   } else if (m.type === "chat") {
     addChat(m.seat, m.text);
   } else if (m.type === "pair_done") {
-    const pair = nameOf(m.a) + " і " + nameOf(m.b);
-    let line = { alone: "🔒 " + pair + " пішли побути наодинці", kiss: "💋 " + pair + " поцілувались (+1 ❤ кожному)", busy: "🔒 Не вийшло: хтось уже в іншому діалозі", none: "🤷 " + pair + " розгубились" }[m.outcome];
+    const pair = T("{0} і {1}", nameOf(m.a), nameOf(m.b));
+    let line = { alone: T("🔒 {0} пішли побути наодинці", pair), kiss: T("💋 {0} поцілувались (+1 ❤ кожному)", pair), busy: T("🔒 Не вийшло: хтось уже в іншому діалозі"), none: T("🤷 {0} розгубились", pair) }[m.outcome];
     if (m.outcome === "push") {
-      line = m.ca === "push" && m.cb === "push" ? "👋 " + pair + " відштовхнули одне одного"
-        : "👋 " + nameOf(m.ca === "push" ? m.a : m.b) + " відштовхнув(ла) " + nameOf(m.ca === "push" ? m.b : m.a);
+      line = m.ca === "push" && m.cb === "push" ? T("👋 {0} відштовхнули одне одного", pair)
+        : T("👋 {0} відштовхнув(ла) {1}", nameOf(m.ca === "push" ? m.a : m.b), nameOf(m.ca === "push" ? m.b : m.a));
     }
     if (m.outcome === "kiss") { fly(m.a, "💋"); fly(m.b, "💋"); }
     if (m.outcome === "push") fly(m.ca === "push" ? m.b : m.a, "💔");
@@ -424,41 +582,44 @@ function handle(m) {
       const wanted = mine === "alone" || (m.outcome === "push" && mine && mine !== "push");
       if (wanted && S.players[other]) {
         const nm = nameOf(other);
-        setTimeout(() => showOver(m.outcome === "push" ? "💔 " + nm + " тебе відштовхнув(ла)" : "🔒 " + nm + " поки не готовий(а) наодинці",
-          "Розтопи серце подарунком: " + nm + " отримає його разом із запрошенням побути з тобою наодинці.", [
-            ["🎁 Подарувати " + nm, () => { hideOver(); openGift(other); }],
-            ["Пізніше", hideOver],
+        setTimeout(() => showOver(T(m.outcome === "push" ? "💔 {0} тебе відштовхнув(ла)" : "🔒 {0} поки не готовий(а) наодинці", nm),
+          T("Розтопи серце подарунком: {0} отримає його разом із запрошенням побути з тобою наодинці.", nm), [
+            [T("🎁 Подарувати {0}", nm), () => { hideOver(); openGift(other); }],
+            [T("Пізніше"), hideOver],
           ]), 600);
       }
     }
   } else if (m.type === "chat_opened") {
     S.pair = null;
-    showOver("🔒 Ви наодинці", "Пиши співрозмовнику в чаті з ботом. Гру можна закрити, а потім повернутись за стіл.", [
-      ["Закрити гру", () => { try { tg.close(); } catch (e) { hideOver(); } }],
-      ["Повернутись за стіл", () => { ws.send(JSON.stringify({ type: "join" })); hideOver(); }],
+    showOver(T("🔒 Ви наодинці"), T("Пиши співрозмовнику в чаті з ботом. Гру можна закрити, а потім повернутись за стіл."), [
+      [T("Закрити гру"), () => { try { tg.close(); } catch (e) { hideOver(); } }],
+      [T("Повернутись за стіл"), () => { ws.send(JSON.stringify({ type: "join" })); hideOver(); }],
     ]);
   } else if (m.type === "gift") {
-    const from = m.from >= 0 ? nameOf(m.from) : "Хтось";
+    const from = m.from >= 0 ? nameOf(m.from) : T("Хтось");
     addFeed("🎁 " + from + " → " + nameOf(m.to) + ": " + m.gift.emoji + " " + m.gift.name + " (+" + (m.hearts || 1) + " ❤)", m.to === S.seat);
     fly(m.to, m.gift.emoji);
     if (m.to === S.seat) buzz("notificationOccurred", "success");
   } else if (m.type === "gift_invite") {
     const nm = nameOf(m.from);
-    showOver("🎁 " + nm + " дарує тобі " + m.gift.emoji + " " + m.gift.name, nm + " запрошує тебе побути наодинці: це приватний чат у боті, без імен і контактів.", [
-      ["🔒 Побути наодинці", () => { ws.send(JSON.stringify({ type: "invite", yes: true })); hideOver(); }],
-      ["Дякую, лишусь за столом", () => { ws.send(JSON.stringify({ type: "invite", yes: false })); hideOver(); }],
+    showOver(T("🎁 {0} дарує тобі {1}", nm, m.gift.emoji + " " + m.gift.name), T("{0} запрошує тебе побути наодинці: це приватний чат у боті, без імен і контактів.", nm), [
+      [T("🔒 Побути наодинці"), () => { ws.send(JSON.stringify({ type: "invite", yes: true })); hideOver(); }],
+      [T("Дякую, лишусь за столом"), () => { ws.send(JSON.stringify({ type: "invite", yes: false })); hideOver(); }],
     ]);
+  } else if (m.type === "aim_set") {
+    addFeed(T("🎯 Наступного твого ходу пляшка покаже на {0}", nameOf(m.to)), true);
+    buzz("notificationOccurred", "success");
   } else if (m.type === "notice") {
     addFeed(m.text);
   } else if (m.type === "invoice") {
     if (tg && tg.openInvoice) {
-      tg.openInvoice(m.link, (st) => addFeed(st === "paid" ? "✅ Оплачено, подарунок летить" : st === "cancelled" ? "Оплату скасовано" : "Оплата не пройшла"));
-    } else addFeed("Відкрий гру з Telegram, щоб оплатити.");
+      tg.openInvoice(m.link, (st) => addFeed(T(st === "paid" ? "✅ Оплачено, подарунок летить" : st === "cancelled" ? "Оплату скасовано" : "Оплата не пройшла")));
+    } else addFeed(T("Відкрий гру з Telegram, щоб оплатити."));
   } else if (m.type === "error") {
     if (m.code === "need_start") {
       S.fatal = true;
-      showOver("Спершу в бота", m.message, [["Закрити", () => { try { tg.close(); } catch (e) {} }]]);
-    } else addFeed(m.message || "Помилка гри");
+      showOver(T("Спершу в бота"), m.message, [[T("Закрити"), () => { try { tg.close(); } catch (e) {} }]]);
+    } else addFeed(m.message || T("Помилка гри"));
   }
 }
 
@@ -467,7 +628,7 @@ function connect() {
   const initData = tg && tg.initData;
   if (!initData) {
     S.fatal = true;
-    showOver("Відкрий через Telegram", "Ця гра працює лише всередині бота.", []);
+    showOver(T("Відкрий через Telegram"), T("Ця гра працює лише всередині бота."), []);
     return;
   }
   hideOver();
@@ -476,7 +637,7 @@ function connect() {
   ws.addEventListener("close", (e) => {
     if (S.fatal) return;
     S.phase = "wait";
-    showOver("З'єднання втрачено", e.code === 4001 ? "Гру відкрито в іншому вікні." : "Перевір інтернет і підключись знову.", [["Підключитись знову", connect]]);
+    showOver(T("З'єднання втрачено"), T(e.code === 4001 ? "Гру відкрито в іншому вікні." : "Перевір інтернет і підключись знову."), [[T("Підключитись знову"), connect]]);
   });
 }
 
@@ -516,6 +677,7 @@ $("chatForm").addEventListener("submit", (e) => {
   $("chatText").value = "";
 });
 
+applyLang();
 render();
 connect();
 </script>
