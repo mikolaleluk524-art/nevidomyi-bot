@@ -187,7 +187,7 @@ async function bookings(box) {
 
 function manualBooking() {
   sheet(`<h2>Записати клієнтку</h2><p class="small muted">Для тих, хто записався по телефону чи в Instagram. Передоплата не потрібна.</p>
-    <label class="f"><span>Послуга</span><select id="ms">${services.filter((s) => s.active).map((s) => `<option value="${s.id}">${esc(s.name)} · ${s.duration} хв · ${money(s.price)}</option>`).join("")}</select></label>
+    <label class="f"><span>Послуга</span><select id="ms">${services.filter((s) => s.active && !s.addon).map((s) => `<option value="${s.id}">${esc(s.name)} · ${s.duration} хв · ${money(s.price)}</option>`).join("")}</select></label>
     ${masters.length > 1 ? `<label class="f"><span>Майстер</span><select id="mm">${masters.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join("")}</select></label>` : ""}
     <div class="two"><label class="f"><span>Дата</span><input type="date" id="md" value="${curDay}"></label><label class="f"><span>Час</span><input type="time" id="mt" value="10:00" step="300"></label></div>
     <label class="f"><span>Імʼя</span><input id="mn"></label>
@@ -309,6 +309,8 @@ async function servicesTab(box) {
     <label class="f"><span>Опис</span><input data-f="description" value="${esc(s.description || "")}"></label>
     <div class="two"><label class="f"><span>Ціна, грн</span><input data-f="price" type="number" inputmode="numeric" value="${s.price ?? ""}"></label>
       <label class="f"><span>Тривалість, хв</span><input data-f="duration" type="number" inputmode="numeric" step="5" value="${s.duration ?? 60}"></label></div>
+    <label class="check"><input type="checkbox" data-f="priceFrom" ${s.price_from ? "checked" : ""}> Ціна «від» (залежить від довжини, дизайну)</label>
+    <label class="check"><input type="checkbox" data-f="addon" ${s.addon ? "checked" : ""}> Доповнення (напр. френч) — додається до основної послуги з тієї ж категорії</label>
     <label class="check"><input type="checkbox" data-f="active" ${s.active !== 0 ? "checked" : ""}> Показувати в прайсі</label>
     <div class="row" style="margin-top:10px"><button class="btn grow" data-save>Зберегти</button>${s.id ? '<button class="btn line" data-del>Видалити</button>' : ""}</div></div>`;
   box.innerHTML = `<button class="btn block" id="adds">＋ Нова послуга</button><div id="new"></div><div class="stack" style="margin-top:12px">${services.map(row).join("")}</div>`;
@@ -316,7 +318,7 @@ async function servicesTab(box) {
     $("[data-save]", card).onclick = async () => {
       const v = (f) => $(`[data-f="${f}"]`, card);
       try {
-        await api("/api/admin/services", { body: { id: Number(card.dataset.s) || undefined, category: v("category").value, sort: v("sort").value, name: v("name").value, description: v("description").value, price: v("price").value, duration: v("duration").value, active: v("active").checked } });
+        await api("/api/admin/services", { body: { id: Number(card.dataset.s) || undefined, category: v("category").value, sort: v("sort").value, name: v("name").value, description: v("description").value, price: v("price").value, duration: v("duration").value, active: v("active").checked, addon: v("addon").checked, priceFrom: v("priceFrom").checked } });
         toast("Збережено ✓");
         route();
       } catch (e) {

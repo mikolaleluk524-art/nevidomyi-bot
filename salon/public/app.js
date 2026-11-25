@@ -6,6 +6,10 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const money = (n) => `${Number(n).toLocaleString("uk-UA")} грн`;
 const dur = (m) => (m >= 60 ? `${Math.floor(m / 60)} год${m % 60 ? " " + (m % 60) + " хв" : ""}` : `${m} хв`);
 const stars = (n) => "★★★★★".slice(0, Math.round(n)) + "☆☆☆☆☆".slice(0, 5 - Math.round(n));
+const priceLabel = (s) => (s.addon ? "+" : s.priceFrom ? "від " : "") + money(s.price);
+// Текст з порожніми рядками → абзаци
+const paras = (t, cls = "") => String(t || "").split(/\n\s*\n/).map((p) => `<p class="${cls}">${esc(p).replace(/\n/g, "<br>")}</p>`).join("");
+const tgLink = (t) => (/^\+?\d[\d\s-]{6,}$/.test(t) ? `https://t.me/+${t.replace(/\D/g, "")}` : `https://t.me/${t.replace(/^@/, "")}`);
 const img = (f) => `/uploads/${encodeURIComponent(f)}`;
 const WD = ["Нд", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
 const MONTHS = ["Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень", "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень"];
@@ -172,21 +176,22 @@ async function home() {
       <section class="section">
         <h2>${info.masters.length > 1 ? "Майстри" : "Ваш майстер"}</h2>
         ${info.masters.map((m) => `
-          <div class="card row" style="align-items:flex-start">
-            <div class="avatar" style="margin:0;flex:none">${m.photo ? `<img src="${img(m.photo)}" alt="">` : esc(m.name[0])}</div>
-            <div><b>${esc(m.name)}</b><div class="small muted">${esc(m.role)}</div><p class="small" style="margin-top:6px">${esc(m.about)}</p></div>
+          <div class="card">
+            <div class="row"><div class="avatar" style="margin:0;flex:none;width:76px;height:76px">${m.photo ? `<img src="${img(m.photo)}" alt="">` : esc(m.name[0])}</div>
+              <div><h3 style="margin:0">${esc(m.name)}</h3><div class="small" style="color:var(--accent);font-weight:700">${esc(m.role)}</div></div></div>
+            <div style="margin-top:12px">${paras(m.about)}</div>
           </div>`).join("")}
         ${certs.length ? `<a class="btn line block" style="margin-top:10px" href="#/works?tab=cert">🎓 Сертифікати (${certs.length})</a>` : ""}
       </section>` : ""}
 
     <section class="section card">
       <h3>Про нас</h3>
-      <p>${esc(s.about)}</p>
+      ${paras(s.about)}
       <p class="muted small">📍 ${esc(s.address)}${s.cabinet ? ", " + esc(s.cabinet) : ""}</p>
       <div class="row wrap">
         <a class="btn sm ghost" href="tel:${esc(s.phone)}">📞 Подзвонити</a>
         ${s.instagram ? `<a class="btn sm ghost" target="_blank" rel="noopener" href="https://instagram.com/${esc(s.instagram.replace(/^@/, ""))}">Instagram</a>` : ""}
-        ${s.telegram ? `<a class="btn sm ghost" target="_blank" rel="noopener" href="https://t.me/${esc(s.telegram.replace(/^@/, ""))}">Telegram</a>` : ""}
+        ${s.telegram ? `<a class="btn sm ghost" target="_blank" rel="noopener" href="${esc(tgLink(s.telegram))}">Telegram</a>` : ""}
         ${s.viber ? `<a class="btn sm ghost" href="viber://chat?number=${esc(s.viber.replace(/[^\d+]/g, ""))}">Viber</a>` : ""}
       </div>
     </section>
@@ -291,22 +296,28 @@ function price() {
   view.innerHTML = groupByCat(info.services).map(([cat, list]) => `
     <div class="cat"><h3>${esc(cat)}</h3>
       ${list.map((s) => `
-        <a class="svc" href="#/book?service=${s.id}" style="text-decoration:none;color:inherit">
+        <a class="svc" href="${s.addon ? "#/book" : `#/book?service=${s.id}`}" style="text-decoration:none;color:inherit">
           <div class="grow"><div class="name">${esc(s.name)}</div>
             ${s.description ? `<div class="small muted">${esc(s.description)}</div>` : ""}
-            <div class="small muted">⏱ ${dur(s.duration)}</div></div>
-          <div class="price">${money(s.price)}<div class="small" style="color:var(--accent);font-weight:700">Записатись →</div></div>
+            <div class="small muted">${s.addon ? "✨ Додається до основної послуги при записі" : `⏱ ${dur(s.duration)}`}</div></div>
+          <div class="price">${priceLabel(s)}${s.addon ? "" : '<div class="small" style="color:var(--accent);font-weight:700">Записатись →</div>'}</div>
         </a>`).join("")}
     </div>`).join("") + `<p class="small muted center" style="margin-top:18px">${info.settings.prepayPercent > 0 ? `Для підтвердження запису — передоплата ${info.settings.prepayPercent}%. Решта — на місці.` : "Оплата на місці."}</p>`;
 }
 
 // ================= Запис =================
-const book = { serviceId: null, masterId: 0, date: null, start: null, time: null, step: 1 };
+const book = { serviceId: null, addons: [], masterId: 0, date: null, start: null, time: null, step: 1 };
+const addonsFor = (id) => {
+  const main = info.services.find((s) => s.id === id);
+  return info.services.filter((a) => a.addon && (!a.category || a.category === main?.category));
+};
+const addonQs = () => (book.addons.length ? `&addons=${book.addons.join(",")}` : "");
 
 function bookStart(q) {
   setTab("book");
   if (q.get("service")) {
     book.serviceId = Number(q.get("service"));
+    book.addons = [];
     book.masterId = Number(q.get("master")) || 0;
     book.date = q.get("date") || null;
     book.start = null;
@@ -317,7 +328,12 @@ function bookStart(q) {
 }
 
 const eligibleMasters = () => info.masters.filter((m) => !m.services.length || m.services.includes(book.serviceId));
-const svc = () => info.services.find((s) => s.id === book.serviceId);
+// Обрана послуга разом із доповненнями (ціна і час сумуються)
+const svc = () => {
+  const main = info.services.find((s) => s.id === book.serviceId);
+  const add = info.services.filter((a) => book.addons.includes(a.id));
+  return { ...main, name: [main.name, ...add.map((a) => a.name)].join(" + "), price: main.price + add.reduce((x, a) => x + a.price, 0), duration: main.duration + add.reduce((x, a) => x + a.duration, 0) };
+};
 
 function stepsBar() {
   return `<div class="steps">${[1, 2, 3, 4].map((i) => `<i class="${i <= book.step ? "on" : ""}"></i>`).join("")}</div>`;
@@ -333,17 +349,30 @@ function renderBook() {
   const back = book.step > 1 ? () => goStep(book.step === 3 && eligibleMasters().length <= 1 ? 1 : book.step - 1) : null;
   if (book.step === 1) {
     header("Оберіть послугу", null);
-    view.innerHTML = stepsBar() + groupByCat(info.services).map(([cat, list]) => `
+    view.innerHTML = stepsBar() + groupByCat(info.services.filter((s) => !s.addon)).map(([cat, list]) => `
       <div class="cat"><h3>${esc(cat)}</h3>
         ${list.map((s) => `<div class="svc ${s.id === book.serviceId ? "sel" : ""}" data-id="${s.id}">
           <div class="grow"><div class="name">${esc(s.name)}</div><div class="small muted">⏱ ${dur(s.duration)}</div></div>
-          <div class="price">${money(s.price)}</div></div>`).join("")}
+          <div class="price">${priceLabel(s)}</div></div>`).join("")}
       </div>`).join("");
+    const next = () => goStep(eligibleMasters().length > 1 ? 2 : 3);
     view.querySelectorAll(".svc").forEach((el) => (el.onclick = () => {
       book.serviceId = Number(el.dataset.id);
+      book.addons = [];
       book.start = null;
       book.masterId = 0;
-      goStep(eligibleMasters().length > 1 ? 2 : 3);
+      const extra = addonsFor(book.serviceId);
+      if (!extra.length) return next();
+      const main = info.services.find((s) => s.id === book.serviceId);
+      sheet(`<h2>${esc(main.name)}</h2><p class="muted">Додати щось до послуги?</p>
+        ${extra.map((a) => `<label class="check"><input type="checkbox" value="${a.id}"> <span class="grow">${esc(a.name)}<div class="small muted">${esc(a.description || "")}</div></span><b>${priceLabel(a)}</b></label>`).join("")}
+        <button class="btn block big" style="margin-top:18px" id="addNext">Далі</button>`, (el2, close) => {
+        $("#addNext", el2).onclick = () => {
+          book.addons = [...el2.querySelectorAll("input:checked")].map((i) => Number(i.value));
+          close();
+          next();
+        };
+      });
     }));
     return;
   }
@@ -368,9 +397,9 @@ function renderBook() {
 async function renderDates(back) {
   header("Дата і час", back);
   const s = svc();
-  view.innerHTML = stepsBar() + `<div class="card row between" style="padding:12px 14px"><div><b>${esc(s.name)}</b><div class="small muted">⏱ ${dur(s.duration)}</div></div><b>${money(s.price)}</b></div>
+  view.innerHTML = stepsBar() + `<div class="card row between" style="padding:12px 14px"><div><b>${esc(s.name)}</b><div class="small muted">⏱ ${dur(s.duration)}</div></div><b>${s.priceFrom ? "від " : ""}${money(s.price)}</b></div>
     <div id="days"><div class="spinner"></div></div><div id="slots"></div>`;
-  const { days } = await api(`/api/availability?service=${book.serviceId}&master=${book.masterId}`);
+  const { days } = await api(`/api/availability?service=${book.serviceId}&master=${book.masterId}${addonQs()}`);
   if (!book.date || !days.find((d) => d.date === book.date && d.free)) book.date = days.find((d) => d.free)?.date || days[0]?.date;
   let lastMonth = null;
   $("#days").innerHTML = `<div class="month" id="monthLbl"></div><div class="days">${days.map((d) => {
@@ -397,7 +426,7 @@ async function renderDates(back) {
 async function loadSlots() {
   const box = $("#slots");
   box.innerHTML = '<div class="spinner"></div>';
-  const { slots } = await api(`/api/slots?service=${book.serviceId}&master=${book.masterId}&date=${book.date}`);
+  const { slots } = await api(`/api/slots?service=${book.serviceId}&master=${book.masterId}&date=${book.date}${addonQs()}`);
   if (!slots.length) {
     box.innerHTML = `<div class="card center" style="margin-top:12px"><div style="font-size:34px">🗓️</div><b>На цей день усе зайнято</b>
       <p class="small muted">Оберіть інший день або попросіть повідомити, якщо хтось скасує запис.</p>
@@ -449,13 +478,14 @@ async function renderConfirm(back) {
   `;
   let q = null;
   const refresh = async () => {
-    q = await api("/api/quote", { body: { serviceId: book.serviceId, date: book.date, useBonus: $("#useBonus")?.checked, ref: store.get("ref") } });
+    q = await api("/api/quote", { body: { serviceId: book.serviceId, addons: book.addons, date: book.date, useBonus: $("#useBonus")?.checked, ref: store.get("ref") } });
     $("#sum").innerHTML = `
-      <div>Вартість</div><div>${money(q.price)}</div>
+      <div>Вартість${svc().priceFrom ? " (від)" : ""}</div><div>${money(q.price)}</div>
       ${q.discount ? `<div>${esc(q.discountReason)}</div><div style="color:var(--ok)">−${money(q.discount)}</div>` : ""}
       ${q.bonusUse ? `<div>Бонусами</div><div style="color:var(--ok)">−${money(q.bonusUse)}</div>` : ""}
       <div class="tot">До сплати</div><div class="tot">${money(q.total)}</div>
       ${q.prepay ? `<div class="tot" style="color:var(--accent)">Передоплата зараз</div><div class="tot" style="color:var(--accent)">${money(q.prepay)}</div>` : ""}`;
+    if (svc().priceFrom) $("#sum").insertAdjacentHTML("beforeend", `<div class="small muted" style="grid-column:1/-1">Остаточна ціна залежить від довжини й дизайну — майстер уточнить на місці.</div>`);
     $("#go").textContent = q.prepay ? `Записатись і сплатити ${money(q.prepay)}` : "Записатись";
   };
   $("#useBonus")?.addEventListener("change", refresh);
@@ -470,7 +500,7 @@ async function renderConfirm(back) {
       store.set("name", name);
       store.set("phone", phone);
       const r = await api("/api/book", {
-        body: { serviceId: book.serviceId, masterId: book.masterId, date: book.date, start: book.start, name, phone, comment: $("#comment").value, useBonus: $("#useBonus")?.checked, ref: store.get("ref"), src: store.get("src") },
+        body: { serviceId: book.serviceId, addons: book.addons, masterId: book.masterId, date: book.date, start: book.start, name, phone, comment: $("#comment").value, useBonus: $("#useBonus")?.checked, ref: store.get("ref"), src: store.get("src") },
       });
       store.set("token", r.token);
       store.set("ref", null);
@@ -553,7 +583,8 @@ function works(q) {
     ${kinds.length > 1 ? `<div class="tabs">${kinds.map(([k, n]) => `<button class="${k === tab ? "on" : ""}" data-k="${k}">${n}</button>`).join("")}</div>` : ""}
     ${list.length ? `<div class="grid ${tab === "cert" ? "certs" : ""}">${list.map((g, i) => `<div class="ph" data-i="${i}"><img loading="lazy" src="${img(g.file)}" alt="${esc(g.caption)}">${g.caption ? `<div class="cap">${esc(g.caption)}</div>` : ""}</div>`).join("")}</div>`
       : `<div class="empty"><div class="ic">🖼️</div>Скоро тут зʼявляться фото</div>`}
-    <a class="btn block big" style="margin-top:16px" href="#/book">Хочу так само — записатись</a>`;
+    ${info.settings.instagram ? `<a class="btn line block" style="margin-top:16px" target="_blank" rel="noopener" href="https://instagram.com/${esc(info.settings.instagram.replace(/^@/, ""))}">📸 Ще більше робіт в Instagram @${esc(info.settings.instagram.replace(/^@/, ""))}</a>` : ""}
+    <a class="btn block big" style="margin-top:10px" href="#/book">Хочу так само — записатись</a>`;
   view.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => (location.hash = `#/works?tab=${b.dataset.k}`)));
   view.querySelectorAll(".ph").forEach((el) => (el.onclick = () => lightbox(list, Number(el.dataset.i))));
 }

@@ -37,6 +37,7 @@ import {
   quote,
   upsertClient,
   when,
+  withAddons,
 } from "./lib/booking.js";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
@@ -203,7 +204,7 @@ function publicInfo() {
   const avg = one("SELECT AVG(rating) AS avg, COUNT(*) AS n FROM reviews WHERE status = 'approved'");
   return {
     settings: s,
-    services: all("SELECT id, category, name, description, price, duration FROM services WHERE active = 1 ORDER BY sort, id"),
+    services: all("SELECT id, category, name, description, price, duration, addon, price_from AS priceFrom FROM services WHERE active = 1 ORDER BY sort, id"),
     masters: all("SELECT id, name, role, photo, about, services FROM masters WHERE active = 1 ORDER BY sort, id").map((m) => ({
       ...m,
       services: JSON.parse(m.services || "[]"),
@@ -280,12 +281,12 @@ async function api(req, res, url) {
   if (m === "GET" && p === "/api/public") return send(res, 200, publicInfo());
 
   if (m === "GET" && p === "/api/availability") {
-    return send(res, 200, { days: availability(Number(q.service), Number(q.master) || null, Number(q.days) || 0) });
+    return send(res, 200, { days: availability(Number(q.service), Number(q.master) || null, Number(q.days) || 0, q.addons) });
   }
 
   if (m === "GET" && p === "/api/slots") {
     if (!isDate(q.date)) throw new HttpError(400, "Некоректна дата");
-    return send(res, 200, { slots: daySlots(Number(q.service), Number(q.master) || null, q.date) });
+    return send(res, 200, { slots: daySlots(Number(q.service), Number(q.master) || null, q.date, q.addons) });
   }
 
   if (m === "POST" && p === "/api/scan") {
@@ -298,7 +299,7 @@ async function api(req, res, url) {
 
   if (m === "POST" && p === "/api/quote") {
     const body = await json(req);
-    const service = one("SELECT * FROM services WHERE id = ? AND active = 1", Number(body.serviceId));
+    const service = withAddons(body.serviceId, body.addons);
     if (!service) throw new HttpError(404, "Послугу не знайдено");
     const c = clientByToken(req.headers["x-client-token"]);
     return send(res, 200, quote({ service, client: c, date: body.date || kyivNow().date, useBonus: body.useBonus, ref: body.ref }));
@@ -315,6 +316,7 @@ async function api(req, res, url) {
     const c = upsertClient({ token: req.headers["x-client-token"], name, phone, ref: body.ref, src: body.src });
     const b = createBooking({
       serviceId: Number(body.serviceId),
+      addonIds: body.addons,
       masterId: Number(body.masterId) || null,
       date: body.date,
       start: body.start,
@@ -509,6 +511,7 @@ async function adminApi(req, res, p, m, q) {
     const c = upsertClient({ name: String(body.name).trim(), phone });
     const b = createBooking({
       serviceId: Number(body.serviceId),
+      addonIds: body.addons,
       masterId: Number(body.masterId) || null,
       date: body.date,
       start: toMin(body.time),
@@ -529,10 +532,11 @@ async function adminApi(req, res, p, m, q) {
     if (m === "GET") return send(res, 200, all("SELECT * FROM services ORDER BY sort, id"));
     if (m === "POST") {
       const s = await json(req);
-      const vals = [String(s.category || ""), String(s.name || "").trim(), String(s.description || ""), Math.max(0, Number(s.price) || 0), Math.max(5, Number(s.duration) || 60), s.active === false ? 0 : 1, Number(s.sort) || 0];
+      const addon = s.addon ? 1 : 0;
+      const vals = [String(s.category || ""), String(s.name || "").trim(), String(s.description || ""), Math.max(0, Number(s.price) || 0), Math.max(addon ? 0 : 5, Number(s.duration) || (addon ? 0 : 60)), s.active === false ? 0 : 1, Number(s.sort) || 0, addon, s.priceFrom ? 1 : 0];
       if (!vals[1]) throw new HttpError(400, "Вкажіть назву послуги");
-      if (s.id) run("UPDATE services SET category=?, name=?, description=?, price=?, duration=?, active=?, sort=? WHERE id=?", ...vals, Number(s.id));
-      else run("INSERT INTO services(category, name, description, price, duration, active, sort) VALUES(?,?,?,?,?,?,?)", ...vals);
+      if (s.id) run("UPDATE services SET category=?, name=?, description=?, price=?, duration=?, active=?, sort=?, addon=?, price_from=? WHERE id=?", ...vals, Number(s.id));
+      else run("INSERT INTO services(category, name, description, price, duration, active, sort, addon, price_from) VALUES(?,?,?,?,?,?,?,?,?)", ...vals);
       return send(res, 200, { ok: true });
     }
   }

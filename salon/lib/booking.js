@@ -38,9 +38,31 @@ export function freeStarts(master, date, duration, s = getSettings()) {
   return out;
 }
 
+/**
+ * Основна послуга + обрані доповнення (френч, ремонт нігтя…) як одна «послуга»:
+ * ціна й тривалість сумуються, назва — «Покриття гель-лаком + Френч».
+ * Доповнення приймаються лише з тієї ж категорії, що й основна послуга.
+ */
+export function withAddons(serviceId, addonIds = []) {
+  const main = one("SELECT * FROM services WHERE id = ? AND active = 1 AND addon = 0", Number(serviceId));
+  if (!main) return null;
+  const ids = [...new Set((Array.isArray(addonIds) ? addonIds : String(addonIds || "").split(",")).map(Number).filter(Boolean))];
+  const addons = ids
+    .map((id) => one("SELECT * FROM services WHERE id = ? AND active = 1 AND addon = 1", id))
+    .filter((a) => a && (!a.category || a.category === main.category));
+  return {
+    ...main,
+    mainName: main.name,
+    addons,
+    name: [main.name, ...addons.map((a) => a.name)].join(" + "),
+    price: main.price + addons.reduce((x, a) => x + a.price, 0),
+    duration: main.duration + addons.reduce((x, a) => x + a.duration, 0),
+  };
+}
+
 /** Слоти на день: [{ start, time, masters: [id] }] */
-export function daySlots(serviceId, masterId, date) {
-  const service = one("SELECT * FROM services WHERE id = ? AND active = 1", serviceId);
+export function daySlots(serviceId, masterId, date, addonIds = []) {
+  const service = withAddons(serviceId, addonIds);
   if (!service) return [];
   const s = getSettings();
   const masters = mastersFor(serviceId).filter((m) => !masterId || m.id === Number(masterId));
@@ -54,21 +76,21 @@ export function daySlots(serviceId, masterId, date) {
   return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([start, ids]) => ({ start, time: hm(start), masters: ids }));
 }
 
-export function availability(serviceId, masterId, days) {
+export function availability(serviceId, masterId, days, addonIds = []) {
   const s = getSettings();
   const today = kyivNow().date;
   const n = Math.min(days || s.bookingDays, s.bookingDays, 90);
   const out = [];
   for (let i = 0; i < n; i++) {
     const date = addDays(today, i);
-    out.push({ date, free: daySlots(serviceId, masterId, date).length });
+    out.push({ date, free: daySlots(serviceId, masterId, date, addonIds).length });
   }
   return out;
 }
 
 /** Найближче вільне вікно на будь-яку послугу (для головного екрана). */
 export function nearestFree() {
-  const service = one("SELECT * FROM services WHERE active = 1 ORDER BY duration, sort LIMIT 1");
+  const service = one("SELECT * FROM services WHERE active = 1 AND addon = 0 ORDER BY duration, sort LIMIT 1");
   if (!service) return null;
   const today = kyivNow().date;
   for (let i = 0; i < 14; i++) {
@@ -169,8 +191,8 @@ export function quote({ service, client, date, useBonus, ref }) {
 
 export class BookingError extends Error {}
 
-export function createBooking({ serviceId, masterId, date, start, client, comment, useBonus, source = "app", skipPrepay = false }) {
-  const service = one("SELECT * FROM services WHERE id = ? AND active = 1", serviceId);
+export function createBooking({ serviceId, addonIds = [], masterId, date, start, client, comment, useBonus, source = "app", skipPrepay = false }) {
+  const service = withAddons(serviceId, addonIds);
   if (!service) throw new BookingError("Послугу не знайдено");
   const s = getSettings();
   const today = kyivNow().date;
