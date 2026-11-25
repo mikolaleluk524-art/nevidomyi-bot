@@ -15,11 +15,19 @@ h1{font-size:21px;margin-bottom:4px}
 .table{position:relative;width:min(92vw,360px);height:min(92vw,360px);margin:0 auto 14px;border-radius:50%;border:2px solid var(--border);background:radial-gradient(circle,#24201b,#14110f);box-shadow:0 0 30px #0008}
 .seat{position:absolute;width:62px;transform:translate(-50%,-50%);cursor:pointer}
 .seat.empty{opacity:.22;cursor:default}
-.av{width:42px;height:42px;margin:0 auto;border-radius:50%;background:var(--card);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px}
+.av{width:44px;height:44px;margin:0 auto;border-radius:50%;background:var(--card);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:23px}
 .nm{font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.seat.me .av{border-color:var(--accent)}
-.seat.turn .av{box-shadow:0 0 0 3px #d4a57466;border-color:var(--accent)}
-.seat.paired .av{background:#5c2a3a;border-color:var(--pink);color:#fff}
+.seat.m .av{border-color:#5b8def;background:#18222f}
+.seat.f .av{border-color:var(--pink);background:#2f1823}
+.seat.me .av{box-shadow:0 0 0 2px var(--accent)}
+.hb{position:absolute;top:-6px;right:4px;font-size:10px;background:#3a1626;color:#ffb3d1;border-radius:8px;padding:0 4px;line-height:15px}
+.gb{position:absolute;top:26px;left:4px;font-size:15px}
+.hb:empty,.crown:empty,.gb:empty{display:none}
+.crown{position:absolute;top:-17px;left:50%;transform:translateX(-50%);font-size:15px}
+.fly{position:absolute;font-size:26px;transform:translate(-50%,-50%);pointer-events:none;animation:fly 1.4s ease-out forwards;z-index:3}
+@keyframes fly{to{transform:translate(-50%,-160%) scale(1.4);opacity:0}}
+.seat.turn .av{box-shadow:0 0 0 3px #d4a574aa}
+.seat.paired .av{box-shadow:0 0 0 3px #e87eb0aa,0 0 14px #e87eb066}
 #bottle{position:absolute;left:50%;top:50%;width:32px;height:122px;margin:-61px 0 0 -16px;transform:rotate(0deg)}
 .chips{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px}
 .cat{padding:9px 2px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:10px;font-size:12px}
@@ -36,9 +44,23 @@ button:disabled{opacity:.45;cursor:default}
 .card{padding:16px 14px;border-radius:14px;background:var(--card);border:1px solid var(--border);font-size:16px;line-height:1.45}
 .who{font-size:13px;color:var(--pink);margin-bottom:8px}
 .tag{color:var(--accent);font-size:11px;letter-spacing:2px;margin-bottom:6px}
-.feed{margin-top:12px;font-size:12px;color:var(--muted);text-align:left}
-.feed div{padding:5px 0;border-top:1px solid #2a262244}
+.feed{margin-top:12px;font-size:13px;color:var(--muted);text-align:left;max-height:190px;overflow-y:auto;padding:4px 8px;background:var(--card);border:1px solid var(--border);border-radius:12px 12px 0 0}
+.feed div{padding:5px 0;border-top:1px solid #2a262244;line-height:1.35}
+.feed div:first-child{border-top:0}
 .feed .me{color:var(--accent);font-weight:600}
+.feed b{font-weight:700;color:var(--text)}
+.feed b.m{color:#8fb2f5}.feed b.f{color:#f2a2c8}
+.feed .msg{color:var(--text)}
+.chatf{display:flex;gap:6px;padding:6px;background:var(--card);border:1px solid var(--border);border-top:0;border-radius:0 0 12px 12px}
+.chatf input{flex:1;min-width:0;padding:10px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;font-family:inherit}
+.chatf button{padding:0 14px;border:0;border-radius:9px;background:var(--accent);color:#17110c;font-weight:800;font-size:16px}
+.answer{margin-top:12px;padding:12px;border-radius:14px;background:#1d1a2c;border:1px solid #8c7ae6;text-align:left}
+.answer .t{font-size:15px;margin-bottom:8px;line-height:1.4}
+.answer textarea{width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:15px;font-family:inherit;resize:none}
+.answer .main{margin-top:8px}
+.reacts{display:flex;gap:8px;justify-content:center;margin-top:10px}
+.reacts button{font-size:22px;padding:6px 12px;border-radius:12px;border:1px solid var(--border);background:var(--bg)}
+.said{font-size:17px;color:var(--text)}
 .note{color:var(--muted);font-size:11px;margin:16px auto 0;max-width:320px}
 .hidden{display:none!important}
 .sheet,.over{position:fixed;inset:0;background:#000a;display:flex;align-items:flex-end;justify-content:center;z-index:5}
@@ -83,22 +105,34 @@ button:disabled{opacity:.45;cursor:default}
   <div class="pair hidden" id="pair">
     <div class="t" id="pairTitle"></div>
     <div class="row">
-      <button data-choice="chat">💬 Піти в чат</button>
-      <button data-choice="kiss">💋 Поцілунок</button>
-      <button data-choice="skip">Лишитись</button>
+      <button data-choice="kiss">💋 Поцілувати</button>
+      <button data-choice="push">👋 Відштовхнути</button>
+      <button data-choice="alone">🔒 Наодинці</button>
     </div>
     <div class="wait" id="pairWait"></div>
   </div>
 
+  <div class="answer hidden" id="answerBox">
+    <div class="t" id="answerTask"></div>
+    <textarea id="answerText" rows="3" maxlength="200" placeholder="Твоя відповідь..."></textarea>
+    <button class="main" id="answerSend">Відповісти</button>
+    <button class="ghost" id="answerSkip">Пропустити 🤐</button>
+    <div class="wait">На відповідь є хвилина. Її побачать усі за столом.</div>
+  </div>
+
   <div class="result" id="result"></div>
   <div class="feed" id="feed"></div>
-  <div class="note">Натисни «🎁 Подарунок» або тапни на гравця за столом, щоб подарувати йому подарунок. Чат відкривається лише коли пара обрала його обоє. Не надсилай контакти й особисті дані.</div>
+  <form class="chatf" id="chatForm">
+    <input id="chatText" maxlength="150" autocomplete="off" placeholder="Написати за столом...">
+    <button type="submit">➤</button>
+  </form>
+  <div class="note">Відповідай на завдання, став реакції — вони дають ❤ гравцю, а найпопулярніший отримує 👑. Подарунок дає ❤ і запрошення побути наодинці: натисни «🎁 Подарунок» або тапни на гравця. Без подарунка наодинці можна, лише якщо пара обере це обоє. Не надсилай контакти й особисті дані.</div>
 </div>
 
 <div class="sheet hidden" id="sheet">
   <div class="box">
     <h2 id="sheetTitle"></h2>
-    <p id="sheetText">Подарунок побачать усі за столом. Оплата зірками Telegram.</p>
+    <p id="sheetText"></p>
     <div class="grid" id="gifts"></div>
     <button class="ghost" id="sheetClose">Закрити</button>
   </div>
@@ -120,7 +154,9 @@ const buzz = (kind, name) => { try { tg.HapticFeedback[kind](name); } catch (e) 
 
 const N = 10;
 const CAT_NAMES = { truth: "ПРАВДА", action: "ДІЯ", kiss: "ПОЦІЛУНОК", adult: "18+" };
-const S = { seat: -1, players: [], turn: -1, phase: "wait", spinner: -1, pair: null, answered: [], gifts: [], selected: "all", myChoice: null, fatal: false };
+const S = { seat: -1, players: [], turn: -1, phase: "wait", spinner: -1, pair: null, task: null, answered: [], gifts: [], selected: "all", myChoice: null, fatal: false };
+const FACE = { m: "👨", f: "👩" };
+const giftHearts = (stars) => Math.max(1, Math.round(stars / 5));
 let ws = null;
 let rot = 0;
 let giftSeat = -1;
@@ -130,7 +166,7 @@ const seatEls = [];
 for (let i = 0; i < N; i++) {
   const el = document.createElement("div");
   el.className = "seat empty";
-  el.innerHTML = '<div class="av"></div><div class="nm"></div>';
+  el.innerHTML = '<div class="av"></div><div class="nm"></div><span class="hb"></span><span class="crown"></span><span class="gb"></span>';
   el.addEventListener("click", () => openGift(i));
   $("table").appendChild(el);
   seatEls.push(el);
@@ -141,15 +177,20 @@ const nameOf = (i) => (S.players[i] && S.players[i].name) || "Хтось";
 
 function render() {
   const me = S.seat;
+  const top = Math.max(0, ...S.players.map((p) => (p ? p.hearts || 0 : 0)));
   seatEls.forEach((el, i) => {
     const p = S.players[i];
     const a = angleOf(i) * Math.PI / 180;
     el.style.left = 50 + 39 * Math.sin(a) + "%";
     el.style.top = 50 - 39 * Math.cos(a) + "%";
     const active = (S.phase === "idle" && i === S.turn) || ((S.phase === "spin" || S.phase === "pair") && i === S.spinner);
-    el.className = "seat" + (p ? "" : " empty") + (i === me ? " me" : "") + (active ? " turn" : "") + (S.pair && S.pair.includes(i) ? " paired" : "");
-    el.querySelector(".av").textContent = p ? (Array.from(p.name.trim())[0] || "?").toUpperCase() : "·";
-    el.querySelector(".nm").textContent = p ? p.name + (p.g ? " " + p.g : "") : "";
+    const inRound = (S.pair && S.pair.includes(i)) || (S.task && (S.task.target === i || S.task.spinner === i));
+    el.className = "seat" + (p ? "" : " empty") + (p && p.g ? " " + p.g : "") + (i === me ? " me" : "") + (active ? " turn" : "") + (inRound ? " paired" : "");
+    el.querySelector(".av").textContent = p ? FACE[p.g] || "🙂" : "·";
+    el.querySelector(".nm").textContent = p ? p.name + (p.age ? ", " + p.age : "") : "";
+    el.querySelector(".hb").textContent = p && p.hearts ? "❤ " + p.hearts : "";
+    el.querySelector(".crown").textContent = p && top > 0 && p.hearts === top ? "👑" : "";
+    el.querySelector(".gb").textContent = p && p.badge ? p.badge : "";
   });
 
   const n = S.players.filter(Boolean).length;
@@ -157,24 +198,63 @@ function render() {
   $("status").textContent = S.phase === "wait" ? "За столом " + n + " з " + N + ". Для гри потрібно хоча б двоє." : "За столом " + n + " з " + N + (myTurn ? " · твоя черга" : "");
   const spin = $("spin");
   spin.disabled = !myTurn;
-  spin.textContent = S.phase === "wait" ? "Чекаємо гравців..." : S.phase === "spin" ? "Пляшка крутиться..." : S.phase === "pair" ? "Пара обирає..." : myTurn ? "КРУТИТИ" : "Крутить: " + nameOf(S.turn);
+  spin.textContent = S.phase === "wait" ? "Чекаємо гравців..." : S.phase === "spin" ? "Пляшка крутиться..." : S.phase === "answer" ? "Відповідає: " + nameOf(S.task ? S.task.target : -1) : S.phase === "pair" ? "Пара обирає..." : myTurn ? "КРУТИТИ" : "Крутить: " + nameOf(S.turn);
+
+  const answering = S.phase === "answer" && S.task && S.task.target === me && !S.sent;
+  const box = $("answerBox");
+  if (answering && box.classList.contains("hidden")) {
+    $("answerTask").textContent = (CAT_NAMES[S.task.category] || "ЗАВДАННЯ") + " від " + nameOf(S.task.spinner) + ": " + S.task.text;
+    $("answerText").value = "";
+    box.classList.remove("hidden");
+    setTimeout(() => { try { $("answerText").focus(); } catch (e) {} }, 100);
+  } else if (!answering) box.classList.add("hidden");
 
   const inPair = S.phase === "pair" && S.pair && S.pair.includes(me);
   $("pair").classList.toggle("hidden", !inPair);
   if (inPair) {
     const other = S.pair.find((s) => s !== me);
-    $("pairTitle").textContent = "💞 Ви в парі: " + nameOf(other) + ". Що обираєте?";
+    $("pairTitle").textContent = "💞 Ви в парі з " + nameOf(other) + ". Що далі?";
     document.querySelectorAll("#pair button").forEach((b) => { b.disabled = Boolean(S.myChoice); });
-    $("pairWait").textContent = S.myChoice ? "Чекаємо відповідь партнера..." : "Чат відкриється, лише якщо обоє оберуть «Піти в чат».";
+    $("pairWait").textContent = S.myChoice ? "Чекаємо, що обере " + nameOf(other) + "..." : "«Наодинці» — приватний чат у боті, якщо обоє його оберуть.";
   }
 }
 
+function pushFeed(d) {
+  const f = $("feed");
+  const stick = f.scrollHeight - f.scrollTop - f.clientHeight < 40;
+  f.appendChild(d);
+  while (f.children.length > 60) f.firstChild.remove();
+  if (stick) f.scrollTop = f.scrollHeight;
+}
 function addFeed(text, mine) {
   const d = document.createElement("div");
   d.textContent = text;
   if (mine) d.className = "me";
-  $("feed").prepend(d);
-  while ($("feed").children.length > 5) $("feed").lastChild.remove();
+  pushFeed(d);
+}
+function addChat(seat, text) {
+  const d = document.createElement("div");
+  const b = document.createElement("b");
+  const p = S.players[seat];
+  b.textContent = (p ? (FACE[p.g] || "🙂") + " " + p.name : "Хтось") + ": ";
+  if (p && p.g) b.className = p.g;
+  const t = document.createElement("span");
+  t.className = "msg";
+  t.textContent = text;
+  d.append(b, t);
+  pushFeed(d);
+}
+// Емоджі злітає над місцем гравця.
+function fly(seat, emoji) {
+  const el = seatEls[seat];
+  if (!el) return;
+  const f = document.createElement("span");
+  f.className = "fly";
+  f.textContent = emoji;
+  f.style.left = el.style.left;
+  f.style.top = el.style.top;
+  $("table").appendChild(f);
+  setTimeout(() => f.remove(), 1500);
 }
 
 function showResult(tag, text, who) {
@@ -207,7 +287,7 @@ function openGift(i) {
   if (!S.players[i] || i === S.seat || !ws || ws.readyState !== 1) return;
   giftSeat = i;
   $("sheetTitle").textContent = "🎁 Подарунок для " + S.players[i].name;
-  $("sheetText").textContent = "Подарунок побачать усі за столом. Оплата зірками Telegram.";
+  $("sheetText").textContent = "💌 Разом із подарунком " + S.players[i].name + " отримає запрошення побути з тобою наодинці. Подарунок дає ❤ (у кого найбільше — той носить 👑) і видно на аватарці. Оплата зірками Telegram.";
   const grid = $("gifts");
   grid.innerHTML = "";
   S.gifts.forEach((g) => {
@@ -216,7 +296,7 @@ function openGift(i) {
     b.innerHTML = "<b></b><span></span><i></i>";
     b.querySelector("b").textContent = g.emoji;
     b.querySelector("span").textContent = g.name;
-    b.querySelector("i").textContent = g.stars + " ⭐";
+    b.querySelector("i").textContent = g.stars + " ⭐ · +" + giftHearts(g.stars) + " ❤";
     b.addEventListener("click", () => {
       ws.send(JSON.stringify({ type: "gift_invoice", toSeat: giftSeat, gift: g.id }));
       $("sheet").classList.add("hidden");
@@ -261,8 +341,14 @@ function handle(m) {
     S.seat = m.seat;
     S.gifts = m.gifts || [];
     hideOver();
+  } else if (m.type === "need_gender") {
+    showOver("Хто ти?", "Так за столом видно, хто хлопець, а хто дівчина. Збережемо в анкету, більше не питатимемо.", [
+      ["👨 Я хлопець", () => { ws.send(JSON.stringify({ type: "gender", gender: "Чоловік" })); hideOver(); }],
+      ["👩 Я дівчина", () => { ws.send(JSON.stringify({ type: "gender", gender: "Жінка" })); hideOver(); }],
+    ]);
   } else if (m.type === "table") {
     S.players = m.players;
+    S.task = m.task || null;
     S.turn = m.turn;
     S.phase = m.phase;
     S.pair = m.pair;
@@ -283,26 +369,85 @@ function handle(m) {
     render();
     buzz("impactOccurred", "medium");
   } else if (m.type === "spin_result") {
-    S.phase = "pair";
+    S.sent = false;
+    S.phase = "answer";
     S.spinner = m.spinner;
     S.pair = [m.spinner, m.target];
-    showResult(CAT_NAMES[m.category] || "ЗАВДАННЯ", m.task, "💞 " + nameOf(m.spinner) + " і " + nameOf(m.target));
+    showResult(CAT_NAMES[m.category] || "ЗАВДАННЯ", m.task, "🍾 " + nameOf(m.spinner) + " → " + nameOf(m.target) + (m.target === S.seat ? " (це ти!)" : " · чекаємо відповідь"));
     render();
     buzz("notificationOccurred", "success");
+  } else if (m.type === "answer") {
+    const who = nameOf(m.seat);
+    showResult(CAT_NAMES[m.category] || "ЗАВДАННЯ", m.task, m.text ? "💬 " + who + " відповідає:" : "🤐 " + who + " промовчав(ла)");
+    if (m.text) {
+      const said = document.createElement("div");
+      said.className = "said";
+      said.style.marginTop = "10px";
+      said.textContent = "«" + m.text + "»";
+      $("result").querySelector(".card").appendChild(said);
+      if (m.seat !== S.seat) {
+        const row = document.createElement("div");
+        row.className = "reacts";
+        ["❤️", "😂", "🔥", "😮"].forEach((e) => {
+          const b = document.createElement("button");
+          b.textContent = e;
+          b.addEventListener("click", () => {
+            ws.send(JSON.stringify({ type: "react", emoji: e }));
+            row.querySelectorAll("button").forEach((x) => { x.disabled = true; });
+            buzz("impactOccurred", "light");
+          });
+          row.appendChild(b);
+        });
+        $("result").appendChild(row);
+      }
+    }
+  } else if (m.type === "react") {
+    fly(m.to, m.emoji);
+    addFeed(m.emoji + " " + nameOf(m.from) + " → " + nameOf(m.to), m.to === S.seat);
+    if (m.to === S.seat) buzz("notificationOccurred", "success");
+  } else if (m.type === "chat") {
+    addChat(m.seat, m.text);
   } else if (m.type === "pair_done") {
     const pair = nameOf(m.a) + " і " + nameOf(m.b);
-    const line = { chat: "💬 " + pair + " пішли в чат", kiss: "💋 " + pair + " поцілувались", busy: "Чат не відкрився: хтось уже в іншому діалозі", none: pair + " лишились за столом" }[m.outcome];
+    let line = { alone: "🔒 " + pair + " пішли побути наодинці", kiss: "💋 " + pair + " поцілувались (+1 ❤ кожному)", busy: "🔒 Не вийшло: хтось уже в іншому діалозі", none: "🤷 " + pair + " розгубились" }[m.outcome];
+    if (m.outcome === "push") {
+      line = m.ca === "push" && m.cb === "push" ? "👋 " + pair + " відштовхнули одне одного"
+        : "👋 " + nameOf(m.ca === "push" ? m.a : m.b) + " відштовхнув(ла) " + nameOf(m.ca === "push" ? m.b : m.a);
+    }
+    if (m.outcome === "kiss") { fly(m.a, "💋"); fly(m.b, "💋"); }
+    if (m.outcome === "push") fly(m.ca === "push" ? m.b : m.a, "💔");
     addFeed(line, m.a === S.seat || m.b === S.seat);
+    // Хотів(ла) більшого, а не вийшло — пропонуємо подарунок із запрошенням.
+    if ((m.a === S.seat || m.b === S.seat) && m.outcome !== "alone") {
+      const mine = m.a === S.seat ? m.ca : m.cb;
+      const other = m.a === S.seat ? m.b : m.a;
+      const wanted = mine === "alone" || (m.outcome === "push" && mine && mine !== "push");
+      if (wanted && S.players[other]) {
+        const nm = nameOf(other);
+        setTimeout(() => showOver(m.outcome === "push" ? "💔 " + nm + " тебе відштовхнув(ла)" : "🔒 " + nm + " поки не готовий(а) наодинці",
+          "Розтопи серце подарунком: " + nm + " отримає його разом із запрошенням побути з тобою наодинці.", [
+            ["🎁 Подарувати " + nm, () => { hideOver(); openGift(other); }],
+            ["Пізніше", hideOver],
+          ]), 600);
+      }
+    }
   } else if (m.type === "chat_opened") {
     S.pair = null;
-    showOver("💬 Діалог відкрито", "Пиши співрозмовнику в чаті з ботом. Гру можна закрити, а потім повернутись за стіл.", [
+    showOver("🔒 Ви наодинці", "Пиши співрозмовнику в чаті з ботом. Гру можна закрити, а потім повернутись за стіл.", [
       ["Закрити гру", () => { try { tg.close(); } catch (e) { hideOver(); } }],
       ["Повернутись за стіл", () => { ws.send(JSON.stringify({ type: "join" })); hideOver(); }],
     ]);
   } else if (m.type === "gift") {
     const from = m.from >= 0 ? nameOf(m.from) : "Хтось";
-    addFeed("🎁 " + from + " → " + nameOf(m.to) + ": " + m.gift.emoji + " " + m.gift.name, m.to === S.seat);
+    addFeed("🎁 " + from + " → " + nameOf(m.to) + ": " + m.gift.emoji + " " + m.gift.name + " (+" + (m.hearts || 1) + " ❤)", m.to === S.seat);
+    fly(m.to, m.gift.emoji);
     if (m.to === S.seat) buzz("notificationOccurred", "success");
+  } else if (m.type === "gift_invite") {
+    const nm = nameOf(m.from);
+    showOver("🎁 " + nm + " дарує тобі " + m.gift.emoji + " " + m.gift.name, nm + " запрошує тебе побути наодинці: це приватний чат у боті, без імен і контактів.", [
+      ["🔒 Побути наодинці", () => { ws.send(JSON.stringify({ type: "invite", yes: true })); hideOver(); }],
+      ["Дякую, лишусь за столом", () => { ws.send(JSON.stringify({ type: "invite", yes: false })); hideOver(); }],
+    ]);
   } else if (m.type === "notice") {
     addFeed(m.text);
   } else if (m.type === "invoice") {
@@ -350,6 +495,26 @@ document.querySelectorAll("#pair button").forEach((b) => b.addEventListener("cli
   ws.send(JSON.stringify({ type: "pair", choice: S.myChoice }));
   render();
 }));
+
+$("answerSend").addEventListener("click", () => {
+  const text = $("answerText").value.trim();
+  if (!text) { $("answerText").focus(); return; }
+  ws.send(JSON.stringify({ type: "answer", text }));
+  S.sent = true;
+  $("answerBox").classList.add("hidden");
+});
+$("answerSkip").addEventListener("click", () => {
+  ws.send(JSON.stringify({ type: "answer", skip: true }));
+  S.sent = true;
+  $("answerBox").classList.add("hidden");
+});
+$("chatForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const text = $("chatText").value.trim();
+  if (!text || !ws || ws.readyState !== 1) return;
+  ws.send(JSON.stringify({ type: "chat", text }));
+  $("chatText").value = "";
+});
 
 render();
 connect();
