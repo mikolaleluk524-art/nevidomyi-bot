@@ -52,6 +52,8 @@ button:disabled{opacity:.45;cursor:default}
 .gift b{display:block;font-size:28px;font-weight:400}
 .gift span{display:block;font-size:13px}
 .gift i{display:block;font-size:12px;font-style:normal;color:var(--accent);margin-top:2px}
+.giftBtn{width:100%;margin-top:8px;padding:12px;border-radius:13px;border:1px solid var(--pink);background:#2a1820;color:var(--text);font-size:15px;font-weight:700}
+.who-btn{padding:12px 6px;background:var(--bg);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:14px}
 .ghost{width:100%;padding:11px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);margin-top:6px}
 </style>
 </head>
@@ -76,6 +78,7 @@ button:disabled{opacity:.45;cursor:default}
     <button class="cat" data-cat="adult">🔞 18+</button>
   </div>
   <button class="main" id="spin" disabled>Підключення...</button>
+  <button class="giftBtn" id="giftBtn">🎁 Подарунок</button>
 
   <div class="pair hidden" id="pair">
     <div class="t" id="pairTitle"></div>
@@ -89,13 +92,13 @@ button:disabled{opacity:.45;cursor:default}
 
   <div class="result" id="result"></div>
   <div class="feed" id="feed"></div>
-  <div class="note">Тапни на гравця за столом, щоб подарувати йому подарунок. Чат відкривається лише коли пара обрала його обоє. Не надсилай контакти й особисті дані.</div>
+  <div class="note">Натисни «🎁 Подарунок» або тапни на гравця за столом, щоб подарувати йому подарунок. Чат відкривається лише коли пара обрала його обоє. Не надсилай контакти й особисті дані.</div>
 </div>
 
 <div class="sheet hidden" id="sheet">
   <div class="box">
     <h2 id="sheetTitle"></h2>
-    <p>Подарунок побачать усі за столом. Оплата зірками Telegram.</p>
+    <p id="sheetText">Подарунок побачать усі за столом. Оплата зірками Telegram.</p>
     <div class="grid" id="gifts"></div>
     <button class="ghost" id="sheetClose">Закрити</button>
   </div>
@@ -204,6 +207,7 @@ function openGift(i) {
   if (!S.players[i] || i === S.seat || !ws || ws.readyState !== 1) return;
   giftSeat = i;
   $("sheetTitle").textContent = "🎁 Подарунок для " + S.players[i].name;
+  $("sheetText").textContent = "Подарунок побачать усі за столом. Оплата зірками Telegram.";
   const grid = $("gifts");
   grid.innerHTML = "";
   S.gifts.forEach((g) => {
@@ -222,6 +226,32 @@ function openGift(i) {
   });
   $("sheet").classList.remove("hidden");
 }
+// Кнопка «🎁 Подарунок»: обрати, кому дарувати.
+function pickGiftTarget() {
+  if (!ws || ws.readyState !== 1) return;
+  const others = [];
+  S.players.forEach((p, i) => { if (p && i !== S.seat) others.push(i); });
+  const grid = $("gifts");
+  grid.innerHTML = "";
+  if (!others.length) {
+    $("sheetTitle").textContent = "🎁 Подарунок";
+    $("sheetText").textContent = "Зачекай, поки хтось сяде за стіл. Подарувати можна будь-кому з гравців.";
+  } else if (others.length === 1) {
+    return openGift(others[0]);
+  } else {
+    $("sheetTitle").textContent = "🎁 Кому подарувати?";
+    $("sheetText").textContent = "Обери гравця за столом.";
+    others.forEach((i) => {
+      const b = document.createElement("button");
+      b.className = "who-btn";
+      b.textContent = S.players[i].name;
+      b.addEventListener("click", () => openGift(i));
+      grid.appendChild(b);
+    });
+  }
+  $("sheet").classList.remove("hidden");
+}
+$("giftBtn").addEventListener("click", pickGiftTarget);
 $("sheetClose").addEventListener("click", () => $("sheet").classList.add("hidden"));
 $("sheet").addEventListener("click", (e) => { if (e.target === $("sheet")) $("sheet").classList.add("hidden"); });
 
