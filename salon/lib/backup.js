@@ -1,10 +1,11 @@
 // Резервні копії бази: щогодини (зберігаємо 48) і щодня (зберігаємо 90).
 // Копія — повний знімок SQLite (VACUUM INTO), узгоджений навіть під час запису.
-// Якщо задано TG_BOT_TOKEN і TG_CHAT_ID — щоденна копія ще й надсилається в Telegram (поза Railway).
+// Якщо підключено Telegram-зошит — щоденна копія ще й надсилається туди (поза Railway).
 import { existsSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { BACKUP_DIR, db, getSecret, setSecret } from "./db.js";
+import { sendDocumentToOwners } from "./telegram.js";
 
 const KEEP_HOURLY = 48;
 const KEEP_DAILY = 90;
@@ -28,16 +29,18 @@ function rotate(prefix, keep) {
 }
 
 async function sendToTelegram(file) {
-  const token = process.env.TG_BOT_TOKEN?.trim();
-  const chat = process.env.TG_CHAT_ID?.trim();
-  if (!token || !chat) return false;
-  const form = new FormData();
-  form.append("chat_id", chat);
-  form.append("caption", `🗄 Резервна копія записів «Магія краси» за ${today()}. Зберігайте — з неї можна відновити все.`);
-  form.append("document", new Blob([gzipSync(readFileSync(file))]), `magiia-krasy-${today()}.sqlite.gz`);
-  const res = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, { method: "POST", body: form });
-  if (!res.ok) throw new Error(`telegram ${res.status}`);
-  return true;
+  return sendDocumentToOwners(
+    gzipSync(readFileSync(file)),
+    `magiia-krasy-${today()}.sqlite.gz`,
+    `🗄 Резервна копія записів «Магія краси» за ${today()}.\nПросто зберігайте цей файл — з нього можна відновити все.`
+  );
+}
+
+/** Копія «зараз» у Telegram (кнопка «🗄 Копія бази»). */
+export async function sendBackupNow() {
+  const f = snapshot(`hourly-${today()}-${hour()}.sqlite`);
+  setSecret("last_backup", String(Date.now()));
+  return sendToTelegram(f);
 }
 
 /** Робить потрібні копії: щогодинну завжди, щоденну — раз на добу. */

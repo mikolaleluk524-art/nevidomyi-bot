@@ -625,6 +625,8 @@ async function settings(box) {
       ${f("birthdayDiscount", "Знижка в тиждень дня народження, %", "number")}</div>
     <button class="btn block big" id="save" style="margin-top:14px">Зберегти</button>
 
+    <section class="section card" id="tgbox"><h3>📒 Telegram-зошит</h3><div class="spinner"></div></section>
+
     <section class="section card" id="safety"><h3>🛡 Збереження записів</h3><div class="spinner"></div></section>
 
     <section class="section card"><h3>Сповіщення для вас</h3>
@@ -656,6 +658,7 @@ async function settings(box) {
   };
   $("#push").onclick = adminPush;
   renderSafety();
+  renderTelegram();
   $("#bsend").onclick = async () => {
     if (!$("#bt").value.trim()) return toast("Вкажіть заголовок");
     if (!confirm("Надіслати всім клієнткам?")) return;
@@ -708,6 +711,25 @@ async function settings(box) {
   }
 }
 
+async function renderTelegram() {
+  const box = $("#tgbox");
+  const d = await api("/api/admin/telegram");
+  if (!d.on) {
+    box.innerHTML = `<h3>📒 Telegram-зошит</h3><p class="small muted">Бот ще не підключений до сайту. Коли розробник додасть токен бота в Railway, тут зʼявиться кнопка «Підключити».</p>`;
+    return;
+  }
+  box.innerHTML = `<h3>📒 Telegram-зошит</h3>
+    <p class="small muted">Бот @${esc(d.bot || "")} надсилає нові записи, щоранку — сторінку на день, щовечора — записи на завтра, щоночі — копію бази.</p>
+    ${d.chats.length ? `<div class="small stack" style="margin:8px 0">${d.chats.map((c) => `<div class="row between"><span>✅ ${esc(c.name)}</span><button class="btn sm line" data-tgdel="${esc(c.id)}">Відключити</button></div>`).join("")}</div>` : `<p class="small">Ще ніхто не підключений.</p>`}
+    ${d.link ? `<a class="btn block" target="_blank" rel="noopener" href="${esc(d.link)}">${d.chats.length ? "＋ Підключити ще один Telegram" : "Підключити мій Telegram"}</a>
+      <p class="small muted" style="margin-top:6px">Відкриється бот — натисніть «Старт». Посилання одноразове.</p>` : ""}`;
+  box.querySelectorAll("[data-tgdel]").forEach((b) => (b.onclick = async () => {
+    if (!confirm("Відключити цей Telegram від зошита?")) return;
+    await api(`/api/admin/telegram/${b.dataset.tgdel}`, { method: "DELETE" });
+    renderTelegram();
+  }));
+}
+
 async function renderSafety() {
   const box = $("#safety");
   const d = await api("/api/admin/backups");
@@ -729,6 +751,7 @@ async function renderSafety() {
     await api("/api/admin/backups", { body: {} });
     toast("Копію зроблено ✓");
     renderSafety();
+  renderTelegram();
   };
 }
 

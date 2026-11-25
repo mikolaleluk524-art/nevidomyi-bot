@@ -8,7 +8,7 @@
  *   ADMIN_PASSWORD    — пароль кабінету власниці (якщо не задано — створюється під час першого входу в /admin)
  *   LIQPAY_PUBLIC_KEY, LIQPAY_PRIVATE_KEY — ключі LiqPay (ПриватБанк) для передоплати
  *   MONO_TOKEN        — або токен monobank еквайрингу (без жодних ключів — тестова оплата)
- *   TG_BOT_TOKEN, TG_CHAT_ID — дублювати сповіщення про записи в Telegram
+ *   TG_BOT_TOKEN      — токен Telegram-бота «Зошит записів» (власниця підключається кнопкою в кабінеті)
  */
 import { createServer } from "node:http";
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
@@ -17,6 +17,7 @@ import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { all, db, getSecret, getSettings, integrity, one, run, setSecret, setSettings, UPLOAD_DIR } from "./lib/db.js";
 import { backupPath, listBackups, runBackups, startBackups } from "./lib/backup.js";
+import { botInfo, linkCode, ownerChats, removeChat, startTelegram, telegramOn } from "./lib/telegram.js";
 import { addDays, hm, humanDate, isDate, kyivNow, toMin } from "./lib/time.js";
 import { notifyOwner, pushClient, saveSubscription, VAPID_PUBLIC } from "./lib/notify.js";
 import { activateGift, createGift, GIFT_PENDING_MINUTES, giftByCode, giftLog, publicGift, redeemGift } from "./lib/gifts.js";
@@ -566,13 +567,29 @@ async function adminApi(req, res, p, m, q) {
     return send(res, 200, {
       integrity,
       lastBackup: Number(getSecret("last_backup")) || 0,
-      telegram: Boolean(process.env.TG_BOT_TOKEN && process.env.TG_CHAT_ID),
+      telegram: telegramOn() && ownerChats().length > 0,
       lastTelegram: getSecret("tg_backup_day") || "",
       onVolume: Boolean(process.env.RAILWAY_VOLUME_MOUNT_PATH),
       counts: { bookings: r("SELECT COUNT(*) n FROM bookings"), clients: r("SELECT COUNT(*) n FROM clients") },
       backups: listBackups().slice(0, 20),
     });
   }
+  if (m === "GET" && p === "/api/admin/telegram") {
+    if (!telegramOn()) return send(res, 200, { on: false });
+    const bot = await botInfo();
+    return send(res, 200, {
+      on: true,
+      bot: bot?.username || null,
+      chats: ownerChats().map((c) => ({ id: String(c.id), name: c.name })),
+      link: bot ? `https://t.me/${bot.username}?start=${linkCode()}` : null,
+    });
+  }
+  const tcm = p.match(/^\/api\/admin\/telegram\/(-?\d+)$/);
+  if (tcm && m === "DELETE") {
+    removeChat(tcm[1]);
+    return send(res, 200, { ok: true });
+  }
+
   if (m === "POST" && p === "/api/admin/backups") {
     await runBackups();
     return send(res, 200, { ok: true });
@@ -643,7 +660,7 @@ async function adminApi(req, res, p, m, q) {
       pendingReviews: r("SELECT COUNT(*) n FROM reviews WHERE status = 'pending'").n,
       requests: r("SELECT COUNT(*) n FROM bookings WHERE status = 'request'").n,
       payments: getSettings().onlinePay ? provider() : "off",
-      telegram: Boolean(process.env.TG_BOT_TOKEN && process.env.TG_CHAT_ID),
+      telegram: telegramOn() && ownerChats().length > 0,
     });
   }
 
@@ -1007,6 +1024,7 @@ setInterval(async () => {
 
 // ---------- сервер ----------
 startBackups();
+startTelegram();
 if (integrity !== "ok") notifyOwner({ title: "⚠️ Перевірка бази", body: `Перевірка цілісності: ${integrity}. Є резервні копії — напишіть розробнику.` }).catch(() => {});
 
 // Коректне завершення при оновленні: дописуємо все на диск і закриваємо базу.

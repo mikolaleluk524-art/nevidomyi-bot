@@ -1,6 +1,7 @@
 // Сповіщення: web-push клієнтам і власниці + (необовʼязково) Telegram власниці.
 import webpush from "web-push";
 import { all, getSecret, run, setSecret } from "./db.js";
+import { sendToOwners } from "./telegram.js";
 
 let vapid = { publicKey: process.env.VAPID_PUBLIC_KEY, privateKey: process.env.VAPID_PRIVATE_KEY };
 if (!vapid.publicKey || !vapid.privateKey) {
@@ -48,17 +49,5 @@ export const pushClient = (clientId, payload) => send(all("SELECT * FROM push_su
 
 export async function notifyOwner(payload) {
   await send(all("SELECT * FROM push_subs WHERE is_admin = 1"), payload);
-  const token = process.env.TG_BOT_TOKEN?.trim();
-  const chat = process.env.TG_CHAT_ID?.trim();
-  if (token && chat) {
-    try {
-      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ chat_id: chat, text: `${payload.title}\n${payload.body}` }),
-      });
-    } catch (e) {
-      console.error("[tg]", e.message);
-    }
-  }
+  await sendToOwners(payload.title, payload.body);
 }
