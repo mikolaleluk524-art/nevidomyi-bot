@@ -105,6 +105,51 @@ const OUTREACH_TEMPLATES = {
   },
 };
 
+// Додаткові варіанти: кожного разу береться випадковий, щоб тексти не повторювались.
+const PROMO_MORE = {
+  dating: [
+    { uk: "🍾 Знайомства без нудних анкет\nУ Telegram є гра в бутилочку: до 10 людей за столом, завдання, реакції, подарунки. Сподобались одне одному — 🔒 переходите в приватний чат.\nАнонімно, 18+\n👉 {link}",
+      ru: "🍾 Знакомства без скучных анкет\nВ Telegram есть игра в бутылочку: до 10 человек за столом, задания, реакции, подарки. Понравились друг другу — 🔒 переходите в приватный чат.\nАнонимно, 18+\n👉 {link}",
+      en: "🍾 Dating without boring profiles\nThere's a Spin the Bottle game in Telegram: up to 10 people at a table, dares, reactions, gifts. Like each other? 🔒 move to a private chat.\nAnonymous, 18+\n👉 {link}" },
+    { uk: "👀 Хто сьогодні опиниться з тобою в парі?\nКрути пляшку, відповідай на питання, даруй 🌹 і обирай: 💋 поцілувати чи 👋 відштовхнути.\nБез імен і номерів, поки сам не захочеш. 18+\n👉 {link}",
+      ru: "👀 Кто сегодня окажется с тобой в паре?\nКрути бутылочку, отвечай на вопросы, дари 🌹 и выбирай: 💋 поцеловать или 👋 оттолкнуть.\nБез имён и номеров, пока сам не захочешь. 18+\n👉 {link}",
+      en: "👀 Who'll end up paired with you tonight?\nSpin the bottle, answer questions, give 🌹 and choose: 💋 kiss or 👋 push away.\nNo names or numbers unless you want. 18+\n👉 {link}" },
+  ],
+  humor: [
+    { uk: "😅 Нарешті місце, де відштовхнути людину — це кнопка, а не драма.\n🍾 Гра в бутилочку в Telegram: завдання, реакції, корона 👑 найпопулярнішому. 18+\n👉 {link}",
+      ru: "😅 Наконец-то место, где оттолкнуть человека — это кнопка, а не драма.\n🍾 Игра в бутылочку в Telegram: задания, реакции, корона 👑 самому популярному. 18+\n👉 {link}",
+      en: "😅 Finally, a place where pushing someone away is a button, not a drama.\n🍾 Spin the Bottle in Telegram: dares, reactions, a 👑 crown for the most popular. 18+\n👉 {link}" },
+    { uk: "🍾 Завдання дня: напиши комплімент незнайомцю і не почервоній.\nЦе одна з карток у грі в бутилочку в Telegram. Решта — ще цікавіші 😏 18+\n👉 {link}",
+      ru: "🍾 Задание дня: напиши комплимент незнакомцу и не покраснеть.\nЭто одна из карточек в игре в бутылочку в Telegram. Остальные — ещё интереснее 😏 18+\n👉 {link}",
+      en: "🍾 Dare of the day: compliment a stranger without blushing.\nThat's one card from Spin the Bottle in Telegram. The rest are even better 😏 18+\n👉 {link}" },
+  ],
+  video: [
+    { uk: "🎬 Формат «реакція»: ти дивишся в камеру, на екрані крутиться пляшка.\nТекст: «Пляшка обрала мене, а завдання — „Опиши себе трьома емоджі“» → показуєш відповідь 😂\nФінал: кнопки 💋 / 👋 / 🔒 і твоє обличчя.\nПідпис: Гра в бутилочку в Telegram 👉 {link}",
+      ru: "🎬 Формат «реакция»: ты смотришь в камеру, на экране крутится бутылочка.\nТекст: «Бутылочка выбрала меня, а задание — „Опиши себя тремя эмодзи“» → показываешь ответ 😂\nФинал: кнопки 💋 / 👋 / 🔒 и твоё лицо.\nПодпись: Игра в бутылочку в Telegram 👉 {link}",
+      en: "🎬 Reaction format: you look at the camera while the bottle spins on screen.\nText: “The bottle picked me, and the dare is ‘Describe yourself in three emojis’” → show your answer 😂\nEnding: 💋 / 👋 / 🔒 buttons and your face.\nCaption: Spin the Bottle in Telegram 👉 {link}" },
+    { uk: "🎬 Формат «POV»: «POV: ти загадав бажання за 👑, а хтось написав тобі вірш» → показуєш відповідь на екрані.\nКадр 2: обираєш переможця, 👑 летить на аватарку.\nПідпис: Бажання й корони — в бутилочці в Telegram 👉 {link}",
+      ru: "🎬 Формат «POV»: «POV: ты загадал желание за 👑, а кто-то написал тебе стих» → показываешь ответ на экране.\nКадр 2: выбираешь победителя, 👑 летит на аватарку.\nПодпись: Желания и короны — в бутылочке в Telegram 👉 {link}",
+      en: "🎬 POV format: “POV: you made a wish for a 👑 and someone wrote you a poem” → show the answer on screen.\nShot 2: you pick the winner and the 👑 lands on their avatar.\nCaption: Wishes and crowns in Spin the Bottle on Telegram 👉 {link}" },
+  ],
+  story: [
+    { uk: "💋 чи 👋? Вирішуй за столом 🍾\n{link}", ru: "💋 или 👋? Решай за столом 🍾\n{link}", en: "💋 or 👋? Decide at the table 🍾\n{link}" },
+    { uk: "✨ Загадай бажання — хтось його виконає 👑\n{link}", ru: "✨ Загадай желание — кто-то его исполнит 👑\n{link}", en: "✨ Make a wish — someone will grant it 👑\n{link}" },
+  ],
+};
+const OUTREACH_MORE = {
+  swap: {
+    uk: "Добрий день! Пишу щодо співпраці з каналом «{channel}».\nЯ розвиваю Telegram-бота «Невідомий»: анонімний чат і гра в бутилочку з подарунками, 18+. Думаю, вашим підписникам це може бути цікаво, а нашим — ваш канал.\nПропоную обмінятися постами в зручний для вас день. Готовий підлаштувати текст під стиль каналу.\nЯк вам така ідея?",
+    ru: "Добрый день! Пишу по поводу сотрудничества с каналом «{channel}».\nЯ развиваю Telegram-бота «Невідомий»: анонимный чат и игра в бутылочку с подарками, 18+. Думаю, вашим подписчикам это может быть интересно, а нашим — ваш канал.\nПредлагаю обменяться постами в удобный для вас день. Готов подстроить текст под стиль канала.\nКак вам такая идея?",
+    en: "Hello! I'm writing about a possible collaboration with “{channel}”.\nI run “Nevidomyi”, a Telegram bot with anonymous chat and a Spin the Bottle game with gifts (18+). I think your subscribers might enjoy it, and ours might enjoy your channel.\nWould you be up for swapping posts on a day that suits you? I'm happy to adapt the text to your channel's style.",
+  },
+  paid: {
+    uk: "Добрий день! Цікавить реклама в каналі «{channel}».\nПродукт — Telegram-бот «Невідомий»: анонімний чат і гра в бутилочку, 18+. Пост короткий, з одним посиланням.\nПідкажіть, будь ласка, ціну, формат (з закріпом чи без, скільки годин у топі) і найближчі вільні дати.",
+    ru: "Добрый день! Интересует реклама в канале «{channel}».\nПродукт — Telegram-бот «Невідомий»: анонимный чат и игра в бутылочку, 18+. Пост короткий, с одной ссылкой.\nПодскажите, пожалуйста, цену, формат (с закрепом или без, сколько часов в топе) и ближайшие свободные даты.",
+    en: "Hello! I'm interested in advertising in “{channel}”.\nThe product is “Nevidomyi”, a Telegram bot with anonymous chat and a Spin the Bottle game (18+). The post is short, with a single link.\nCould you share the price, the format (pinned or not, hours at the top) and the nearest available dates?",
+  },
+};
+const pickOne = (list) => list[Math.floor(Math.random() * list.length)];
+
 const fill = (text, vars) => text.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "");
 
 async function ask(prompt, schema) {
@@ -172,7 +217,10 @@ ${note ? `Побажання власника: ${note}\n` : ""}Вимоги:
   }
   return {
     source: "templates",
-    items: Object.entries(PROMO_TEMPLATES).map(([format, t]) => ({ format, title: FORMATS[format], uk: fill(t.uk, { link }), ru: fill(t.ru, { link }), en: fill(t.en, { link }) })),
+    items: Object.entries(PROMO_TEMPLATES).map(([format, base]) => {
+      const t = pickOne([base, ...(PROMO_MORE[format] || [])]);
+      return { format, title: FORMATS[format], uk: fill(t.uk, { link }), ru: fill(t.ru, { link }), en: fill(t.en, { link }) };
+    }),
   };
 }
 
@@ -196,5 +244,5 @@ export async function outreachLetter({ channel, topic, offer, lang, me }) {
     }
   }
   const sign = vars.me !== "—" ? `\n— ${vars.me}` : "";
-  return { source: "templates", text: fill(OUTREACH_TEMPLATES[kind][l], vars) + sign };
+  return { source: "templates", text: fill(pickOne([OUTREACH_TEMPLATES[kind][l], OUTREACH_MORE[kind][l]]), vars) + sign };
 }
