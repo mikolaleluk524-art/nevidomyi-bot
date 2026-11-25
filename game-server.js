@@ -54,7 +54,7 @@ function endRoom(room, leavingId) {
   for (const player of room.players) {
     if (player.id !== leavingId) {
       send(player.ws, { type: "opponent_left" });
-      player.room = null;
+      player.ws.room = null;
     }
   }
 }
