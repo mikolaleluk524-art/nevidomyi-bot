@@ -47,7 +47,8 @@ function verifyInitData(raw) {
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([key, value]) => `${key}=${value}`)
     .join("\n");
-  const secret = createHmac("sha256", BOT_TOKEN).update("WebAppData").digest();
+  // Telegram: secret_key = HMAC-SHA256(key = "WebAppData", data = bot_token)
+  const secret = createHmac("sha256", "WebAppData").update(BOT_TOKEN).digest();
   const expected = createHmac("sha256", secret).update(check).digest();
   let supplied;
   try { supplied = Buffer.from(hash, "hex"); } catch { throw new Error("Некоректний підпис"); }
