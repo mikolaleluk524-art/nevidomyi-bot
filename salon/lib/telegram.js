@@ -25,10 +25,9 @@ export function ownerChats() {
   if (env && !list.some((c) => String(c.id) === env)) list.push({ id: env, name: "TG_CHAT_ID" });
   return list;
 }
+// Зошит — лише для одного Telegram (Марини Олександрівни): нове підключення замінює попереднє.
 function addChat(id, name) {
-  const list = JSON.parse(getSecret("tg_chats") || "[]").filter((c) => String(c.id) !== String(id));
-  list.push({ id, name });
-  setSecret("tg_chats", JSON.stringify(list));
+  setSecret("tg_chats", JSON.stringify([{ id, name }]));
 }
 export function removeChat(id) {
   setSecret("tg_chats", JSON.stringify(JSON.parse(getSecret("tg_chats") || "[]").filter((c) => String(c.id) !== String(id))));
@@ -139,7 +138,7 @@ async function handle(update) {
 
   if (text.startsWith("/start")) {
     const code = text.split(" ")[1];
-    if (code && code === getSecret("tg_link_code")) {
+    if (code && code === getSecret("tg_link_code") && !ownerChats().length) {
       addChat(chat, [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(" ") || "Власниця");
       setSecret("tg_link_code", ""); // код одноразовий
       // Журнал починаємо з цього моменту (старі записи є в копії бази)

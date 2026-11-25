@@ -721,8 +721,8 @@ async function renderTelegram() {
   box.innerHTML = `<h3>📒 Telegram-зошит</h3>
     <p class="small muted">Бот @${esc(d.bot || "")} одразу записує в Telegram кожен запис і кожну зміну, о 7:00 надсилає записи на сьогодні, о 20:00 — на завтра, кожні 2 години — повну копію бази.</p>
     ${d.chats.length ? `<div class="small stack" style="margin:8px 0">${d.chats.map((c) => `<div class="row between"><span>✅ ${esc(c.name)}</span><button class="btn sm line" data-tgdel="${esc(c.id)}">Відключити</button></div>`).join("")}</div>` : `<p class="small">Ще ніхто не підключений.</p>`}
-    ${d.link ? `<a class="btn block" target="_blank" rel="noopener" href="${esc(d.link)}">${d.chats.length ? "＋ Підключити ще один Telegram" : "Підключити мій Telegram"}</a>
-      <p class="small muted" style="margin-top:6px">Відкриється бот — натисніть «Старт». Посилання одноразове.</p>` : ""}`;
+    ${d.link ? `<a class="btn block" target="_blank" rel="noopener" href="${esc(d.link)}">Підключити мій Telegram</a>
+      <p class="small muted" style="margin-top:6px">Відкрийте це посилання на своєму телефоні й натисніть «Старт». Зошит приходитиме лише в один Telegram — ваш.</p>` : `<p class="small muted">Зошит надходить лише в цей Telegram. Щоб перенести на інший — спершу відключіть.</p>`}`;
   box.querySelectorAll("[data-tgdel]").forEach((b) => (b.onclick = async () => {
     if (!confirm("Відключити цей Telegram від зошита?")) return;
     await api(`/api/admin/telegram/${b.dataset.tgdel}`, { method: "DELETE" });

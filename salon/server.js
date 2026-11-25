@@ -581,7 +581,8 @@ async function adminApi(req, res, p, m, q) {
       on: true,
       bot: bot?.username || null,
       chats: ownerChats().map((c) => ({ id: String(c.id), name: c.name })),
-      link: bot ? `https://t.me/${bot.username}?start=${linkCode()}` : null,
+      // Підключити можна лише один Telegram; щоб змінити — спершу відключити поточний
+      link: bot && !ownerChats().length ? `https://t.me/${bot.username}?start=${linkCode()}` : null,
     });
   }
   const tcm = p.match(/^\/api\/admin\/telegram\/(-?\d+)$/);
