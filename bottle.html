@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="uk">
 <head>
@@ -6,217 +5,323 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Гра в бутилочку</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-
 <style>
-:root {
-  --bg:#0c0b0a;
-  --card:#191613;
-  --border:#302923;
-  --text:#f5f0ea;
-  --muted:#a89f94;
-  --accent:#d4a574;
-  --green:#3b6b4f;
-}
-* {box-sizing:border-box;margin:0;padding:0}
-body {
-  background:var(--bg);
-  color:var(--text);
-  font-family:system-ui,sans-serif;
-  min-height:100vh;
-  padding:24px 16px;
-  text-align:center;
-}
-h1 {font-size:23px;margin-bottom:5px}
-.sub {font-size:13px;color:var(--muted);margin-bottom:20px}
-.game-status {max-width:360px;margin:0 auto 14px;color:var(--accent);font-size:13px;min-height:20px}
-.stats {
-  display:flex;
-  justify-content:space-between;
-  max-width:360px;
-  margin:0 auto 18px;
-  color:var(--muted);
-  font-size:13px;
-}
-.table {
-  width:min(82vw,320px);
-  height:min(82vw,320px);
-  margin:0 auto 22px;
-  border-radius:50%;
-  border:2px solid var(--border);
-  background:radial-gradient(circle,#24201b,#14110f);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  position:relative;
-  box-shadow:0 0 35px #0008;
-}
-.side {
-  position:absolute;
-  top:50%;
-  transform:translateY(-50%);
-  font-size:12px;
-  color:var(--muted);
-  width:65px;
-}
-.left {left:4px}
-.right {right:4px}
-#bottle {
-  width:56px;
-  height:210px;
-  transform:rotate(0deg);
-  transition:transform 4s cubic-bezier(.12,.72,.18,1);
-}
-.categories {
-  display:grid;
-  grid-template-columns:repeat(2,1fr);
-  gap:9px;
-  max-width:360px;
-  margin:0 auto 16px;
-}
-.cat {
-  padding:12px 5px;
-  background:var(--card);
-  border:1px solid var(--border);
-  color:var(--text);
-  border-radius:12px;
-  font-size:14px;
-}
-.cat.active {
-  background:#493724;
-  border-color:var(--accent);
-  color:var(--accent);
-}
-button {
-  cursor:pointer;
-  font-family:inherit;
-}
-.main-btn {
-  width:100%;
-  max-width:360px;
-  padding:15px;
-  border:0;
-  border-radius:13px;
-  background:var(--accent);
-  color:#17110c;
-  font-size:16px;
-  font-weight:800;
-}
-.secondary {
-  margin-top:10px;
-  padding:12px 20px;
-  border:1px solid var(--border);
-  background:var(--card);
-  color:var(--text);
-  border-radius:12px;
-}
-.result {
-  max-width:360px;
-  margin:20px auto 0;
-  min-height:145px;
-}
-.who {
-  font-size:14px;
-  color:var(--accent);
-  margin-bottom:10px;
-}
-.card {
-  padding:20px 15px;
-  border-radius:15px;
-  background:var(--card);
-  border:1px solid var(--border);
-  font-size:17px;
-  line-height:1.5;
-}
-.tag {
-  color:var(--accent);
-  font-size:11px;
-  letter-spacing:2px;
-  margin-bottom:9px;
-}
-.hidden {display:none}
-.note {
-  color:var(--muted);
-  font-size:11px;
-  margin:20px auto 0;
-  max-width:320px;
-}
+:root{--bg:#0c0b0a;--card:#191613;--border:#302923;--text:#f5f0ea;--muted:#a89f94;--accent:#d4a574;--pink:#e87eb0;--ok:#6b9e78;--bad:#c45c4a}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min-height:100vh;padding:14px 14px 28px;text-align:center}
+.wrap{max-width:400px;margin:0 auto}
+h1{font-size:21px;margin-bottom:4px}
+.status{font-size:13px;color:var(--accent);min-height:20px;margin-bottom:10px}
+.table{position:relative;width:min(92vw,360px);height:min(92vw,360px);margin:0 auto 14px;border-radius:50%;border:2px solid var(--border);background:radial-gradient(circle,#24201b,#14110f);box-shadow:0 0 30px #0008}
+.seat{position:absolute;width:62px;transform:translate(-50%,-50%);cursor:pointer}
+.seat.empty{opacity:.22;cursor:default}
+.av{width:42px;height:42px;margin:0 auto;border-radius:50%;background:var(--card);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px}
+.nm{font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.seat.me .av{border-color:var(--accent)}
+.seat.turn .av{box-shadow:0 0 0 3px #d4a57466;border-color:var(--accent)}
+.seat.paired .av{background:#5c2a3a;border-color:var(--pink);color:#fff}
+#bottle{position:absolute;left:50%;top:50%;width:32px;height:122px;margin:-61px 0 0 -16px;transform:rotate(0deg)}
+.chips{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px}
+.cat{padding:9px 2px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:10px;font-size:12px}
+.cat.on{background:#493724;border-color:var(--accent);color:var(--accent)}
+button{font-family:inherit;cursor:pointer}
+button:disabled{opacity:.45;cursor:default}
+.main{width:100%;padding:15px;border:0;border-radius:13px;background:var(--accent);color:#17110c;font-size:16px;font-weight:800}
+.pair{margin-top:12px;padding:12px;border-radius:14px;background:#2a1820;border:1px solid var(--pink)}
+.pair .t{font-size:14px;margin-bottom:10px}
+.row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.row button{padding:11px 4px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px}
+.wait{font-size:12px;color:var(--muted);margin-top:8px}
+.result{margin-top:12px;min-height:8px}
+.card{padding:16px 14px;border-radius:14px;background:var(--card);border:1px solid var(--border);font-size:16px;line-height:1.45}
+.who{font-size:13px;color:var(--pink);margin-bottom:8px}
+.tag{color:var(--accent);font-size:11px;letter-spacing:2px;margin-bottom:6px}
+.feed{margin-top:12px;font-size:12px;color:var(--muted);text-align:left}
+.feed div{padding:5px 0;border-top:1px solid #2a262244}
+.feed .me{color:var(--accent);font-weight:600}
+.note{color:var(--muted);font-size:11px;margin:16px auto 0;max-width:320px}
+.hidden{display:none!important}
+.sheet,.over{position:fixed;inset:0;background:#000a;display:flex;align-items:flex-end;justify-content:center;z-index:5}
+.over{align-items:center;background:#000d}
+.box{width:100%;max-width:400px;background:var(--card);border:1px solid var(--border);border-radius:18px 18px 0 0;padding:16px}
+.over .box{border-radius:18px;margin:0 14px}
+.box h2{font-size:17px;margin-bottom:6px}
+.box p{font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.4}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.gift{padding:12px 6px;background:var(--bg);border:1px solid var(--border);border-radius:12px;color:var(--text)}
+.gift b{display:block;font-size:28px;font-weight:400}
+.gift span{display:block;font-size:13px}
+.gift i{display:block;font-size:12px;font-style:normal;color:var(--accent);margin-top:2px}
+.ghost{width:100%;padding:11px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);margin-top:6px}
 </style>
 </head>
-
 <body>
+<div class="wrap">
+  <h1>🍾 Гра в бутилочку</h1>
+  <div class="status" id="status">Підключення до столу...</div>
 
-<h1>🍾 Гра в бутилочку</h1>
-<div class="sub">Випробуй удачу разом зі співрозмовником</div>
+  <div class="table" id="table">
+    <svg id="bottle" viewBox="0 0 56 210">
+      <rect x="22" y="2" width="12" height="16" rx="3" fill="#d4a574"/>
+      <path d="M22 18 H34 V70 C34 82 52 92 52 120 V196 C52 204 46 208 40 208 H16 C10 208 4 204 4 196 V120 C4 92 22 82 22 70 Z" fill="#3b6b4f" stroke="#6b9e78" stroke-width="2"/>
+      <rect x="12" y="130" width="32" height="46" rx="4" fill="#f5f0ea" opacity=".85"/>
+    </svg>
+  </div>
 
-<div class="stats"><span>Раунд: <b id="round">0</b></span><span id="categoryName">Усі категорії</span></div><div class="game-status" id="gameStatus">Підключення до спільної гри...</div>
+  <div class="chips" id="chips">
+    <button class="cat on" data-cat="all">🎲 Усе</button>
+    <button class="cat" data-cat="truth">💬 Правда</button>
+    <button class="cat" data-cat="action">🔥 Дія</button>
+    <button class="cat" data-cat="kiss">💋 Цьом</button>
+    <button class="cat" data-cat="adult">🔞 18+</button>
+  </div>
+  <button class="main" id="spin" disabled>Підключення...</button>
 
-<div class="table">
-  <div class="side left" id="leftPlayer">Гравець 1</div><div class="side right" id="rightPlayer">Гравець 2</div>
+  <div class="pair hidden" id="pair">
+    <div class="t" id="pairTitle"></div>
+    <div class="row">
+      <button data-choice="chat">💬 Піти в чат</button>
+      <button data-choice="kiss">💋 Поцілунок</button>
+      <button data-choice="skip">Лишитись</button>
+    </div>
+    <div class="wait" id="pairWait"></div>
+  </div>
 
-  <svg id="bottle" viewBox="0 0 56 210">
-    <rect x="22" y="2" width="12" height="16" rx="3" fill="#d4a574"/>
-    <path d="M22 18 H34 V70 C34 82 52 92 52 120 V196 C52 204 46 208 40 208 H16 C10 208 4 204 4 196 V120 C4 92 22 82 22 70 Z"
-      fill="#3b6b4f" stroke="#6b9e78" stroke-width="2"/>
-    <rect x="12" y="130" width="32" height="46" rx="4" fill="#f5f0ea" opacity=".85"/>
-  </svg>
+  <div class="result" id="result"></div>
+  <div class="feed" id="feed"></div>
+  <div class="note">Тапни на гравця за столом, щоб подарувати йому подарунок. Чат відкривається лише коли пара обрала його обоє. Не надсилай контакти й особисті дані.</div>
 </div>
 
-<div class="categories">
-  <button class="cat active" data-cat="all">🎲 Усе</button>
-  <button class="cat" data-cat="truth">💬 Правда</button>
-  <button class="cat" data-cat="action">🔥 Дія</button>
-  <button class="cat" data-cat="kiss">💋 Поцілунок</button>
-  <button class="cat" data-cat="adult">🔞 18+</button>
-</div>
-
-<button class="main-btn" id="spin">КРУТИТИ</button>
-
-<div class="result" id="result">
-  <div class="card">
-    <div class="tag">ГОТОВІ ДО ГРИ?</div>
-    Натисни кнопку та дізнайся, кому випаде наступне завдання.
+<div class="sheet hidden" id="sheet">
+  <div class="box">
+    <h2 id="sheetTitle"></h2>
+    <p>Подарунок побачать усі за столом. Оплата зірками Telegram.</p>
+    <div class="grid" id="gifts"></div>
+    <button class="ghost" id="sheetClose">Закрити</button>
   </div>
 </div>
 
-<button class="secondary hidden" id="next">Наступний раунд</button><button class="secondary hidden" id="cancel">Скасувати пошук</button>
-
-<div class="note">
-  Грайте добровільно. Кожен може відмовитися від будь-якого завдання.
-  Не надсилайте особисті дані та інтимні матеріали.
+<div class="over hidden" id="over">
+  <div class="box">
+    <h2 id="overTitle"></h2>
+    <p id="overText"></p>
+    <div id="overBtns"></div>
+  </div>
 </div>
 
 <script>
-const tg=window.Telegram?.WebApp; tg?.ready(); tg?.expand();
-const tasks={
-truth:["Яке твоє найсмішніше побачення?","Яка твоя найбільша слабкість?","Коли ти востаннє закохувався?","Який твій найбільший секрет, яким можеш поділитися?","Що тебе найбільше приваблює в людині?","Який твій найбільш незручний момент?","Кому ти хотів би зараз написати?","Яка твоя найдивніша звичка?","Що ти ніколи не пробачиш?","Який комплімент ти пам'ятаєш досі?"],
-action:["Зобрази свого співрозмовника протягом 20 секунд.","Заспівай приспів будь-якої пісні.","Скажи три щирі компліменти.","Протягом хвилини говори пошепки.","Зобрази смішну емоцію.","Розкажи анекдот.","Покажи свій найкращий танець.","Придумай співрозмовнику прізвисько.","Скажи щось приємне співрозмовнику.","Протягом наступного раунду відповідай тільки правду."],
-kiss:["Повітряний поцілунок співрозмовнику.","Опиши свій ідеальний поцілунок.","Скажи, що тобі найбільше подобається в співрозмовнику.","Назви три риси, які тебе приваблюють.","Придумай романтичне побачення.","Надішли повітряний поцілунок у камеру."],
-adult:["Який твій найбільш сміливий романтичний досвід?","Що для тебе найпривабливіше в партнері?","Яка твоя найбільш несподівана фантазія, якою комфортно поділитися?","Що для тебе є найважливішим в інтимних стосунках?","Який романтичний сценарій ти хотів би спробувати?"]};
-let selected="all",round=0,rotation=0,busy=false,matched=false,manualCancel=false,seat=-1,opponentName="Співрозмовник",socket;
-const bottle=document.getElementById("bottle"),spin=document.getElementById("spin"),next=document.getElementById("next"),cancel=document.getElementById("cancel"),result=document.getElementById("result"),status=document.getElementById("gameStatus");
-spin.disabled=true;
-function showStatus(t){status.textContent=t;}
-function showCard(tag,txt){result.innerHTML='<div class="card"><div class="tag"></div><div class="task-text"></div></div>';result.querySelector(".tag").textContent=tag;result.querySelector(".task-text").textContent=txt;}
-function catName(k){return ({truth:"ПРАВДА",action:"ДІЯ",kiss:"ПОЦІЛУНОК",adult:"18+"})[k]||"ЗАВДАННЯ";}
-document.querySelectorAll(".cat").forEach(b=>b.addEventListener("click",()=>{if(busy)return;document.querySelectorAll(".cat").forEach(x=>x.classList.remove("active"));b.classList.add("active");selected=b.dataset.cat;document.getElementById("categoryName").textContent=b.textContent;tg?.HapticFeedback?.selectionChanged();}));
-function connect(){
- const initData=tg?.initData;if(!initData){showStatus("Відкрий гру через Telegram, щоб підключитися.");return;}
- const url="wss://nevidomyi-bot-production-045b32cd.up.railway.app/game?initData="+encodeURIComponent(initData);
- socket=new WebSocket(url);socket.addEventListener("open",()=>showStatus("З'єднано. Шукаю другого гравця..."));
- socket.addEventListener("message",e=>{let m;try{m=JSON.parse(e.data)}catch{return}
- if(m.type==="waiting"){showStatus("Очікування другого гравця...");cancel.classList.remove("hidden")}
- else if(m.type==="matched"){matched=true;seat=m.seat;const mine=m.players[seat],other=m.players[1-seat];opponentName=other?.name||"Співрозмовник";document.getElementById("leftPlayer").textContent=seat===0?"Ти: "+mine.name:opponentName;document.getElementById("rightPlayer").textContent=seat===1?"Ти: "+mine.name:opponentName;cancel.classList.add("hidden");spin.disabled=false;showStatus("Гравця знайдено. Можна крутити пляшку.");showCard("ГРА ПОЧАЛАСЯ","Натисни «Крутити». Результат побачите обоє.")}
- else if(m.type==="spin_start"){busy=true;spin.disabled=true;next.classList.add("hidden");round=m.round;document.getElementById("round").textContent=round;rotation+=m.rotation;bottle.style.transform="rotate("+rotation+"deg)";showCard("ПЛЯШКА ОБЕРТАЄТЬСЯ","Результат буде однаковим на обох екранах...");tg?.HapticFeedback?.impactOccurred("medium")}
- else if(m.type==="spin_result"){busy=false;spin.disabled=!matched;showCard(catName(m.category),m.task);const w=document.createElement("div");w.className="who";w.textContent="🎯 ЦЬОГО РАЗУ: "+(m.winnerSeat===seat?"Ти":opponentName);result.prepend(w);next.classList.remove("hidden");showStatus("Раунд завершено. Результат синхронізовано.");tg?.HapticFeedback?.notificationOccurred("success")}
- else if(m.type==="cancelled"){showStatus("Пошук скасовано. Перезапусти Mini App, щоб почати знову.");cancel.classList.add("hidden")}
- else if(m.type==="opponent_left"){matched=false;busy=false;spin.disabled=true;next.classList.add("hidden");showStatus("Співрозмовник вийшов із гри. Перезапусти Mini App для нового пошуку.");showCard("ГРА ЗАВЕРШЕНО","Співрозмовник залишив кімнату.")}
- else if(m.type==="error")showStatus(m.message||"Помилка гри.");});
- socket.addEventListener("close",()=>{if(!manualCancel&&!matched)showStatus("З'єднання закрито. Перезапусти гру.");if(matched){matched=false;spin.disabled=true;}});
- socket.addEventListener("error",()=>showStatus("Не вдалося з'єднатися із сервером гри."));
+const $ = (id) => document.getElementById(id);
+const tg = window.Telegram && window.Telegram.WebApp;
+try { tg && tg.ready(); tg && tg.expand(); } catch (e) {}
+const buzz = (kind, name) => { try { tg.HapticFeedback[kind](name); } catch (e) {} };
+
+const N = 10;
+const CAT_NAMES = { truth: "ПРАВДА", action: "ДІЯ", kiss: "ПОЦІЛУНОК", adult: "18+" };
+const S = { seat: -1, players: [], turn: -1, phase: "wait", spinner: -1, pair: null, answered: [], gifts: [], selected: "all", myChoice: null, fatal: false };
+let ws = null;
+let rot = 0;
+let giftSeat = -1;
+
+/* ---------- стіл ---------- */
+const seatEls = [];
+for (let i = 0; i < N; i++) {
+  const el = document.createElement("div");
+  el.className = "seat empty";
+  el.innerHTML = '<div class="av"></div><div class="nm"></div>';
+  el.addEventListener("click", () => openGift(i));
+  $("table").appendChild(el);
+  seatEls.push(el);
 }
-spin.addEventListener("click",()=>{if(matched&&!busy&&socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:"spin",selected,tasks}));});
-next.addEventListener("click",()=>{result.innerHTML='<div class="card"><div class="tag">НАСТУПНИЙ РАУНД</div>Натискай «Крутити»!</div>';next.classList.add("hidden");});
-cancel.addEventListener("click",()=>{if(socket?.readyState===WebSocket.OPEN){manualCancel=true;socket.send(JSON.stringify({type:"cancel"}));socket.close();}cancel.classList.add("hidden");});
+// Кут місця на колі: ти завжди внизу.
+const angleOf = (i) => ((i - S.seat + N) % N) / N * 360 + 180;
+const nameOf = (i) => (S.players[i] && S.players[i].name) || "Хтось";
+
+function render() {
+  const me = S.seat;
+  seatEls.forEach((el, i) => {
+    const p = S.players[i];
+    const a = angleOf(i) * Math.PI / 180;
+    el.style.left = 50 + 39 * Math.sin(a) + "%";
+    el.style.top = 50 - 39 * Math.cos(a) + "%";
+    const active = (S.phase === "idle" && i === S.turn) || ((S.phase === "spin" || S.phase === "pair") && i === S.spinner);
+    el.className = "seat" + (p ? "" : " empty") + (i === me ? " me" : "") + (active ? " turn" : "") + (S.pair && S.pair.includes(i) ? " paired" : "");
+    el.querySelector(".av").textContent = p ? (Array.from(p.name.trim())[0] || "?").toUpperCase() : "·";
+    el.querySelector(".nm").textContent = p ? p.name + (p.g ? " " + p.g : "") : "";
+  });
+
+  const n = S.players.filter(Boolean).length;
+  const myTurn = S.phase === "idle" && S.turn === me;
+  $("status").textContent = S.phase === "wait" ? "За столом " + n + " з " + N + ". Для гри потрібно хоча б двоє." : "За столом " + n + " з " + N + (myTurn ? " · твоя черга" : "");
+  const spin = $("spin");
+  spin.disabled = !myTurn;
+  spin.textContent = S.phase === "wait" ? "Чекаємо гравців..." : S.phase === "spin" ? "Пляшка крутиться..." : S.phase === "pair" ? "Пара обирає..." : myTurn ? "КРУТИТИ" : "Крутить: " + nameOf(S.turn);
+
+  const inPair = S.phase === "pair" && S.pair && S.pair.includes(me);
+  $("pair").classList.toggle("hidden", !inPair);
+  if (inPair) {
+    const other = S.pair.find((s) => s !== me);
+    $("pairTitle").textContent = "💞 Ви в парі: " + nameOf(other) + ". Що обираєте?";
+    document.querySelectorAll("#pair button").forEach((b) => { b.disabled = Boolean(S.myChoice); });
+    $("pairWait").textContent = S.myChoice ? "Чекаємо відповідь партнера..." : "Чат відкриється, лише якщо обоє оберуть «Піти в чат».";
+  }
+}
+
+function addFeed(text, mine) {
+  const d = document.createElement("div");
+  d.textContent = text;
+  if (mine) d.className = "me";
+  $("feed").prepend(d);
+  while ($("feed").children.length > 5) $("feed").lastChild.remove();
+}
+
+function showResult(tag, text, who) {
+  const box = $("result");
+  box.innerHTML = '<div class="who"></div><div class="card"><div class="tag"></div><div class="txt"></div></div>';
+  box.querySelector(".who").textContent = who || "";
+  box.querySelector(".tag").textContent = tag;
+  box.querySelector(".txt").textContent = text;
+}
+
+/* ---------- вікна ---------- */
+function showOver(title, text, buttons) {
+  $("overTitle").textContent = title;
+  $("overText").textContent = text;
+  const box = $("overBtns");
+  box.innerHTML = "";
+  (buttons || []).forEach(([label, fn]) => {
+    const b = document.createElement("button");
+    b.className = "main";
+    b.style.marginTop = "8px";
+    b.textContent = label;
+    b.addEventListener("click", fn);
+    box.appendChild(b);
+  });
+  $("over").classList.remove("hidden");
+}
+const hideOver = () => $("over").classList.add("hidden");
+
+function openGift(i) {
+  if (!S.players[i] || i === S.seat || !ws || ws.readyState !== 1) return;
+  giftSeat = i;
+  $("sheetTitle").textContent = "🎁 Подарунок для " + S.players[i].name;
+  const grid = $("gifts");
+  grid.innerHTML = "";
+  S.gifts.forEach((g) => {
+    const b = document.createElement("button");
+    b.className = "gift";
+    b.innerHTML = "<b></b><span></span><i></i>";
+    b.querySelector("b").textContent = g.emoji;
+    b.querySelector("span").textContent = g.name;
+    b.querySelector("i").textContent = g.stars + " ⭐";
+    b.addEventListener("click", () => {
+      ws.send(JSON.stringify({ type: "gift_invoice", toSeat: giftSeat, gift: g.id }));
+      $("sheet").classList.add("hidden");
+      addFeed("Готую оплату...");
+    });
+    grid.appendChild(b);
+  });
+  $("sheet").classList.remove("hidden");
+}
+$("sheetClose").addEventListener("click", () => $("sheet").classList.add("hidden"));
+$("sheet").addEventListener("click", (e) => { if (e.target === $("sheet")) $("sheet").classList.add("hidden"); });
+
+/* ---------- повідомлення від сервера ---------- */
+function handle(m) {
+  if (m.type === "joined") {
+    S.seat = m.seat;
+    S.gifts = m.gifts || [];
+    hideOver();
+  } else if (m.type === "table") {
+    S.players = m.players;
+    S.turn = m.turn;
+    S.phase = m.phase;
+    S.pair = m.pair;
+    S.answered = m.answered || [];
+    if (m.phase !== "pair") S.myChoice = null;
+    render();
+  } else if (m.type === "spin_start") {
+    S.phase = "spin";
+    S.spinner = m.spinner;
+    S.pair = null;
+    S.myChoice = null;
+    $("result").innerHTML = "";
+    const cur = ((rot % 360) + 360) % 360;
+    rot += m.turns * 360 + ((((angleOf(m.target) - cur) % 360) + 360) % 360);
+    const bottle = $("bottle");
+    bottle.style.transition = "transform " + m.duration + "ms cubic-bezier(.12,.72,.18,1)";
+    bottle.style.transform = "rotate(" + rot + "deg)";
+    render();
+    buzz("impactOccurred", "medium");
+  } else if (m.type === "spin_result") {
+    S.phase = "pair";
+    S.spinner = m.spinner;
+    S.pair = [m.spinner, m.target];
+    showResult(CAT_NAMES[m.category] || "ЗАВДАННЯ", m.task, "💞 " + nameOf(m.spinner) + " і " + nameOf(m.target));
+    render();
+    buzz("notificationOccurred", "success");
+  } else if (m.type === "pair_done") {
+    const pair = nameOf(m.a) + " і " + nameOf(m.b);
+    const line = { chat: "💬 " + pair + " пішли в чат", kiss: "💋 " + pair + " поцілувались", busy: "Чат не відкрився: хтось уже в іншому діалозі", none: pair + " лишились за столом" }[m.outcome];
+    addFeed(line, m.a === S.seat || m.b === S.seat);
+  } else if (m.type === "chat_opened") {
+    S.pair = null;
+    showOver("💬 Діалог відкрито", "Пиши співрозмовнику в чаті з ботом. Гру можна закрити, а потім повернутись за стіл.", [
+      ["Закрити гру", () => { try { tg.close(); } catch (e) { hideOver(); } }],
+      ["Повернутись за стіл", () => { ws.send(JSON.stringify({ type: "join" })); hideOver(); }],
+    ]);
+  } else if (m.type === "gift") {
+    const from = m.from >= 0 ? nameOf(m.from) : "Хтось";
+    addFeed("🎁 " + from + " → " + nameOf(m.to) + ": " + m.gift.emoji + " " + m.gift.name, m.to === S.seat);
+    if (m.to === S.seat) buzz("notificationOccurred", "success");
+  } else if (m.type === "notice") {
+    addFeed(m.text);
+  } else if (m.type === "invoice") {
+    if (tg && tg.openInvoice) {
+      tg.openInvoice(m.link, (st) => addFeed(st === "paid" ? "✅ Оплачено, подарунок летить" : st === "cancelled" ? "Оплату скасовано" : "Оплата не пройшла"));
+    } else addFeed("Відкрий гру з Telegram, щоб оплатити.");
+  } else if (m.type === "error") {
+    if (m.code === "need_start") {
+      S.fatal = true;
+      showOver("Спершу в бота", m.message, [["Закрити", () => { try { tg.close(); } catch (e) {} }]]);
+    } else addFeed(m.message || "Помилка гри");
+  }
+}
+
+/* ---------- підключення ---------- */
+function connect() {
+  const initData = tg && tg.initData;
+  if (!initData) {
+    S.fatal = true;
+    showOver("Відкрий через Telegram", "Ця гра працює лише всередині бота.", []);
+    return;
+  }
+  hideOver();
+  ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/game?initData=" + encodeURIComponent(initData));
+  ws.addEventListener("message", (e) => { let m; try { m = JSON.parse(e.data); } catch (err) { return; } handle(m); });
+  ws.addEventListener("close", (e) => {
+    if (S.fatal) return;
+    S.phase = "wait";
+    showOver("З'єднання втрачено", e.code === 4001 ? "Гру відкрито в іншому вікні." : "Перевір інтернет і підключись знову.", [["Підключитись знову", connect]]);
+  });
+}
+
+$("chips").addEventListener("click", (e) => {
+  const b = e.target.closest(".cat");
+  if (!b) return;
+  document.querySelectorAll(".cat").forEach((x) => x.classList.remove("on"));
+  b.classList.add("on");
+  S.selected = b.dataset.cat;
+  buzz("selectionChanged");
+});
+$("spin").addEventListener("click", () => ws && ws.send(JSON.stringify({ type: "spin", selected: S.selected })));
+document.querySelectorAll("#pair button").forEach((b) => b.addEventListener("click", () => {
+  if (S.myChoice) return;
+  S.myChoice = b.dataset.choice;
+  ws.send(JSON.stringify({ type: "pair", choice: S.myChoice }));
+  render();
+}));
+
+render();
 connect();
 </script>
 </body>
