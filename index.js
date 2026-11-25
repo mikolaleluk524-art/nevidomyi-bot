@@ -21,6 +21,7 @@ import {
   tg,
 } from "./src/bot.js";
 import { adminRoutes } from "./admin.js";
+import { attachBottleGame } from "./game-server.js";
 
 const DASHBOARD = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "dashboard.html"), "utf8");
 
@@ -84,7 +85,7 @@ function armWatchdog() {
 
 function listen() {
   const port = Number(process.env.PORT || 8080);
-  createServer((req, res) => {
+  const server = createServer((req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Headers", "X-Admin-Key, Content-Type");
     if (req.method === "OPTIONS") {
@@ -106,8 +107,10 @@ function listen() {
     const fresh = Date.now() - beat < 90_000;
     res.writeHead(fresh ? 200 : 503, { "content-type": "text/plain; charset=utf-8" });
     res.end(fresh ? "ok" : "poll stalled");
-  }).listen(port, "0.0.0.0", () => {
-    console.info(`[bot] health + admin :${port}`);
+  });
+  attachBottleGame(server);
+  server.listen(port, "0.0.0.0", () => {
+    console.info(`[bot] health + admin + bottle game :${port}`);
   });
 }
 
