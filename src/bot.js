@@ -207,6 +207,7 @@ function spam(id) {
 function menuKb() {
   return {
     keyboard: [
+      [{ text: "🍾 Гра в бутилочку", web_app: { url: "https://nevidomyi-bot-production-045b32cd.up.railway.app/bottle.html" } }],
       [{ text: BTN.search }],
       [{ text: BTN.next }, { text: BTN.stop }],
       [{ text: BTN.form }],
