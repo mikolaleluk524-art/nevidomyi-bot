@@ -21,7 +21,8 @@ h1{font-size:21px;margin-bottom:4px}
 .seat.f .av{border-color:var(--pink);background:#2f1823}
 .seat.me .av{box-shadow:0 0 0 2px var(--accent)}
 .hb{position:absolute;top:-6px;right:4px;font-size:10px;background:#3a1626;color:#ffb3d1;border-radius:8px;padding:0 4px;line-height:15px}
-.hb:empty,.crown:empty{display:none}
+.gb{position:absolute;top:26px;left:4px;font-size:15px}
+.hb:empty,.crown:empty,.gb:empty{display:none}
 .crown{position:absolute;top:-17px;left:50%;transform:translateX(-50%);font-size:15px}
 .fly{position:absolute;font-size:26px;transform:translate(-50%,-50%);pointer-events:none;animation:fly 1.4s ease-out forwards;z-index:3}
 @keyframes fly{to{transform:translate(-50%,-160%) scale(1.4);opacity:0}}
@@ -104,9 +105,9 @@ button:disabled{opacity:.45;cursor:default}
   <div class="pair hidden" id="pair">
     <div class="t" id="pairTitle"></div>
     <div class="row">
-      <button data-choice="chat">💬 Піти в чат</button>
-      <button data-choice="kiss">💋 Поцілунок</button>
-      <button data-choice="skip">Лишитись</button>
+      <button data-choice="kiss">💋 Поцілувати</button>
+      <button data-choice="push">👋 Відштовхнути</button>
+      <button data-choice="alone">🔒 Наодинці</button>
     </div>
     <div class="wait" id="pairWait"></div>
   </div>
@@ -125,13 +126,13 @@ button:disabled{opacity:.45;cursor:default}
     <input id="chatText" maxlength="150" autocomplete="off" placeholder="Написати за столом...">
     <button type="submit">➤</button>
   </form>
-  <div class="note">Відповідай на завдання, став реакції — вони дають ❤ гравцю, а найпопулярніший отримує 👑. Натисни «🎁 Подарунок» або тапни на гравця, щоб подарувати йому подарунок. Чат відкривається лише коли пара обрала його обоє. Не надсилай контакти й особисті дані.</div>
+  <div class="note">Відповідай на завдання, став реакції — вони дають ❤ гравцю, а найпопулярніший отримує 👑. Подарунок дає ❤ і запрошення побути наодинці: натисни «🎁 Подарунок» або тапни на гравця. Без подарунка наодинці можна, лише якщо пара обере це обоє. Не надсилай контакти й особисті дані.</div>
 </div>
 
 <div class="sheet hidden" id="sheet">
   <div class="box">
     <h2 id="sheetTitle"></h2>
-    <p id="sheetText">Подарунок побачать усі за столом. Оплата зірками Telegram.</p>
+    <p id="sheetText"></p>
     <div class="grid" id="gifts"></div>
     <button class="ghost" id="sheetClose">Закрити</button>
   </div>
@@ -155,6 +156,7 @@ const N = 10;
 const CAT_NAMES = { truth: "ПРАВДА", action: "ДІЯ", kiss: "ПОЦІЛУНОК", adult: "18+" };
 const S = { seat: -1, players: [], turn: -1, phase: "wait", spinner: -1, pair: null, task: null, answered: [], gifts: [], selected: "all", myChoice: null, fatal: false };
 const FACE = { m: "👨", f: "👩" };
+const giftHearts = (stars) => Math.max(1, Math.round(stars / 5));
 let ws = null;
 let rot = 0;
 let giftSeat = -1;
@@ -164,7 +166,7 @@ const seatEls = [];
 for (let i = 0; i < N; i++) {
   const el = document.createElement("div");
   el.className = "seat empty";
-  el.innerHTML = '<div class="av"></div><div class="nm"></div><span class="hb"></span><span class="crown"></span>';
+  el.innerHTML = '<div class="av"></div><div class="nm"></div><span class="hb"></span><span class="crown"></span><span class="gb"></span>';
   el.addEventListener("click", () => openGift(i));
   $("table").appendChild(el);
   seatEls.push(el);
@@ -188,6 +190,7 @@ function render() {
     el.querySelector(".nm").textContent = p ? p.name + (p.age ? ", " + p.age : "") : "";
     el.querySelector(".hb").textContent = p && p.hearts ? "❤ " + p.hearts : "";
     el.querySelector(".crown").textContent = p && top > 0 && p.hearts === top ? "👑" : "";
+    el.querySelector(".gb").textContent = p && p.badge ? p.badge : "";
   });
 
   const n = S.players.filter(Boolean).length;
@@ -212,7 +215,7 @@ function render() {
     const other = S.pair.find((s) => s !== me);
     $("pairTitle").textContent = "💞 Ви в парі з " + nameOf(other) + ". Що далі?";
     document.querySelectorAll("#pair button").forEach((b) => { b.disabled = Boolean(S.myChoice); });
-    $("pairWait").textContent = S.myChoice ? "Чекаємо відповідь партнера..." : "Чат відкриється, лише якщо обоє оберуть «Піти в чат».";
+    $("pairWait").textContent = S.myChoice ? "Чекаємо, що обере " + nameOf(other) + "..." : "«Наодинці» — приватний чат у боті, якщо обоє його оберуть.";
   }
 }
 
@@ -284,7 +287,7 @@ function openGift(i) {
   if (!S.players[i] || i === S.seat || !ws || ws.readyState !== 1) return;
   giftSeat = i;
   $("sheetTitle").textContent = "🎁 Подарунок для " + S.players[i].name;
-  $("sheetText").textContent = "Подарунок побачать усі за столом. Оплата зірками Telegram.";
+  $("sheetText").textContent = "💌 Разом із подарунком " + S.players[i].name + " отримає запрошення побути з тобою наодинці. Подарунок дає ❤ (у кого найбільше — той носить 👑) і видно на аватарці. Оплата зірками Telegram.";
   const grid = $("gifts");
   grid.innerHTML = "";
   S.gifts.forEach((g) => {
@@ -293,7 +296,7 @@ function openGift(i) {
     b.innerHTML = "<b></b><span></span><i></i>";
     b.querySelector("b").textContent = g.emoji;
     b.querySelector("span").textContent = g.name;
-    b.querySelector("i").textContent = g.stars + " ⭐";
+    b.querySelector("i").textContent = g.stars + " ⭐ · +" + giftHearts(g.stars) + " ❤";
     b.addEventListener("click", () => {
       ws.send(JSON.stringify({ type: "gift_invoice", toSeat: giftSeat, gift: g.id }));
       $("sheet").classList.add("hidden");
@@ -406,19 +409,45 @@ function handle(m) {
     addChat(m.seat, m.text);
   } else if (m.type === "pair_done") {
     const pair = nameOf(m.a) + " і " + nameOf(m.b);
-    const line = { chat: "💬 " + pair + " пішли в чат", kiss: "💋 " + pair + " поцілувались", busy: "Чат не відкрився: хтось уже в іншому діалозі", none: pair + " лишились за столом" }[m.outcome];
+    let line = { alone: "🔒 " + pair + " пішли побути наодинці", kiss: "💋 " + pair + " поцілувались (+1 ❤ кожному)", busy: "🔒 Не вийшло: хтось уже в іншому діалозі", none: "🤷 " + pair + " розгубились" }[m.outcome];
+    if (m.outcome === "push") {
+      line = m.ca === "push" && m.cb === "push" ? "👋 " + pair + " відштовхнули одне одного"
+        : "👋 " + nameOf(m.ca === "push" ? m.a : m.b) + " відштовхнув(ла) " + nameOf(m.ca === "push" ? m.b : m.a);
+    }
+    if (m.outcome === "kiss") { fly(m.a, "💋"); fly(m.b, "💋"); }
+    if (m.outcome === "push") fly(m.ca === "push" ? m.b : m.a, "💔");
     addFeed(line, m.a === S.seat || m.b === S.seat);
+    // Хотів(ла) більшого, а не вийшло — пропонуємо подарунок із запрошенням.
+    if ((m.a === S.seat || m.b === S.seat) && m.outcome !== "alone") {
+      const mine = m.a === S.seat ? m.ca : m.cb;
+      const other = m.a === S.seat ? m.b : m.a;
+      const wanted = mine === "alone" || (m.outcome === "push" && mine && mine !== "push");
+      if (wanted && S.players[other]) {
+        const nm = nameOf(other);
+        setTimeout(() => showOver(m.outcome === "push" ? "💔 " + nm + " тебе відштовхнув(ла)" : "🔒 " + nm + " поки не готовий(а) наодинці",
+          "Розтопи серце подарунком: " + nm + " отримає його разом із запрошенням побути з тобою наодинці.", [
+            ["🎁 Подарувати " + nm, () => { hideOver(); openGift(other); }],
+            ["Пізніше", hideOver],
+          ]), 600);
+      }
+    }
   } else if (m.type === "chat_opened") {
     S.pair = null;
-    showOver("💬 Діалог відкрито", "Пиши співрозмовнику в чаті з ботом. Гру можна закрити, а потім повернутись за стіл.", [
+    showOver("🔒 Ви наодинці", "Пиши співрозмовнику в чаті з ботом. Гру можна закрити, а потім повернутись за стіл.", [
       ["Закрити гру", () => { try { tg.close(); } catch (e) { hideOver(); } }],
       ["Повернутись за стіл", () => { ws.send(JSON.stringify({ type: "join" })); hideOver(); }],
     ]);
   } else if (m.type === "gift") {
     const from = m.from >= 0 ? nameOf(m.from) : "Хтось";
-    addFeed("🎁 " + from + " → " + nameOf(m.to) + ": " + m.gift.emoji + " " + m.gift.name, m.to === S.seat);
+    addFeed("🎁 " + from + " → " + nameOf(m.to) + ": " + m.gift.emoji + " " + m.gift.name + " (+" + (m.hearts || 1) + " ❤)", m.to === S.seat);
     fly(m.to, m.gift.emoji);
     if (m.to === S.seat) buzz("notificationOccurred", "success");
+  } else if (m.type === "gift_invite") {
+    const nm = nameOf(m.from);
+    showOver("🎁 " + nm + " дарує тобі " + m.gift.emoji + " " + m.gift.name, nm + " запрошує тебе побути наодинці: це приватний чат у боті, без імен і контактів.", [
+      ["🔒 Побути наодинці", () => { ws.send(JSON.stringify({ type: "invite", yes: true })); hideOver(); }],
+      ["Дякую, лишусь за столом", () => { ws.send(JSON.stringify({ type: "invite", yes: false })); hideOver(); }],
+    ]);
   } else if (m.type === "notice") {
     addFeed(m.text);
   } else if (m.type === "invoice") {

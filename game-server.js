@@ -2,8 +2,10 @@
  * Гра «Бутилочка»: спільні столи до 10 людей.
  * Крутить той, чия черга. Пляшка обирає гравця (частіше протилежної статі) і дає йому завдання.
  * Гравець відповідає текстом, стіл реагує (❤️😂🔥😮 — це «симпатії» гравця).
- * Потім пара вирішує: 💬 піти в чат у боті, 💋 поцілунок за столом або лишитись.
- * Чат відкривається лише коли обоє обрали «чат». Імена беруться з анкети бота, а не з Telegram.
+ * Потім пара вирішує: 💋 поцілувати, 👋 відштовхнути або 🔒 побути наодинці (приватний чат у боті,
+ * якщо обоє обрали). Імена беруться з анкети бота, а не з Telegram.
+ * Подарунки (за зірки): дають ❤ (корона найпопулярнішого), видно на аватарці, і отримувач
+ * одразу отримує запрошення побути наодинці з тим, хто подарував.
  * За столом є спільний чат; посилання, @нікнейми й телефони в ньому приховуються.
  */
 
@@ -11,7 +13,7 @@ import { createHmac, createPublicKey, timingSafeEqual, verify } from "node:crypt
 import { DatabaseSync } from "node:sqlite";
 import { WebSocketServer, WebSocket } from "ws";
 import { BOT_TOKEN, DB_PATH, tg } from "./src/bot.js";
-import { createGiftInvoice, giftList, setGiftHooks } from "./gifts.js";
+import { GIFTS, createGiftInvoice, giftList, setGiftHooks } from "./gifts.js";
 
 const GAME_PATH = "/game";
 const SEATS = 10;
@@ -23,6 +25,10 @@ const ANSWER_MAX = 200;
 const CHAT_MAX = 150;
 const REACTIONS = ["❤️", "😂", "🔥", "😮"];
 const GENDERS = { Чоловік: "m", Жінка: "f" };
+const CHOICES = ["kiss", "push", "alone"];
+const INVITE_MS = 5 * 60_000;
+// Скільки ❤ дає подарунок: 🌹10⭐ → 2, 💎250⭐ → 50.
+export const giftHearts = (stars) => Math.max(1, Math.round(stars / 5));
 
 // Усі завдання виконуються текстом. {name} — ім'я того, хто крутив пляшку.
 const TASKS = {
@@ -202,7 +208,7 @@ const nextSeat = (t, from) => {
 };
 const snapshot = (t) => ({
   type: "table",
-  players: t.players.map((p) => p && { name: p.name, g: p.g, age: p.age, hearts: p.hearts }),
+  players: t.players.map((p) => p && { name: p.name, g: p.g, age: p.age, hearts: p.hearts, badge: p.badge }),
   turn: t.turn,
   phase: t.phase,
   round: t.round,
@@ -258,7 +264,7 @@ function sit(ws) {
     if (k < SEATS && k > best) { t = c; best = k; }
   }
   if (!t) {
-    t = { id: ++tableSeq, players: Array(SEATS).fill(null), turn: 0, phase: "wait", round: 0, spinner: -1, target: -1, pair: null, task: null, last: null, timers: {} };
+    t = { id: ++tableSeq, players: Array(SEATS).fill(null), turn: 0, phase: "wait", round: 0, spinner: -1, target: -1, pair: null, task: null, last: null, invites: new Map(), timers: {} };
     tables.set(t.id, t);
   }
   const seat = t.players.indexOf(null);
@@ -272,6 +278,7 @@ function sit(ws) {
     g: GENDERS[gender] ?? "",
     age: Number.isInteger(age) && age >= 18 && age < 100 ? age : null,
     hearts: 0,
+    badge: "",
   };
   send(ws, { type: "joined", seat, gifts: giftList() });
   refresh(t);
@@ -395,10 +402,31 @@ function join(ws) {
 function onPair(ws, msg) {
   const t = ws.table;
   if (!t || t.phase !== "pair" || !t.pair.seats.includes(ws.seat) || t.pair.answers[ws.seat]) return;
-  if (!["chat", "kiss", "skip"].includes(msg.choice)) return;
+  if (!CHOICES.includes(msg.choice)) return;
   t.pair.answers[ws.seat] = msg.choice;
   if (t.pair.seats.every((s) => t.pair.answers[s])) finishPair(t);
   else broadcast(t, snapshot(t));
+}
+
+// Обоє йдуть у приватний чат у боті й залишають стіл.
+function goPrivate(t, pa, pb, text) {
+  for (const p of [pa, pb]) {
+    if (p.ws.table === t && t.players[p.ws.seat] === p) t.players[p.ws.seat] = null;
+    p.ws.table = null;
+    p.ws.seat = -1;
+    t.invites.delete(p.id);
+    send(p.ws, { type: "chat_opened" });
+    tg("sendMessage", { chat_id: p.id, text }).catch((err) => console.error("[game] notify", err.message));
+  }
+}
+
+// Відштовхнув хоч один → відштовхнули. Обоє «наодинці» → приватний чат.
+// Поцілунок, якщо хтось хоче поцілувати, а інший не проти (поцілувати чи наодинці).
+function pairOutcome(ca, cb) {
+  if (ca === "push" || cb === "push") return "push";
+  if (ca === "alone" && cb === "alone") return "alone";
+  if (ca && cb && (ca === "kiss" || cb === "kiss")) return "kiss";
+  return "none";
 }
 
 function finishPair(t) {
@@ -408,24 +436,32 @@ function finishPair(t) {
   const [a, b] = t.pair.seats;
   const pa = t.players[a];
   const pb = t.players[b];
-  const ca = t.pair.answers[a] ?? "skip";
-  const cb = t.pair.answers[b] ?? "skip";
+  const ca = t.pair.answers[a] ?? null;
+  const cb = t.pair.answers[b] ?? null;
   t.pair = null;
   t.phase = "idle";
-  let outcome = "none";
-  if (pa && pb && ca === "chat" && cb === "chat") outcome = openDialog(pa.id, pb.id) ? "chat" : "busy";
-  else if (pa && pb && ca === "kiss" && cb === "kiss") outcome = "kiss";
-  broadcast(t, { type: "pair_done", a, b, outcome });
-  if (outcome === "chat") {
-    for (const p of [pa, pb]) {
-      t.players[p.ws.seat] = null;
-      p.ws.table = null;
-      p.ws.seat = -1;
-      send(p.ws, { type: "chat_opened" });
-      tg("sendMessage", { chat_id: p.id, text: "💬 Ви обрали одне одного за столом. Пиши: я передам повідомлення без твого імені. «Завершити діалог» зупиняє розмову." }).catch((err) => console.error("[game] notify", err.message));
-    }
-  }
+  let outcome = pa && pb ? pairOutcome(ca, cb) : "none";
+  if (outcome === "alone" && !openDialog(pa.id, pb.id)) outcome = "busy";
+  if (outcome === "kiss") { pa.hearts += 1; pb.hearts += 1; }
+  broadcast(t, { type: "pair_done", a, b, ca, cb, outcome });
+  if (outcome === "alone") goPrivate(t, pa, pb, "🔒 Ви обрали побути наодинці. Пиши: я передам повідомлення без твого імені. «Завершити діалог» зупиняє розмову.");
   t.turn = nextSeat(t, t.spinner);
+  refresh(t);
+}
+
+// Відповідь на запрошення після подарунка.
+function onInvite(ws, msg) {
+  const t = ws.table;
+  const inv = t?.invites.get(ws.userId);
+  if (!inv) return;
+  t.invites.delete(ws.userId);
+  const from = t.players.find((p) => p?.id === inv.fromId);
+  const me = t.players[ws.seat];
+  if (!from || !me || Date.now() - inv.at > INVITE_MS) return send(ws, { type: "notice", text: "Запрошення вже неактуальне." });
+  if (!msg.yes) return send(from.ws, { type: "notice", text: `${me.name} дякує за подарунок, але поки лишається за столом.` });
+  if (!openDialog(from.id, me.id)) return send(ws, { type: "notice", text: "Не вийшло: хтось із вас уже в іншому діалозі." });
+  broadcast(t, { type: "pair_done", a: from.ws.seat, b: ws.seat, outcome: "alone" });
+  goPrivate(t, from, me, "🔒 Подарунок спрацював: ви наодинці. Пиши: я передам повідомлення без твого імені. «Завершити діалог» зупиняє розмову.");
   refresh(t);
 }
 
@@ -464,7 +500,17 @@ export function attachBottleGame(server) {
       const t = target?.table;
       if (!t) return false;
       const sender = sockets.get(from);
-      broadcast(t, { type: "gift", from: sender?.table === t ? sender.seat : -1, to: target.seat, gift });
+      const fromSeat = sender?.table === t ? sender.seat : -1;
+      const hearts = giftHearts(GIFTS[gift.id]?.stars ?? 5);
+      const p = t.players[target.seat];
+      if (p) { p.hearts += hearts; p.badge = gift.emoji; }
+      broadcast(t, { type: "gift", from: fromSeat, to: target.seat, gift, hearts });
+      broadcast(t, snapshot(t));
+      // Подарунок = запрошення побути наодинці з тим, хто подарував.
+      if (fromSeat >= 0) {
+        t.invites.set(String(to), { fromId: String(from), at: Date.now() });
+        send(target, { type: "gift_invite", from: fromSeat, gift });
+      }
       return true;
     },
   });
@@ -512,6 +558,7 @@ export function attachBottleGame(server) {
       else if (msg.type === "chat") onChat(ws, msg);
       else if (msg.type === "pair") onPair(ws, msg);
       else if (msg.type === "gender") onGender(ws, msg);
+      else if (msg.type === "invite") onInvite(ws, msg);
       else if (msg.type === "gift_invoice") void onGiftInvoice(ws, msg);
       else if (msg.type === "join") join(ws);
     }));
