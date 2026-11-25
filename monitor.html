@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Монітор</title>
+<meta name="theme-color" content="#0c0b0a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Монітор">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="/monitor.webmanifest">
+<link rel="icon" href="/monitor-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/monitor-icon.svg">
+<style>
+:root{
+  --bg:#0c0b0a;--card:#191613;--card2:#211d19;--border:#302923;--grid:#2a2420;
+  --text:#f5f0ea;--muted:#a89f94;--faint:#6f665d;
+  --accent:#d4a574;--pink:#e87eb0;
+  --good:#6fbf73;--bad:#e5675a;--warn:#e0b04a;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{background:var(--bg)}
+body{color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.4;
+  padding:calc(12px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom));min-height:100vh}
+.wrap{max-width:720px;margin:0 auto}
+.top{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.top h1{font-size:20px;flex:1}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;font-size:12px;font-weight:600;background:var(--card);border:1px solid var(--border);white-space:nowrap}
+.pill .dot{width:8px;height:8px;border-radius:50%;background:var(--faint)}
+.pill.ok .dot{background:var(--good);box-shadow:0 0 8px var(--good)}
+.pill.bad .dot{background:var(--bad);box-shadow:0 0 8px var(--bad)}
+.icon-btn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:10px;padding:6px 10px;font-size:13px;cursor:pointer}
+.updated{color:var(--faint);font-size:12px;margin:-6px 0 14px}
+h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:22px 0 8px;font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+@media(min-width:560px){.grid.g4{grid-template-columns:repeat(4,1fr)}.grid.g3{grid-template-columns:repeat(3,1fr)}}
+.tile{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px}
+.tile .k{font-size:12px;color:var(--muted)}
+.tile .v{font-size:26px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.tile .s{font-size:12px;color:var(--faint);margin-top:2px}
+.hero{background:linear-gradient(160deg,#2a1f15,#191613 60%);border:1px solid #4a3826;border-radius:16px;padding:16px}
+.hero .k{color:var(--accent);font-size:12px;font-weight:600}
+.hero .v{font-size:40px;font-weight:800;font-variant-numeric:tabular-nums;margin:2px 0}
+.hero .row{display:flex;gap:18px;color:var(--muted);font-size:13px;flex-wrap:wrap}
+.hero .row b{color:var(--text);font-variant-numeric:tabular-nums}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 12px 10px}
+.card .title{font-size:13px;font-weight:600;margin-bottom:2px}
+.card .sub{font-size:12px;color:var(--faint);margin-bottom:8px}
+.chart{position:relative}
+.chart svg{display:block;width:100%;height:150px;overflow:visible}
+.chart .tip{position:absolute;top:-4px;transform:translate(-50%,-100%);background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:4px 8px;font-size:12px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .12s}
+.chart .tip.on{opacity:1}
+.charts{display:grid;gap:8px}
+@media(min-width:560px){.charts{grid-template-columns:1fr 1fr}}
+.kinds .r{display:grid;grid-template-columns:110px 1fr 56px;align-items:center;gap:8px;padding:5px 0}
+.kinds .lbl{font-size:13px;color:var(--text)}
+.kinds .bar{height:12px;border-radius:0 4px 4px 0;background:var(--accent);min-width:2px}
+.kinds .num{text-align:right;font-variant-numeric:tabular-nums;color:var(--text);font-size:13px}
+.kinds .track{background:var(--grid);border-radius:0 4px 4px 0}
+.list .it{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--grid)}
+.list .it:first-child{border-top:0}
+.list .em{width:30px;height:30px;border-radius:9px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:15px;flex:none}
+.list .t{flex:1;min-width:0}
+.list .t .a{font-size:13px}
+.list .t .b{font-size:12px;color:var(--faint)}
+.list .p{font-weight:700;font-variant-numeric:tabular-nums;color:var(--accent)}
+.empty{color:var(--faint);font-size:13px;padding:6px 0}
+.tables{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.tbl{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:6px 9px;font-size:12px;color:var(--muted)}
+.tbl b{color:var(--text)}
+.links{display:flex;gap:8px;flex-wrap:wrap;margin-top:22px}
+.links a{color:var(--muted);font-size:13px;text-decoration:none;border:1px solid var(--border);border-radius:10px;padding:8px 12px}
+.foot{color:var(--faint);font-size:11px;margin-top:16px;line-height:1.5}
+/* вхід */
+.login{max-width:360px;margin:18vh auto 0;text-align:center}
+.login .logo{width:72px;height:72px;margin:0 auto 14px;display:block}
+.login h1{font-size:22px;margin-bottom:6px}
+.login p{color:var(--muted);font-size:13px;margin-bottom:18px}
+.login input{width:100%;padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:16px;font-family:inherit}
+.login button{width:100%;margin-top:10px;padding:14px;border-radius:12px;border:0;background:var(--accent);color:#17110c;font-size:16px;font-weight:800;cursor:pointer}
+.err{color:var(--bad);font-size:13px;min-height:18px;margin-top:10px}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <form class="login hidden" id="login">
+    <svg class="logo" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#191613"/><path d="M96 336l88-96 72 64 72-112 88 80" fill="none" stroke="#d4a574" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/><circle cx="416" cy="272" r="28" fill="#e87eb0"/></svg>
+    <h1>Монітор бота</h1>
+    <p>Невідомий — усе, що відбувається в боті, в одному місці.</p>
+    <input id="key" type="password" autocomplete="current-password" placeholder="Пароль" required>
+    <button type="submit">Увійти</button>
+    <div class="err" id="err"></div>
+  </form>
+
+  <div class="hidden" id="app">
+    <div class="top">
+      <h1>Монітор</h1>
+      <span class="pill" id="health"><span class="dot"></span><span id="healthText">…</span></span>
+      <button class="icon-btn" id="logout" title="Вийти">Вийти</button>
+    </div>
+    <div class="updated" id="updated"></div>
+
+    <h2>Зараз</h2>
+    <div class="grid g4">
+      <div class="tile"><div class="k">Онлайн</div><div class="v" id="online">–</div><div class="s">за 5 хвилин</div></div>
+      <div class="tile"><div class="k">У діалозі</div><div class="v" id="inChat">–</div><div class="s" id="pairs"></div></div>
+      <div class="tile"><div class="k">У пошуку</div><div class="v" id="inSearch">–</div><div class="s">чекають співрозмовника</div></div>
+      <div class="tile"><div class="k">У грі</div><div class="v" id="inGame">–</div><div class="s" id="tablesSub"></div></div>
+    </div>
+
+    <h2>Зірки ⭐</h2>
+    <div class="hero">
+      <div class="k">За останні 24 години</div>
+      <div class="v" id="starsDay">–</div>
+      <div class="row">
+        <span>7 днів: <b id="starsWeek">–</b></span>
+        <span>Весь час: <b id="starsTotal">–</b></span>
+        <span>Оплат за добу: <b id="pays24">–</b></span>
+      </div>
+    </div>
+
+    <div class="charts" style="margin-top:8px">
+      <div class="card">
+        <div class="title">Зірки за днями</div>
+        <div class="sub">Останні 7 днів, київський час</div>
+        <div class="chart" id="chartStars"></div>
+      </div>
+      <div class="card">
+        <div class="title">Нові люди за днями</div>
+        <div class="sub">Останні 7 днів, київський час</div>
+        <div class="chart" id="chartUsers"></div>
+      </div>
+    </div>
+
+    <h2>За що платять</h2>
+    <div class="card kinds" id="kinds"></div>
+
+    <h2>Останні оплати</h2>
+    <div class="card list" id="recent"></div>
+
+    <h2>Люди</h2>
+    <div class="grid g4">
+      <div class="tile"><div class="k">Усього</div><div class="v" id="total">–</div><div class="s" id="adults"></div></div>
+      <div class="tile"><div class="k">Нових за добу</div><div class="v" id="new24">–</div><div class="s">зареєструвались</div></div>
+      <div class="tile"><div class="k">Premium</div><div class="v" id="premium">–</div><div class="s">активний зараз</div></div>
+      <div class="tile"><div class="k">Заблоковані</div><div class="v" id="banned">–</div><div class="s">бан у боті</div></div>
+    </div>
+    <div class="grid" style="margin-top:8px">
+      <div class="tile"><div class="k">Стать</div><div class="s" style="font-size:14px;color:var(--text);margin-top:6px" id="genders">–</div></div>
+      <div class="tile"><div class="k">Мова</div><div class="s" style="font-size:14px;color:var(--text);margin-top:6px" id="langs">–</div></div>
+    </div>
+
+    <h2>Гра</h2>
+    <div class="grid g3">
+      <div class="tile"><div class="k">Подарунків за добу</div><div class="v" id="gifts">–</div><div class="s" id="giftsSub"></div></div>
+      <div class="tile"><div class="k">Щоденні нагороди</div><div class="v" id="daily">–</div><div class="s" id="dailySub"></div></div>
+      <div class="tile"><div class="k">Скарги за добу</div><div class="v" id="reports">–</div><div class="s" id="reportsSub"></div></div>
+    </div>
+    <div class="tables" id="tables"></div>
+
+    <h2>Сервер</h2>
+    <div class="grid g3">
+      <div class="tile"><div class="k">Працює без перезапуску</div><div class="v" id="uptime" style="font-size:20px">–</div></div>
+      <div class="tile"><div class="k">Остання відповідь Telegram</div><div class="v" id="beat" style="font-size:20px">–</div></div>
+      <div class="tile"><div class="k">Пам'ять</div><div class="v" id="mem" style="font-size:20px">–</div></div>
+    </div>
+
+    <div class="links">
+      <a href="/admin">Старий дашборд</a>
+      <a href="https://t.me/nevidomyi_chat_bot" target="_blank" rel="noopener">Відкрити бота</a>
+    </div>
+    <div class="foot">Оновлюється кожні 10 секунд. «≈ $» — приблизно, за курсом 1⭐ ≈ $0.013, який отримує власник бота при виведенні; точна сума — у BotFather → Balance. Оплати до запуску статистики часу (без дати) враховано лише у «Весь час».</div>
+  </div>
+
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const KEY = "monitor_key";
+const store = {
+  get() { try { return localStorage.getItem(KEY) || ""; } catch (e) { return ""; } },
+  set(v) { try { localStorage.setItem(KEY, v); } catch (e) {} },
+  del() { try { localStorage.removeItem(KEY); } catch (e) {} },
+};
+let key = store.get();
+let timer = null;
+
+const KINDS = {
+  premium: ["💎", "Premium"],
+  sub: ["🔁", "Підписка"],
+  search: ["🔍", "Пошук за анкетою"],
+  gift: ["🎁", "Подарунки"],
+  reveal: ["👀", "Хто це?"],
+  back: ["↩️", "Повернути"],
+  aim: ["🎯", "Пляшка на гравця"],
+  other: ["⭐", "Інше"],
+};
+const GIFT_NAMES = { rose: "🌹 Троянда", choco: "🍫 Шоколадка", bear: "🧸 Ведмедик", ring: "💍 Каблучка", diamond: "💎 Діамант" };
+const PREM = { day: "1 день", week: "1 тиждень", month: "1 місяць", sub: "підписка", search: "1 пошук" };
+const fmt = (n) => Number(n || 0).toLocaleString("uk-UA");
+const usd = (stars) => "≈ $" + (stars * 0.013).toFixed(2);
+const ago = (sec) => {
+  const s = Math.max(0, Math.round(sec));
+  if (s < 60) return s + " с тому";
+  if (s < 3600) return Math.round(s / 60) + " хв тому";
+  if (s < 86400) return Math.round(s / 3600) + " год тому";
+  return Math.round(s / 86400) + " дн тому";
+};
+const dur = (ms) => {
+  const m = Math.floor(ms / 60000);
+  if (m < 60) return m + " хв";
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + " год " + (m % 60) + " хв";
+  return Math.floor(h / 24) + " дн " + (h % 24) + " год";
+};
+const dayLabel = (d) => { const [, m, dd] = d.split("-"); return Number(dd) + "." + m; };
+
+/* ---------- стовпчиковий графік: одна серія, тап/наведення показує значення ---------- */
+function barChart(el, data, color, unit) {
+  const W = 320, H = 150, top = 18, bottom = 22, left = 4, right = 4;
+  const max = Math.max(1, ...data.map((d) => d.v));
+  const step = (W - left - right) / data.length;
+  const bw = Math.min(24, step * 0.56);
+  const y = (v) => top + (H - top - bottom) * (1 - v / max);
+  const base = H - bottom;
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", data.map((d) => `${dayLabel(d.day)}: ${d.v} ${unit}`).join(", "));
+  // базова лінія
+  const axis = document.createElementNS(ns, "line");
+  Object.entries({ x1: left, x2: W - right, y1: base + 0.5, y2: base + 0.5, stroke: "#302923", "stroke-width": 1 }).forEach(([k, v]) => axis.setAttribute(k, v));
+  svg.appendChild(axis);
+  const tip = document.createElement("div");
+  tip.className = "tip";
+  const imax = data.reduce((b, d, i) => (d.v > data[b].v ? i : b), 0);
+  data.forEach((d, i) => {
+    const cx = left + step * i + step / 2;
+    const h = Math.max(d.v > 0 ? 3 : 0, base - y(d.v));
+    if (h > 0) {
+      // 4px заокруглення зверху, рівний низ біля базової лінії
+      const x0 = cx - bw / 2, x1 = cx + bw / 2, yt = base - h, r = Math.min(4, h, bw / 2);
+      const path = document.createElementNS(ns, "path");
+      path.setAttribute("d", `M${x0},${base} V${yt + r} Q${x0},${yt} ${x0 + r},${yt} H${x1 - r} Q${x1},${yt} ${x1},${yt + r} V${base} Z`);
+      path.setAttribute("fill", color);
+      path.setAttribute("opacity", i === data.length - 1 ? "1" : "0.72");
+      svg.appendChild(path);
+    }
+    // підпис дня
+    const t = document.createElementNS(ns, "text");
+    Object.entries({ x: cx, y: H - 6, "text-anchor": "middle", "font-size": 10, fill: i === data.length - 1 ? "#f5f0ea" : "#6f665d" }).forEach(([k, v]) => t.setAttribute(k, v));
+    t.textContent = i === data.length - 1 ? "сьогодні" : dayLabel(d.day);
+    svg.appendChild(t);
+    // значення лише над максимумом і над сьогодні
+    if ((i === imax || i === data.length - 1) && d.v > 0) {
+      const lv = document.createElementNS(ns, "text");
+      Object.entries({ x: cx, y: base - h - 5, "text-anchor": "middle", "font-size": 11, "font-weight": 600, fill: "#f5f0ea" }).forEach(([k, v]) => lv.setAttribute(k, v));
+      lv.textContent = fmt(d.v);
+      svg.appendChild(lv);
+    }
+    // зона дотику більша за стовпчик
+    const hit = document.createElementNS(ns, "rect");
+    Object.entries({ x: left + step * i, y: 0, width: step, height: H, fill: "transparent" }).forEach(([k, v]) => hit.setAttribute(k, v));
+    const show = () => {
+      tip.textContent = `${i === data.length - 1 ? "Сьогодні" : dayLabel(d.day)}: ${fmt(d.v)} ${unit}`;
+      tip.style.left = (cx / W) * 100 + "%";
+      tip.style.top = (Math.max(top, base - h) / H) * 150 + "px";
+      tip.classList.add("on");
+    };
+    hit.addEventListener("pointerenter", show);
+    hit.addEventListener("pointerdown", show);
+    hit.addEventListener("pointerleave", () => tip.classList.remove("on"));
+    svg.appendChild(hit);
+  });
+  el.replaceChildren(svg, tip);
+}
+
+/* ---------- відмальовка ---------- */
+function render(d) {
+  const p = d.process || {};
+  const alive = p.beatAgo !== undefined && p.beatAgo < 90000;
+  $("health").className = "pill " + (alive ? "ok" : "bad");
+  $("healthText").textContent = alive ? "Бот працює" : "Telegram не відповідає";
+  $("updated").textContent = "Оновлено " + new Date().toLocaleTimeString("uk-UA");
+
+  const u = d.users || {};
+  $("online").textContent = fmt(u.online);
+  $("inChat").textContent = fmt(u.inChat);
+  $("pairs").textContent = fmt(Math.floor((u.inChat || 0) / 2)) + " пар";
+  $("inSearch").textContent = fmt(u.inSearch);
+  const g = p.game || { players: 0, tables: 0, list: [] };
+  $("inGame").textContent = fmt(g.players);
+  $("tablesSub").textContent = fmt(g.tables) + " " + (g.tables === 1 ? "стіл" : g.tables >= 2 && g.tables <= 4 ? "столи" : "столів");
+
+  const m = d.money || {};
+  $("starsDay").textContent = fmt(m.day) + " ⭐";
+  $("starsDay").title = usd(m.day);
+  $("starsWeek").textContent = fmt(m.week) + " ⭐ (" + usd(m.week) + ")";
+  $("starsTotal").textContent = fmt(m.total) + " ⭐ (" + usd(m.total) + ")";
+  $("pays24").textContent = fmt(m.count24);
+
+  barChart($("chartStars"), (d.series || []).map((s) => ({ day: s.day, v: s.stars })), "#d4a574", "⭐");
+  barChart($("chartUsers"), (d.series || []).map((s) => ({ day: s.day, v: s.users })), "#e87eb0", "людей");
+
+  // За що платять: від найбільшого, один колір (це величина, а не категорії)
+  const kinds = Object.entries(m.byKind || {}).sort((a, b) => b[1] - a[1]);
+  const kmax = Math.max(1, ...kinds.map(([, v]) => v));
+  const box = $("kinds");
+  box.replaceChildren();
+  if (!kinds.length) box.innerHTML = '<div class="empty">Оплат ще немає.</div>';
+  kinds.forEach(([k, v]) => {
+    const r = document.createElement("div");
+    r.className = "r";
+    const [em, name] = KINDS[k] || KINDS.other;
+    const lbl = document.createElement("div"); lbl.className = "lbl"; lbl.textContent = em + " " + name;
+    const tr = document.createElement("div"); tr.className = "track";
+    const bar = document.createElement("div"); bar.className = "bar"; bar.style.width = (v / kmax) * 100 + "%";
+    tr.appendChild(bar);
+    const num = document.createElement("div"); num.className = "num"; num.textContent = fmt(v) + " ⭐";
+    r.append(lbl, tr, num);
+    box.appendChild(r);
+  });
+
+  // Останні оплати
+  const rec = $("recent");
+  rec.replaceChildren();
+  if (!(d.recent || []).length) rec.innerHTML = '<div class="empty">Поки порожньо.</div>';
+  (d.recent || []).forEach((x) => {
+    const it = document.createElement("div"); it.className = "it";
+    const [em, name] = KINDS[x.kind] || KINDS.other;
+    const e = document.createElement("div"); e.className = "em"; e.textContent = em;
+    const t = document.createElement("div"); t.className = "t";
+    const a = document.createElement("div"); a.className = "a";
+    const parts = String(x.payload).split(":");
+    a.textContent = x.kind === "gift" ? (GIFT_NAMES[parts[1]] || name) + (parts[3] === "t" ? " · у грі" : " · у чаті")
+      : x.kind === "premium" || x.kind === "search" || x.kind === "sub" ? "Premium · " + (PREM[parts[1]] || parts[1]) : name;
+    const b = document.createElement("div"); b.className = "b"; b.textContent = ago(d.now - x.at);
+    t.append(a, b);
+    const pr = document.createElement("div"); pr.className = "p"; pr.textContent = "+" + fmt(x.stars) + " ⭐";
+    it.append(e, t, pr);
+    rec.appendChild(it);
+  });
+
+  $("total").textContent = fmt(u.total);
+  $("adults").textContent = fmt(u.adults) + " підтвердили 18+";
+  $("new24").textContent = fmt(u.new24);
+  $("premium").textContent = fmt(u.premium);
+  $("banned").textContent = fmt(u.banned);
+  $("genders").textContent = "👨 " + fmt(u.male) + "   👩 " + fmt(u.female);
+  $("langs").textContent = "🇺🇦 " + fmt(u.uk) + "   🇷🇺 " + fmt(u.ru) + "   🇬🇧 " + fmt(u.en);
+
+  $("gifts").textContent = fmt(d.gifts?.count);
+  $("giftsSub").textContent = fmt(d.gifts?.free) + " безкоштовних · " + fmt(d.gifts?.stars) + " ⭐";
+  $("daily").textContent = fmt(d.daily?.claimed);
+  $("dailySub").textContent = "забрали сьогодні · рекорд серії " + fmt(d.daily?.bestStreak);
+  $("reports").textContent = fmt(d.reports?.day);
+  $("reportsSub").textContent = d.reports?.last?.length ? "остання " + ago(d.now - d.reports.last[0].created_at) : "скарг немає";
+
+  const tb = $("tables");
+  tb.replaceChildren();
+  const PH = { wait: "чекають", idle: "крутять", spin: "крутиться", answer: "відповідають", pair: "пара обирає" };
+  (g.list || []).forEach((t) => {
+    const x = document.createElement("div"); x.className = "tbl";
+    x.innerHTML = "Стіл " + t.id + ": <b></b> · ";
+    x.querySelector("b").textContent = t.players + " гр.";
+    x.append((PH[t.phase] || t.phase) + " · раунд " + t.round);
+    tb.appendChild(x);
+  });
+
+  $("uptime").textContent = p.startedAt ? dur(Date.now() - p.startedAt) : "–";
+  $("beat").textContent = p.beatAgo !== undefined ? ago(p.beatAgo / 1000) : "–";
+  $("mem").textContent = p.memoryMb ? p.memoryMb + " МБ" : "–";
+}
+
+/* ---------- дані ---------- */
+async function load() {
+  try {
+    const r = await fetch("/admin/monitor", { headers: { "X-Admin-Key": key }, cache: "no-store" });
+    if (r.status === 401) { logout("Неправильний пароль."); return; }
+    if (!r.ok) throw new Error(r.status);
+    render(await r.json());
+  } catch (e) {
+    $("health").className = "pill bad";
+    $("healthText").textContent = "Сервер недоступний";
+  }
+}
+function start() {
+  $("login").classList.add("hidden");
+  $("app").classList.remove("hidden");
+  load();
+  clearInterval(timer);
+  timer = setInterval(load, 10000);
+}
+function logout(msg) {
+  clearInterval(timer);
+  key = "";
+  store.del();
+  $("app").classList.add("hidden");
+  $("login").classList.remove("hidden");
+  $("err").textContent = msg || "";
+}
+$("login").addEventListener("submit", (e) => {
+  e.preventDefault();
+  key = $("key").value.trim();
+  if (!key) return;
+  store.set(key);
+  $("err").textContent = "";
+  start();
+});
+$("logout").addEventListener("click", () => logout());
+document.addEventListener("visibilitychange", () => { if (!document.hidden && key) load(); });
+
+if (key) start(); else logout();
+</script>
+</body>
+</html>

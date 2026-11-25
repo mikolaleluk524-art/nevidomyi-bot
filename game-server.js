@@ -628,6 +628,12 @@ async function onGiftInvoice(ws, msg) {
   }
 }
 
+// Для монітора власника: що зараз відбувається за столами.
+export function gameStats() {
+  const list = [...tables.values()].map((t) => ({ id: t.id, players: seated(t).length, phase: t.phase, round: t.round }));
+  return { tables: list.length, players: list.reduce((n, t) => n + t.players, 0), list };
+}
+
 export function attachBottleGame(server) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 2048 });
   server.on("upgrade", (req, socket, head) => {
