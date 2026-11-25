@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Гра в бутилочку</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{--bg:#0c0b0a;--card:#161412;--border:#2a2622;--text:#f5f0ea;--muted:#a89f94;--accent:#d4a574}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px 16px;text-align:center}
+h1{font-size:22px;margin-bottom:4px}
+.sub{font-size:13px;color:var(--muted);margin-bottom:18px}
+.table{position:relative;width:min(80vw,320px);height:min(80vw,320px);border-radius:50%;background:radial-gradient(circle,#1d1a17 0%,#161412 70%);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;margin-bottom:18px}
+.side{position:absolute;top:50%;transform:translateY(-50%);font-size:12px;color:var(--muted);width:70px}
+.side.l{left:8px}.side.r{right:8px}
+#bottle{width:56px;height:210px;transition:transform 4s cubic-bezier(.12,.72,.18,1)}
+button{background:var(--accent);color:#000;border:none;padding:13px 28px;border-radius:12px;font-weight:700;font-size:16px;cursor:pointer}
+button:disabled{opacity:.5}
+.result{margin-top:18px;min-height:130px;width:100%;max-width:360px}
+.who{font-size:13px;color:var(--muted);margin-bottom:8px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;font-size:17px;line-height:1.4}
+.tag{display:inline-block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-bottom:6px}
+.note{font-size:11px;color:var(--muted);margin-top:16px;max-width:320px}
+</style>
+</head>
+<body>
+<h1>🍾 Гра в бутилочку</h1>
+<div class="sub">Крутіть разом із співрозмовником у чаті</div>
+
+<div class="table">
+  <div class="side l">Ліворуч<br>ти</div>
+  <div class="side r">Праворуч<br>співрозмовник</div>
+  <svg id="bottle" viewBox="0 0 56 210" xmlns="http://www.w3.org/2000/svg">
+    <rect x="22" y="2" width="12" height="16" rx="3" fill="#d4a574"/>
+    <path d="M22 18 H34 V70 C34 82 52 92 52 120 V196 C52 204 46 208 40 208 H16 C10 208 4 204 4 196 V120 C4 92 22 82 22 70 Z" fill="#3b6b4f" stroke="#6b9e78" stroke-width="2"/>
+    <rect x="12" y="130" width="32" height="46" rx="4" fill="#f5f0ea" opacity=".85"/>
+  </svg>
+</div>
+
+<button id="spin">Крутити</button>
+
+<div class="result" id="res"></div>
+<div class="note">Не надсилай контакти, адресу чи документи. Завдання лише для гри в чаті.</div>
+
+<script>
+const TRUTHS=[
+  "Яка найдивніша річ, яку ти робив(ла) наодинці?",
+  "Який твій найгірший перший день знайомства?",
+  "Про що ти мрієш, але нікому не розповідаєш?",
+  "Яка пісня зараз грає у тебе в голові?",
+  "Що тебе найбільше бентежить у знайомствах?",
+  "Яка твоя найбезглуздіша звичка?",
+  "Яку брехню
