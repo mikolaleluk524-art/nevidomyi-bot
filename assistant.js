@@ -63,10 +63,60 @@ const TEMPLATES = [
     en: "👀 Wondering who's on the other side?\nTap “Who's this?” during a chat to see your partner's gender, age and city. Names and contacts stay hidden.\n/search" },
 ];
 
+// Додаткові шаблони: більше різноманіття, поки немає ключа Claude.
+TEMPLATES.push(
+  { kind: "event", event: "double_hearts", title: "💖 Вечір кохання",
+    uk: "💖 Вечір кохання в 🍾 Бутилочці!\nЦілу годину кожен поцілунок, реакція й подарунок дають подвійні ❤. Хто стане королем чи королевою столу 👑?\n/game",
+    ru: "💖 Вечер любви в 🍾 Бутылочке!\nЦелый час каждый поцелуй, реакция и подарок дают двойные ❤. Кто станет королём или королевой стола 👑?\n/game",
+    en: "💖 Love Night in 🍾 Spin the Bottle!\nFor a whole hour every kiss, reaction and gift gives double ❤. Who'll be king or queen of the table 👑?\n/game" },
+  { kind: "event", event: "free_rose", title: "🌹 Квіти від бота",
+    uk: "🌹 Бот роздає квіти!\nУ твоєму гаманці гри вже лежить безкоштовна троянда. Подаруй її — і людина отримає запрошення побути з тобою наодинці 🔒\n/game",
+    ru: "🌹 Бот раздаёт цветы!\nВ твоём кошельке игры уже лежит бесплатная роза. Подари её — и человек получит приглашение побыть с тобой наедине 🔒\n/game",
+    en: "🌹 The bot is handing out flowers!\nThere's a free rose in your game wallet. Give it away — and that person gets an invitation to be alone with you 🔒\n/game" },
+  { kind: "news", event: "none", title: "🎯 Пляшка на вибір",
+    uk: "🎯 Хочеш, щоб пляшка показала саме на ту людину?\nУ грі є 🎯 — обираєш гравця, і наступного твого ходу пляшка покаже на нього. А в щоденній нагороді 🎯 буває безкоштовно!\n/game",
+    ru: "🎯 Хочешь, чтобы бутылочка указала именно на того человека?\nВ игре есть 🎯 — выбираешь игрока, и в твой следующий ход бутылочка укажет на него. А в ежедневной награде 🎯 бывает бесплатно!\n/game",
+    en: "🎯 Want the bottle to land on that one person?\nThe game has 🎯 — pick a player and on your next turn the bottle points at them. And the daily reward sometimes gives 🎯 for free!\n/game" },
+  { kind: "news", event: "none", title: "👑 Корона столу",
+    uk: "👑 Хто сьогодні король столу?\nРеакції, поцілунки й подарунки дають ❤, а в кого їх найбільше — той носить корону. Заходь і забирай!\n/game",
+    ru: "👑 Кто сегодня король стола?\nРеакции, поцелуи и подарки дают ❤, а у кого их больше всех — тот носит корону. Заходи и забирай!\n/game",
+    en: "👑 Who's king of the table today?\nReactions, kisses and gifts give ❤, and whoever has the most wears the crown. Come and take it!\n/game" },
+  { kind: "news", event: "none", title: "🔒 Наодинці",
+    uk: "🔒 Сподобався хтось за столом?\nЯкщо пляшка зведе вас у пару й обоє оберете «Наодинці» — відкриється приватний чат. Без імен і номерів, поки самі не захочете.\n/game",
+    ru: "🔒 Понравился кто-то за столом?\nЕсли бутылочка сведёт вас в пару и оба выберете «Наедине» — откроется приватный чат. Без имён и номеров, пока сами не захотите.\n/game",
+    en: "🔒 Like someone at the table?\nIf the bottle pairs you up and you both choose “Alone”, a private chat opens. No names or numbers unless you want to share them.\n/game" },
+  { kind: "news", event: "none", title: "🌙 Вечірня гра",
+    uk: "🌙 Вечір — найкращий час для 🍾 бутилочки!\nЗараз онлайн {online}. Сідай за стіл, відповідай на завдання і дивись, на кого покаже пляшка 👀\n/game",
+    ru: "🌙 Вечер — лучшее время для 🍾 бутылочки!\nСейчас онлайн {online}. Садись за стол, отвечай на задания и смотри, на кого укажет бутылочка 👀\n/game",
+    en: "🌙 Evening is the best time for 🍾 Spin the Bottle!\n{online} online right now. Take a seat, answer dares and see who the bottle picks 👀\n/game" },
+  { kind: "news", event: "none", title: "💬 Просто поговорити",
+    uk: "💬 Хочеш просто поговорити з кимось новим?\nНатисни «Знайти співрозмовника» — випадковий анонімний чат безкоштовний. Не сподобалось — «Наступний».\n/search",
+    ru: "💬 Хочешь просто поговорить с кем-то новым?\nНажми «Найти собеседника» — случайный анонимный чат бесплатный. Не понравилось — «Следующий».\n/search",
+    en: "💬 Just want to talk to someone new?\nTap “Find a chat partner” — a random anonymous chat is free. Not your vibe? Tap “Next”.\n/search" },
+  { kind: "news", event: "none", title: "💎 Пошук за анкетою",
+    uk: "💎 Шукаєш когось конкретного?\nЗ Premium можна шукати співрозмовника за віком, статтю й містом. Або отримай Premium безкоштовно — за запрошених друзів 🎁\n/premium · /invite",
+    ru: "💎 Ищешь кого-то конкретного?\nС Premium можно искать собеседника по возрасту, полу и городу. Или получи Premium бесплатно — за приглашённых друзей 🎁\n/premium · /invite",
+    en: "💎 Looking for someone specific?\nWith Premium you can search by age, gender and city. Or get Premium for free by inviting friends 🎁\n/premium · /invite" },
+  { kind: "news", event: "none", title: "↩️ Друга спроба",
+    uk: "↩️ Розмова обірвалась, а ти не встиг попрощатись?\nПісля діалогу можна надіслати колишньому співрозмовнику запит продовжити. Якщо погодиться — чат відкриється знову.\n/search",
+    ru: "↩️ Разговор оборвался, а ты не успел попрощаться?\nПосле диалога можно отправить бывшему собеседнику запрос продолжить. Если согласится — чат откроется снова.\n/search",
+    en: "↩️ Chat ended before you could say goodbye?\nAfter a chat you can send your last partner a request to continue. If they accept, the chat reopens.\n/search" },
+  { kind: "news", event: "none", title: "🎉 Вихідні",
+    uk: "🎉 Вихідні — час для гри!\nКлич друзів за один стіл 🍾: кручіть пляшку, виконуйте бажання ✨ і даруйте 🌹. За кожного друга — Premium.\n/game · /invite",
+    ru: "🎉 Выходные — время для игры!\nЗови друзей за один стол 🍾: крутите бутылочку, исполняйте желания ✨ и дарите 🌹. За каждого друга — Premium.\n/game · /invite",
+    en: "🎉 The weekend is game time!\nBring friends to one table 🍾: spin the bottle, grant wishes ✨ and give 🌹. Each friend you invite earns you Premium.\n/game · /invite" },
+  { kind: "news", event: "none", title: "🌍 Три мови",
+    uk: "🌍 Бот говорить твоєю мовою: українська, русский, English.\nЗа одним столом кожен бачить гру своєю мовою — грай із людьми з різних країн 🍾\nЗмінити мову: /language",
+    ru: "🌍 Бот говорит на твоём языке: українська, русский, English.\nЗа одним столом каждый видит игру на своём языке — играй с людьми из разных стран 🍾\nСменить язык: /language",
+    en: "🌍 The bot speaks your language: Ukrainian, Russian, English.\nAt the same table everyone sees the game in their own language — play with people from different countries 🍾\nChange language: /language" },
+);
+
 const fill = (text, ctx) => text.replace(/\{(online|players|total)\}/g, (_, k) => String(ctx[k] ?? 0));
 
 function fromTemplates(ctx) {
-  const pool = [...TEMPLATES].sort(() => Math.random() - 0.5);
+  // Спершу ті, що не показувались останнім разом, — так ідеї не повторюються поспіль.
+  const fresh = (t) => (lastTitles.includes(t.title) ? 1 : 0);
+  const pool = [...TEMPLATES].sort(() => Math.random() - 0.5).sort((a, b) => fresh(a) - fresh(b));
   const events = pool.filter((t) => t.kind === "event").slice(0, 1);
   const news = pool.filter((t) => t.kind === "news").slice(0, 3);
   return [...events, ...news].map((t) => ({ ...t, uk: fill(t.uk, ctx), ru: fill(t.ru, ctx), en: fill(t.en, ctx) }));
