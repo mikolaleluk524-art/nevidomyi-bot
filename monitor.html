@@ -104,6 +104,21 @@ h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute
 .progress{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:8px;font-size:13px}
 .progress .bar{height:6px;border-radius:3px;background:var(--grid);margin-top:6px;overflow:hidden}
 .progress .bar i{display:block;height:100%;background:var(--accent);width:0}
+/* реклама */
+.form{display:flex;gap:8px;flex-wrap:wrap}
+.form input,.form select{flex:1;min-width:140px;padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:15px;font-family:inherit}
+.camp{padding:10px 0;border-top:1px solid var(--grid)}
+.camp:first-child{border-top:0}
+.camp .row{display:flex;align-items:center;gap:8px}
+.camp .nm{flex:1;font-weight:700;font-size:14px}
+.camp .ln{font-size:12px;color:var(--muted);word-break:break-all;margin:3px 0 5px;font-family:ui-monospace,Menlo,monospace}
+.camp .st{display:flex;gap:6px;flex-wrap:wrap}
+.camp .st span{font-size:12px;background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:3px 8px;color:var(--muted)}
+.camp .st b{color:var(--text)}
+.x{background:none;border:1px solid var(--border);color:var(--faint);border-radius:8px;padding:4px 8px;font-size:12px;cursor:pointer}
+.x.armed{background:var(--bad);color:#fff;border-color:var(--bad)}
+.out{margin-top:10px}
+.subh{font-size:13px;font-weight:600;margin:14px 0 6px;color:var(--text)}
 .evact{background:#2a1820;border:1px solid #6b3550;border-radius:12px;padding:10px 12px;margin-bottom:8px;font-size:13px;font-weight:600}
 </style>
 </head>
@@ -143,6 +158,44 @@ h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute
     <div class="evact hidden" id="aiEvent"></div>
     <div class="progress hidden" id="aiProgress"><span id="aiProgText"></span><div class="bar"><i id="aiProgBar"></i></div></div>
     <div id="aiIdeas"></div>
+
+    <h2>📣 Реклама</h2>
+    <div class="card">
+      <div class="title">Посилання для каналів</div>
+      <div class="sub">Для кожного каналу чи відео — своє посилання. Тут видно, звідки прийшли люди й хто з них заплатив.</div>
+      <form class="form" id="campForm">
+        <input id="campName" maxlength="60" placeholder="Назва: напр. «Знайомства Київ» або «TikTok»">
+        <button class="btn primary" type="submit">➕ Створити посилання</button>
+      </form>
+      <div id="campList" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card" style="margin-top:8px">
+      <div class="title">✍️ Готова реклама</div>
+      <div class="sub">Пости для каналу знайомств, гумору, сценарій відео й сторіс — трьома мовами, з посиланням кампанії.</div>
+      <div class="form">
+        <select id="promoCamp"></select>
+        <input id="promoNote" maxlength="300" placeholder="Побажання (необов'язково): напр. «з гумором», «для студентів»">
+        <button class="btn primary" id="promoGo">✍️ Написати рекламу</button>
+      </div>
+      <div class="out" id="promoOut"></div>
+    </div>
+
+    <div class="card" style="margin-top:8px">
+      <div class="title">💌 Лист адміну каналу</div>
+      <div class="sub">Знайди канал (напр. на tgstat.ua → «Знайомства» чи «Розваги») і надішли адміну цей лист. Сам бот нікому не пише.</div>
+      <div class="form">
+        <input id="outChannel" maxlength="80" placeholder="Назва каналу">
+        <input id="outTopic" maxlength="120" placeholder="Тема каналу (необов'язково)">
+      </div>
+      <div class="form" style="margin-top:8px">
+        <select id="outOffer"><option value="swap">🤝 Взаємний піар</option><option value="paid">💸 Платна реклама</option></select>
+        <select id="outLang"><option value="uk">🇺🇦 Українською</option><option value="ru">🇷🇺 Російською</option><option value="en">🇬🇧 Англійською</option></select>
+        <input id="outMe" maxlength="40" placeholder="Твоє ім'я (необов'язково)">
+      </div>
+      <button class="btn primary" id="outGo" style="margin-top:8px">✍️ Написати лист</button>
+      <div class="out" id="outOut"></div>
+    </div>
 
     <h2>Зірки ⭐</h2>
     <div class="hero">
@@ -509,6 +562,100 @@ async function loadIdeas(refresh) {
 }
 $("aiMore").addEventListener("click", () => loadIdeas(true));
 
+/* ---------- 📣 реклама ---------- */
+async function copyText(text, btn) {
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch (e) {
+    const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand("copy"); } catch (e2) {} ta.remove();
+  }
+  if (btn) { const old = btn.textContent; btn.textContent = ok ? "✅ Скопійовано" : "Виділи й скопіюй вручну"; setTimeout(() => { btn.textContent = old; }, 1800); }
+}
+function copyBtn(getText) {
+  const b = document.createElement("button"); b.className = "btn"; b.type = "button"; b.textContent = "📋 Копіювати";
+  b.addEventListener("click", () => copyText(getText(), b));
+  return b;
+}
+function renderCampaigns(list) {
+  const box = $("campList");
+  box.replaceChildren();
+  if (!list.length) box.innerHTML = '<div class="empty">Посилань ще немає. Створи перше — наприклад, для каналу, де даватимеш рекламу.</div>';
+  const sel = $("promoCamp"), cur = sel.value;
+  sel.replaceChildren();
+  const def = document.createElement("option"); def.value = ""; def.textContent = "Без кампанії (загальне посилання)"; sel.appendChild(def);
+  list.forEach((c) => {
+    const o = document.createElement("option"); o.value = c.tag; o.textContent = c.name; sel.appendChild(o);
+    const row = document.createElement("div"); row.className = "camp";
+    const top = document.createElement("div"); top.className = "row";
+    const nm = document.createElement("div"); nm.className = "nm"; nm.textContent = c.name;
+    const del = document.createElement("button"); del.className = "x"; del.type = "button"; del.textContent = "✕";
+    let armed = false;
+    del.addEventListener("click", async () => {
+      if (!armed) { armed = true; del.classList.add("armed"); del.textContent = "Видалити?"; setTimeout(() => { armed = false; del.classList.remove("armed"); del.textContent = "✕"; }, 3000); return; }
+      const r = await api("/admin/campaigns", { method: "POST", body: JSON.stringify({ delete: c.tag }) });
+      if (r.ok) renderCampaigns(r.data.campaigns);
+    });
+    top.append(nm, copyBtn(() => c.link), del);
+    const ln = document.createElement("div"); ln.className = "ln"; ln.textContent = c.link;
+    const st = document.createElement("div"); st.className = "st";
+    [["прийшли", c.joined], ["пройшли вік", c.adults], ["заплатили", c.payers], ["⭐", c.stars]].forEach(([k, v]) => {
+      const sp = document.createElement("span"); sp.append(k + " "); const b = document.createElement("b"); b.textContent = fmt(v); sp.appendChild(b); st.appendChild(sp);
+    });
+    row.append(top, ln, st);
+    box.appendChild(row);
+  });
+  if ([...sel.options].some((o) => o.value === cur)) sel.value = cur;
+}
+async function loadCampaigns() {
+  try { const r = await api("/admin/campaigns"); if (r.ok) renderCampaigns(r.data.campaigns); } catch (e) {}
+}
+$("campForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = $("campName").value.trim();
+  if (name.length < 2) { $("campName").focus(); return; }
+  const r = await api("/admin/campaigns", { method: "POST", body: JSON.stringify({ name }) });
+  if (r.ok) { $("campName").value = ""; renderCampaigns(r.data.campaigns); $("promoCamp").value = r.data.created.tag; }
+});
+function langCard(title, texts) {
+  const card = document.createElement("div"); card.className = "idea";
+  const tt = document.createElement("div"); tt.className = "tt"; const b = document.createElement("b"); b.textContent = title; tt.appendChild(b);
+  let cur = Object.keys(texts)[0];
+  const tabs = document.createElement("div"); tabs.className = "tabs";
+  const ta = document.createElement("textarea"); ta.value = texts[cur];
+  ta.addEventListener("input", () => { texts[cur] = ta.value; });
+  [["uk", "🇺🇦 UA"], ["ru", "🇷🇺 RU"], ["en", "🇬🇧 EN"]].filter(([l]) => texts[l] !== undefined).forEach(([l, name]) => {
+    const t = document.createElement("button"); t.type = "button"; t.textContent = name; if (l === cur) t.className = "on";
+    t.addEventListener("click", () => { cur = l; ta.value = texts[l]; tabs.querySelectorAll("button").forEach((x) => x.classList.remove("on")); t.classList.add("on"); });
+    tabs.appendChild(t);
+  });
+  const acts = document.createElement("div"); acts.className = "acts"; acts.appendChild(copyBtn(() => ta.value));
+  card.append(tt);
+  if (tabs.children.length > 1) card.appendChild(tabs);
+  card.append(ta, acts);
+  return card;
+}
+$("promoGo").addEventListener("click", async () => {
+  const btn = $("promoGo"); btn.disabled = true; btn.textContent = "Пишу…";
+  try {
+    const r = await api("/admin/promo", { method: "POST", body: JSON.stringify({ tag: $("promoCamp").value, note: $("promoNote").value }) });
+    const out = $("promoOut"); out.replaceChildren();
+    if (!r.ok) { out.textContent = "Не вдалося написати рекламу"; return; }
+    const src = document.createElement("div"); src.className = "sub"; src.textContent = (r.data.source === "claude" ? "Написав Claude" : "З шаблонів") + " · посилання: " + r.data.link; out.appendChild(src);
+    r.data.items.forEach((it) => out.appendChild(langCard(it.title, { uk: it.uk, ru: it.ru, en: it.en })));
+  } catch (e) {} finally { btn.disabled = false; btn.textContent = "✍️ Написати рекламу"; }
+});
+$("outGo").addEventListener("click", async () => {
+  if (!$("outChannel").value.trim()) { $("outChannel").focus(); return; }
+  const btn = $("outGo"); btn.disabled = true; btn.textContent = "Пишу…";
+  try {
+    const lang = $("outLang").value;
+    const r = await api("/admin/outreach", { method: "POST", body: JSON.stringify({ channel: $("outChannel").value, topic: $("outTopic").value, offer: $("outOffer").value, lang, me: $("outMe").value }) });
+    const out = $("outOut"); out.replaceChildren();
+    if (!r.ok) { out.textContent = "Не вдалося написати лист"; return; }
+    out.appendChild(langCard((r.data.source === "claude" ? "Написав Claude" : "З шаблону") + " · " + $("outChannel").value, { [lang]: r.data.text }));
+  } catch (e) {} finally { btn.disabled = false; btn.textContent = "✍️ Написати лист"; }
+});
+
 /* ---------- дані ---------- */
 async function load() {
   try {
@@ -526,14 +673,19 @@ function start() {
   $("app").classList.remove("hidden");
   load();
   loadIdeas(false);
+  loadCampaigns();
   clearInterval(timer);
   timer = setInterval(load, 10000);
   clearInterval(aiTimer);
   aiTimer = setInterval(() => loadIdeas(false), 10 * 60 * 1000);
+  clearInterval(campTimer);
+  campTimer = setInterval(loadCampaigns, 60 * 1000);
 }
+let campTimer = null;
 function logout(msg) {
   clearInterval(timer);
   clearInterval(aiTimer);
+  clearInterval(campTimer);
   key = "";
   store.del();
   $("app").classList.add("hidden");

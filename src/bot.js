@@ -196,6 +196,8 @@ function openDatabase() {
   next.exec(SCHEMA);
   // Міграція: обрана мова (uk, ru, en). Порожня — беремо з налаштувань Telegram.
   if (!next.prepare("pragma table_info(users)").all().some((c) => c.name === "lang")) next.exec("alter table users add column lang text");
+  // Міграція: з якої рекламної кампанії прийшла людина (посилання ?start=ad_<мітка>).
+  if (!next.prepare("pragma table_info(users)").all().some((c) => c.name === "source")) next.exec("alter table users add column source text");
   return next;
 }
 function installCopy(src) {
@@ -1036,6 +1038,11 @@ async function onCommand(chatId, id, name, args, from) {
     const me = ensure(id, from);
     const startCode = args.trim();
     if (startCode.startsWith("meet_")) return askMeet(id, startCode.slice(5).replace(/[^a-z0-9]/gi, "").slice(0, 12));
+    // Рекламна мітка: запам'ятовуємо лише для нових людей, щоб не перебивати джерело.
+    if (startCode.startsWith("ad_")) {
+      const tag = startCode.slice(3).replace(/[^a-z0-9_-]/gi, "").slice(0, 40).toLowerCase();
+      if (tag) run("update users set source = ? where id = ? and source is null and status = 'new'", tag, id);
+    }
     // Бонус за запрошення — лише для щойно створених акаунтів.
     if (startCode && me.status === "new") {
       const src = one("select id from users where invite_code = ? and id <> ? limit 1", startCode, id);
