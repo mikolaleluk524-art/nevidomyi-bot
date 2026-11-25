@@ -70,13 +70,14 @@ export async function sendToOwners(title, body = "") {
   for (const c of ownerChats()) await sendTo(c.id, text).catch((e) => console.error("[tg]", e.message));
 }
 
-export async function sendDocumentToOwners(buf, filename, caption) {
+export async function sendDocumentToOwners(buf, filename, caption, silent = false) {
   if (!telegramOn()) return false;
   let sent = false;
   for (const c of ownerChats()) {
     const form = new FormData();
     form.append("chat_id", String(c.id));
     form.append("caption", caption);
+    if (silent) form.append("disable_notification", "true");
     form.append("document", new Blob([buf]), filename);
     await tg("sendDocument", form, true)
       .then(() => (sent = true))
@@ -141,7 +142,11 @@ async function handle(update) {
     if (code && code === getSecret("tg_link_code")) {
       addChat(chat, [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(" ") || "Власниця");
       setSecret("tg_link_code", ""); // код одноразовий
-      return sendTo(chat, `✨ <b>Зошит записів підключено!</b>\n\nСюди приходитимуть:\n• нові записи й скасування\n• щоранку о 8:00 — сторінка на сьогодні\n• щовечора о 20:00 — записи на завтра\n• щоночі — резервна копія бази 🗄\n\nКнопки внизу відкривають потрібну сторінку.`);
+      // Журнал починаємо з цього моменту (старі записи є в копії бази)
+      setSecret("tg_journal_last", String(one("SELECT COALESCE(MAX(id),0) n FROM booking_log").n));
+      await sendTo(chat, `✨ <b>Зошит записів підключено!</b>\n\nСюди приходитимуть:\n• 📝 кожен запис одразу, як тільки його створено чи змінено\n• ☀️ щоранку о 7:00 — записи на сьогодні\n• 🌙 щовечора о 20:00 — записи на завтра\n• 🗄 кожні 2 години — повна копія бази (тихо, без звуку)\n\nКнопки внизу відкривають потрібну сторінку.`);
+      const { sendBackupNow } = await import("./backup.js");
+      return sendBackupNow().catch(() => {});
     }
     if (isOwner(chat)) return sendTo(chat, dayPage(kyivNow().date));
     return tg("sendMessage", { chat_id: chat, text: `Це службовий зошит салону «Магія краси» 💅\n\nЗаписатися до майстра: ${site}`, reply_markup: { remove_keyboard: true } });
@@ -163,11 +168,62 @@ async function handle(update) {
   return sendTo(chat, "Оберіть кнопку внизу або напишіть дату, напр. <code>28.11</code> — покажу сторінку на цей день.");
 }
 
+// ---------- журнал: кожен запис і кожна зміна — одразу в Telegram ----------
+const STATUS_UA = { request: "заявка", pending: "очікує оплати", confirmed: "підтверджено", done: "прийшла ✓", cancelled: "скасовано", no_show: "не прийшла", expired: "не оплачено / згоріло" };
+
+function journalText(log, b) {
+  const d = `${b.date.slice(8, 10)}.${b.date.slice(5, 7)}`;
+  const body =
+    `<code>${d} ${hm(b.start)}</code> <b>${esc(b.name)}</b> · ${esc(b.phone)}\n` +
+    `${esc(b.service_name)} · ${b.price - b.discount - b.bonus_used} грн` +
+    (b.comment ? `\n💬 ${esc(b.comment)}` : "");
+  if (!log.old_status) {
+    const title = b.source === "admin" ? `📝 Записано вами · #${b.id}` : `💅 <b>Новий запис · #${b.id}</b>${b.status === "request" ? " (заявка)" : ""}`;
+    return { text: `${title}\n${body}`, loud: b.source !== "admin" };
+  }
+  const loud = log.new_status === "cancelled";
+  const icon = { cancelled: "❌", done: "✅", no_show: "🚫", confirmed: "✔️", expired: "⌛" }[log.new_status] || "✏️";
+  return { text: `${icon} #${b.id} · ${STATUS_UA[log.old_status] || log.old_status} → <b>${STATUS_UA[log.new_status] || log.new_status}</b>\n${body}`, loud };
+}
+
+let journalBusy = false;
+async function journalTick() {
+  if (journalBusy || !ownerChats().length) return;
+  journalBusy = true;
+  try {
+    let last = Number(getSecret("tg_journal_last"));
+    if (!Number.isFinite(last) || getSecret("tg_journal_last") === null) {
+      last = one("SELECT COALESCE(MAX(id),0) n FROM booking_log").n;
+      setSecret("tg_journal_last", String(last));
+    }
+    const logs = all("SELECT * FROM booking_log WHERE id > ? ORDER BY id LIMIT 30", last);
+    for (const log of logs) {
+      const b = one("SELECT b.*, c.name, c.phone FROM bookings b JOIN clients c ON c.id = b.client_id WHERE b.id = ?", log.booking_id);
+      if (b) {
+        const { text, loud } = journalText(log, b);
+        let ok = true;
+        for (const c of ownerChats()) {
+          await sendTo(c.id, text, { disable_notification: !loud }).catch((e) => {
+            ok = false;
+            console.error("[tg journal]", e.message);
+          });
+        }
+        if (!ok) break; // повторимо цей рядок наступного разу — нічого не загубиться
+      }
+      setSecret("tg_journal_last", String(log.id));
+    }
+  } finally {
+    journalBusy = false;
+  }
+}
+
 // ---------- щоденні сторінки ----------
 async function scheduled() {
   if (!ownerChats().length) return;
+  const { telegramBackupTick } = await import("./backup.js");
+  await telegramBackupTick().catch((e) => console.error("[tg backup]", e.message));
   const { date, minutes } = kyivNow();
-  if (minutes >= 8 * 60 && getSecret("tg_morning") !== date) {
+  if (minutes >= 7 * 60 && getSecret("tg_morning") !== date) {
     setSecret("tg_morning", date);
     for (const c of ownerChats()) await sendTo(c.id, `☀️ Доброго ранку!\n\n${dayPage(date)}`).catch(() => {});
   }
@@ -200,6 +256,7 @@ export async function startTelegram() {
     return;
   }
   setInterval(() => scheduled().catch((e) => console.error("[tg sched]", e.message)), 60_000).unref();
+  setInterval(() => journalTick().catch((e) => console.error("[tg journal]", e.message)), 5_000).unref();
   let offset = Number(getSecret("tg_offset")) || 0;
   (async function poll() {
     for (;;) {

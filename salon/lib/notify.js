@@ -49,5 +49,6 @@ export const pushClient = (clientId, payload) => send(all("SELECT * FROM push_su
 
 export async function notifyOwner(payload) {
   await send(all("SELECT * FROM push_subs WHERE is_admin = 1"), payload);
-  await sendToOwners(payload.title, payload.body);
+  // tg:false — подію вже пише Telegram-журнал записів (щоб не дублювати)
+  if (payload.tg !== false) await sendToOwners(payload.title, payload.body);
 }

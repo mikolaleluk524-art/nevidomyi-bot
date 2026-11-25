@@ -267,6 +267,7 @@ export function createBooking({ serviceId, addonIds = [], masterId, date, start,
         url: "/admin",
         tag: "booking-" + b.id,
         requireInteraction: true,
+        tg: false,
       }).catch(() => {});
     }
     return b;
@@ -290,6 +291,7 @@ function onConfirmed(b) {
     body: `${b.client_name} (${b.client_phone})\n${b.service_name} — ${when(b)}${paid}`,
     url: "/admin",
     tag: "booking-" + b.id,
+    tg: false,
   }).catch(() => {});
 }
 
@@ -365,7 +367,7 @@ export async function cancelBooking(id, { byClient = false, refund = true } = {}
     }
   }
   if (byClient) {
-    notifyOwner({ title: "❌ Скасування", body: `${b.client_name}: ${b.service_name} — ${when(b)}`, url: "/admin" }).catch(() => {});
+    notifyOwner({ title: "❌ Скасування", body: `${b.client_name}: ${b.service_name} — ${when(b)}`, url: "/admin", tg: false }).catch(() => {});
   } else {
     pushClient(b.client_id, { title: "Запис скасовано", body: `${b.service_name} — ${when(b)}. Оберіть інший час у застосунку.`, url: "/#/book" }).catch(() => {});
   }
