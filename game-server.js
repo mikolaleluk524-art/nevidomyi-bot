@@ -5,7 +5,7 @@
  * Чат відкривається лише коли обоє обрали «чат». Імена беруться з анкети бота, а не з Telegram.
  */
 
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, createPublicKey, timingSafeEqual, verify } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { WebSocketServer, WebSocket } from "ws";
 import { BOT_TOKEN, DB_PATH, tg } from "./src/bot.js";
@@ -34,6 +34,31 @@ const safe = (fn) => (...args) => {
   try { return fn(...args); } catch (err) { console.error("[game]", err.message); }
 };
 
+// Telegram також підписує initData ключем Ed25519 (без токена, лише з bot_id):
+// https://core.telegram.org/bots/webapps#validating-data-for-third-party-use
+const TG_ED25519 = createPublicKey({
+  key: { kty: "OKP", crv: "Ed25519", x: Buffer.from("e7bf03a2fa4602af4580703d88dda5bb59f32ed8b02a56c187fe7d34caed242d", "hex").toString("base64url") },
+  format: "jwk",
+});
+const OUR_BOT_ID = BOT_TOKEN.split(":")[0];
+
+function ed25519For(params, botId) {
+  const sig = params.get("signature");
+  if (!sig || !botId) return false;
+  const body = [...params.entries()]
+    .filter(([key]) => key !== "hash" && key !== "signature")
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("\n");
+  try {
+    return verify(null, Buffer.from(`${botId}:WebAppData\n${body}`), TG_ED25519, Buffer.from(sig, "base64url"));
+  } catch {
+    return false;
+  }
+}
+
+const verifyEd25519 = (params) => ed25519For(params, OUR_BOT_ID);
+
 function verifyInitData(raw) {
   if (!raw || !BOT_TOKEN) throw new Error("Відкрий гру через Telegram.");
   const params = new URLSearchParams(raw);
@@ -52,7 +77,12 @@ function verifyInitData(raw) {
   const expected = createHmac("sha256", secret).update(check).digest();
   let supplied;
   try { supplied = Buffer.from(hash, "hex"); } catch { throw new Error("Некоректний підпис"); }
-  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) throw new Error("Підпис Telegram не пройшов перевірку");
+  const hmacOk = supplied.length === expected.length && timingSafeEqual(supplied, expected);
+  if (!hmacOk && !verifyEd25519(params)) {
+    console.error(`[game] initData відхилено: наш bot_id=${OUR_BOT_ID}, signature ${params.has("signature") ? "є, але не від нашого бота" : "відсутній"}, поля=${[...params.keys()].join(",")}`);
+    throw new Error("Підпис Telegram не пройшов перевірку");
+  }
+  if (!hmacOk) console.warn("[game] HMAC не зійшовся, але підпис Ed25519 від Telegram для нашого бота вірний — перевір BOT_TOKEN");
   const user = JSON.parse(userRaw);
   if (!user?.id) throw new Error("Telegram user відсутній");
   return String(user.id);
