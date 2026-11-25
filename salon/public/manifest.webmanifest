@@ -1,0 +1,22 @@
+{
+  "name": "Онлайн-запис у салон",
+  "short_name": "Запис",
+  "description": "Запис до майстра, нагадування і маршрут до кабінету",
+  "lang": "uk",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#faf6f3",
+  "theme_color": "#b85c7a",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Записатись", "url": "/#/book" },
+    { "name": "Мої записи", "url": "/#/me" }
+  ]
+}

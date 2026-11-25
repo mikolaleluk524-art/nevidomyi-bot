@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Кабінет майстра</title>
+  <meta name="robots" content="noindex" />
+  <meta name="theme-color" content="#2a1f24" />
+  <link rel="manifest" href="/admin.webmanifest" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icon-180.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/app.css" />
+  <style>
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .stat { background: var(--card); border-radius: 14px; padding: 10px; box-shadow: var(--shadow); text-align: center; }
+    .stat b { display: block; font-size: 20px; }
+    .stat span { font-size: 11px; color: var(--muted); font-weight: 600; }
+    .bk { display: flex; gap: 12px; }
+    .bk .t { width: 54px; flex: none; font-weight: 800; font-size: 17px; }
+    .bk .t small { display: block; font-weight: 600; color: var(--muted); font-size: 11px; }
+    .bk.done { opacity: 0.6; }
+    .bk.cancelled, .bk.no_show { opacity: 0.45; }
+    .bk.cancelled .grow b { text-decoration: line-through; }
+    .blk { background: repeating-linear-gradient(-45deg, var(--card), var(--card) 8px, var(--line) 8px, var(--line) 16px); }
+    .sched-row { display: grid; grid-template-columns: 60px 1fr 1fr; gap: 8px; align-items: center; margin-top: 6px; }
+    .sched-row input[type="time"] { padding: 8px; }
+    .admin-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 4px 16px 10px; margin: 0 -16px; scrollbar-width: none; }
+    .admin-tabs::-webkit-scrollbar { display: none; }
+    .admin-tabs button { flex: none; border: 0; padding: 9px 14px; border-radius: 99px; background: var(--card); color: var(--ink); font: 700 13px var(--sans); box-shadow: var(--shadow); }
+    .admin-tabs button.on { background: var(--ink); color: var(--bg); }
+    .gal { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .gal .it { position: relative; }
+    .gal img { aspect-ratio: 1; object-fit: cover; border-radius: 12px; width: 100%; }
+    .gal .x { position: absolute; top: 4px; right: 4px; border: 0; width: 28px; height: 28px; border-radius: 50%; background: rgba(0,0,0,.6); color: #fff; }
+    .gal input { margin-top: 4px; font-size: 12px; padding: 6px 8px; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    td, th { padding: 8px 4px; border-bottom: 1px solid var(--line); text-align: left; }
+    nav.bar { display: none; }
+    body { padding-bottom: 30px; }
+  </style>
+</head>
+<body>
+  <header class="top" id="top"></header>
+  <main id="view"><div class="spinner"></div></main>
+  <script src="/admin.js" type="module"></script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QR-постер</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    @page { size: A4; margin: 0; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: #e9e1dd; font-family: Manrope, sans-serif; color: #2a1f24; }
+    .bar { position: sticky; top: 0; display: flex; gap: 10px; justify-content: center; padding: 12px; background: #2a1f24; }
+    .bar button { border: 0; padding: 10px 18px; border-radius: 10px; font: 700 15px Manrope, sans-serif; background: #b85c7a; color: #fff; cursor: pointer; }
+    .page {
+      width: 210mm; min-height: 297mm; margin: 16px auto; background: #faf6f3; position: relative; overflow: hidden;
+      display: flex; flex-direction: column; align-items: center; text-align: center; padding: 22mm 18mm 16mm;
+    }
+    .page::before { content: ""; position: absolute; width: 160mm; height: 160mm; border-radius: 50%; background: radial-gradient(#f0cfdb, transparent 70%); top: -60mm; right: -50mm; }
+    .page::after { content: ""; position: absolute; width: 140mm; height: 140mm; border-radius: 50%; background: radial-gradient(#ecdcc4, transparent 70%); bottom: -50mm; left: -50mm; }
+    .page > * { position: relative; z-index: 1; }
+    .tag { letter-spacing: 0.25em; text-transform: uppercase; font-size: 13pt; color: #8a7b80; font-weight: 700; }
+    h1 { font-family: "Cormorant Garamond", serif; font-size: 54pt; margin: 6mm 0 2mm; line-height: 1; }
+    h2 { font-family: "Cormorant Garamond", serif; font-size: 30pt; margin: 8mm 0 2mm; color: #b85c7a; }
+    .sub { font-size: 15pt; max-width: 150mm; color: #5a4a50; }
+    .qr { margin: 10mm 0 6mm; background: #fff; padding: 8mm; border-radius: 8mm; box-shadow: 0 6mm 16mm rgba(122, 54, 83, 0.15); }
+    .qr svg { width: 92mm; height: 92mm; display: block; }
+    .scan { font-weight: 800; font-size: 16pt; }
+    .perks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6mm; margin-top: 10mm; width: 100%; }
+    .perk { background: #fff; border-radius: 5mm; padding: 5mm 3mm; font-size: 11.5pt; font-weight: 600; }
+    .perk b { display: block; font-size: 22pt; }
+    .foot { margin-top: auto; padding-top: 8mm; font-size: 12pt; color: #5a4a50; }
+    .url { font-family: ui-monospace, monospace; font-size: 11pt; color: #8a7b80; margin-top: 2mm; }
+    @media print { .bar { display: none; } body { background: none; } .page { margin: 0; box-shadow: none; } }
+  </style>
+</head>
+<body>
+  <div class="bar"><button onclick="print()">🖨️ Друкувати / зберегти PDF</button></div>
+  <div class="page">
+    <div class="tag" id="tagline"></div>
+    <h1 id="name"></h1>
+    <h2 id="title"></h2>
+    <div class="sub" id="sub"></div>
+    <div class="qr" id="qr"></div>
+    <div class="scan">📱 Наведіть камеру телефону на код</div>
+    <div class="perks">
+      <div class="perk"><b>🗓️</b>Бачите вільні вікна 24/7</div>
+      <div class="perk"><b>🔔</b>Нагадаємо перед візитом</div>
+      <div class="perk"><b>🎁</b><span id="perk3">Бонуси за подруг</span></div>
+    </div>
+    <div class="foot"><div id="addr"></div><div class="url" id="url"></div></div>
+  </div>
+  <script src="/vendor/qrcode.js"></script>
+  <script>
+    // На телефоні зменшуємо аркуш A4, щоб він повністю влазив у екран.
+    const fit = () => {
+      const pg = document.querySelector(".page");
+      pg.style.zoom = innerWidth < 830 ? String(innerWidth / 830) : "";
+    };
+    addEventListener("resize", fit);
+    fit();
+    const q = new URLSearchParams(location.search);
+    const src = (q.get("src") || "poster").replace(/[^\w-]/g, "");
+    const link = `${location.origin}/?src=${src}`;
+    document.getElementById("title").textContent = q.get("t") || "Записуйтесь онлайн";
+    document.getElementById("sub").textContent = q.get("s") || "";
+    document.getElementById("url").textContent = location.host;
+    const code = qrcode(0, "M");
+    code.addData(link);
+    code.make();
+    document.getElementById("qr").innerHTML = code.createSvgTag({ cellSize: 6, margin: 0, scalable: true });
+    fetch("/api/public").then((r) => r.json()).then(({ settings: s }) => {
+      document.title = `QR-постер — ${s.name}`;
+      document.getElementById("name").textContent = s.name;
+      document.getElementById("tagline").textContent = s.tagline;
+      document.getElementById("addr").textContent = `📍 ${s.address}${s.cabinet ? ", " + s.cabinet : ""} · ☎ ${s.phone}`;
+      if (s.refDiscount) document.getElementById("perk3").textContent = `−${s.refDiscount} грн подрузі, бонуси вам`;
+    });
+  </script>
+</body>
+</html>
