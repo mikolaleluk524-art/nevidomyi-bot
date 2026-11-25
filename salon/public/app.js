@@ -10,6 +10,13 @@ const priceLabel = (s) => (s.addon ? "+" : s.priceFrom ? "від " : "") + money
 // Текст з порожніми рядками → абзаци
 const paras = (t, cls = "") => String(t || "").split(/\n\s*\n/).map((p) => `<p class="${cls}">${esc(p).replace(/\n/g, "<br>")}</p>`).join("");
 const tgLink = (t) => (/^\+?\d[\d\s-]{6,}$/.test(t) ? `https://t.me/+${t.replace(/\D/g, "")}` : `https://t.me/${t.replace(/^@/, "")}`);
+const isVideo = (f) => /\.(mp4|mov)$/i.test(f);
+const poster = (f) => (/^v\d/.test(f) ? ` poster="${img(f.replace(/\.\w+$/, "-poster.jpg"))}"` : "");
+// Фото або «живе» відео (без звуку, по колу)
+const media = (f, alt = "", lazy = true) =>
+  isVideo(f)
+    ? `<video src="${img(f)}"${poster(f)} muted loop playsinline autoplay preload="metadata" aria-label="${esc(alt)}"></video>`
+    : `<img ${lazy ? 'loading="lazy"' : ""} src="${img(f)}" alt="${esc(alt)}">`;
 const img = (f) => `/uploads/${encodeURIComponent(f)}`;
 const WD = ["Нд", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
 const MONTHS = ["Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень", "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень"];
@@ -154,7 +161,7 @@ async function home() {
     ${works.length ? `
       <section class="section">
         <div class="section-head"><h2>Наші роботи</h2><a href="#/works">Усі →</a></div>
-        <div class="scroller">${works.map((w) => `<a class="thumb" href="#/works"><img loading="lazy" src="${img(w.file)}" alt="${esc(w.caption)}"></a>`).join("")}</div>
+        <div class="scroller">${works.map((w) => `<a class="thumb" href="#/works">${media(w.file, w.caption)}</a>`).join("")}</div>
       </section>` : ""}
 
     <section class="section">
@@ -581,7 +588,7 @@ function works(q) {
   const list = info.gallery.filter((g) => g.kind === tab);
   view.innerHTML = `
     ${kinds.length > 1 ? `<div class="tabs">${kinds.map(([k, n]) => `<button class="${k === tab ? "on" : ""}" data-k="${k}">${n}</button>`).join("")}</div>` : ""}
-    ${list.length ? `<div class="grid ${tab === "cert" ? "certs" : ""}">${list.map((g, i) => `<div class="ph" data-i="${i}"><img loading="lazy" src="${img(g.file)}" alt="${esc(g.caption)}">${g.caption ? `<div class="cap">${esc(g.caption)}</div>` : ""}</div>`).join("")}</div>`
+    ${list.length ? `<div class="grid ${tab === "cert" ? "certs" : ""}">${list.map((g, i) => `<div class="ph" data-i="${i}">${media(g.file, g.caption)}${g.caption ? `<div class="cap">${esc(g.caption)}</div>` : ""}</div>`).join("")}</div>`
       : `<div class="empty"><div class="ic">🖼️</div>Скоро тут зʼявляться фото</div>`}
     ${info.settings.instagram ? `<a class="btn line block" style="margin-top:16px" target="_blank" rel="noopener" href="https://instagram.com/${esc(info.settings.instagram.replace(/^@/, ""))}">📸 Ще більше робіт в Instagram @${esc(info.settings.instagram.replace(/^@/, ""))}</a>` : ""}
     <a class="btn block big" style="margin-top:10px" href="#/book">Хочу так само — записатись</a>`;
@@ -592,7 +599,7 @@ function works(q) {
 function lightbox(list, i) {
   const lb = document.createElement("div");
   lb.className = "lightbox";
-  const show = () => (lb.innerHTML = `<div><img src="${img(list[i].file)}" alt=""><div class="cap">${esc(list[i].caption)}</div><div class="cap small" style="opacity:.6">${i + 1} / ${list.length} · торкніться, щоб закрити</div></div>`);
+  const show = () => (lb.innerHTML = `<div>${isVideo(list[i].file) ? `<video src="${img(list[i].file)}" muted loop playsinline autoplay controls></video>` : `<img src="${img(list[i].file)}" alt="">`}<div class="cap">${esc(list[i].caption)}</div><div class="cap small" style="opacity:.6">${i + 1} / ${list.length} · торкніться, щоб закрити</div></div>`);
   show();
   let x0 = null;
   lb.addEventListener("touchstart", (e) => (x0 = e.touches[0].clientX), { passive: true });
@@ -613,9 +620,13 @@ function reviews() {
   setTab("home");
   header("Відгуки", true);
   const r = info.rating;
+  const shots = info.gallery.filter((g) => g.kind === "review");
+  setTimeout(() => view.querySelectorAll(".grid .ph").forEach((el) => (el.onclick = () => lightbox(shots, Number(el.dataset.i)))));
   view.innerHTML = `
     ${r.count ? `<div class="card center"><div class="dist">${r.avg}</div><div class="stars" style="font-size:22px">${stars(r.avg)}</div><div class="muted small">${r.count} відгуків</div></div>` : ""}
-    <div class="stack" style="margin-top:14px">${info.reviews.map(reviewCard).join("") || `<div class="empty"><div class="ic">💬</div>Поки що немає відгуків. Будьте першою!</div>`}</div>
+    <div class="stack" style="margin-top:14px">${info.reviews.map(reviewCard).join("")}</div>
+    ${shots.length ? `<h3 style="margin-top:18px">Що пишуть клієнтки</h3><div class="grid">${shots.map((g, i) => `<div class="ph" data-i="${i}">${media(g.file, g.caption)}</div>`).join("")}</div>` : ""}
+    ${!info.reviews.length && !shots.length ? `<div class="empty"><div class="ic">💬</div>Поки що немає відгуків. Будьте першою!</div>` : ""}
     <p class="small muted center" style="margin-top:16px">Залишити відгук можна після візиту в розділі «Мої».</p>`;
 }
 
@@ -820,8 +831,11 @@ async function visit(id) {
   }
   const dest = { lat: Number(s.lat), lng: Number(s.lng) };
   const steps = info.gallery.filter((g) => g.kind === "route");
-  const gmaps = (mode) => `https://www.google.com/maps/dir/?api=1&destination=${dest.lat},${dest.lng}&travelmode=${mode}`;
-  const apple = `https://maps.apple.com/?daddr=${dest.lat},${dest.lng}&dirflg=w`;
+  // Поки майстер не поставила точку на карті — ведемо за адресою.
+  const hasPin = Boolean(dest.lat && dest.lng);
+  const target = hasPin ? `${dest.lat},${dest.lng}` : encodeURIComponent(s.address);
+  const gmaps = (mode) => `https://www.google.com/maps/dir/?api=1&destination=${target}&travelmode=${mode}`;
+  const apple = `https://maps.apple.com/?daddr=${target}&dirflg=w`;
   view.innerHTML = `
     ${b ? `<div class="card visit-card"><div class="row between"><b>${esc(b.service)}</b>${statusBadge(b.status)}</div><div class="muted">${esc(b.when)}</div><div id="countdown" class="small" style="margin-top:4px;color:var(--accent);font-weight:700"></div></div>` : ""}
     <div class="card" style="margin-top:14px;padding:0;overflow:hidden"><div id="map"></div>
@@ -849,6 +863,11 @@ async function visit(id) {
     cd();
   }
 
+  if (!hasPin) {
+    $("#map").innerHTML = `<iframe title="Карта" src="https://www.google.com/maps?q=${encodeURIComponent(s.address)}&z=16&output=embed" style="width:100%;height:100%;border:0" loading="lazy"></iframe>`;
+    $("#dist").parentElement.remove();
+    return;
+  }
   try {
     const L = await loadLeaflet();
     const map = L.map("map", { zoomControl: false, attributionControl: true }).setView([dest.lat, dest.lng], 16);

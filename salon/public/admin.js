@@ -352,6 +352,10 @@ async function resize(file, max) {
 }
 
 async function upload(file, kind, caption = "", max = 1600) {
+  if (file.type.startsWith("video/")) {
+    if (file.size > 60 * 1024 * 1024) throw new Error("Відео завелике (до 60 МБ). Обріжте його в галереї телефону.");
+    return api(`/api/admin/upload?kind=${kind}&caption=${encodeURIComponent(caption)}`, { raw: file, type: file.type === "video/quicktime" ? "video/quicktime" : "video/mp4", method: "POST" });
+  }
   const blob = await resize(file, max);
   return api(`/api/admin/upload?kind=${kind}&caption=${encodeURIComponent(caption)}`, { raw: blob, type: "image/jpeg", method: "POST" });
 }
@@ -359,22 +363,27 @@ async function upload(file, kind, caption = "", max = 1600) {
 async function photos(box) {
   const info = await fetch("/api/public").then((r) => r.json());
   const sections = [
-    ["work", "Роботи", "Фото ваших робіт — їх бачать у розділі «Роботи» та на головній."],
+    ["work", "Роботи", "Фото і короткі відео ваших робіт — їх бачать у розділі «Роботи» та на головній. Можна обрати багато файлів одразу."],
     ["cert", "Сертифікати", "Дипломи і сертифікати про навчання."],
     ["salon", "Кабінет", "Як виглядає ваш кабінет усередині."],
+    ["review", "Скріншоти відгуків", "Скріншоти листувань і відгуків клієнток з Instagram, Viber тощо. Їх видно в розділі «Відгуки». Порада: замалюйте імена й аватарки, якщо клієнтка не давала згоди."],
     ["route", "Маршрут до кабінету", "Покрокові фото: арка → вхід → поверх → двері. Підпишіть кожен крок — клієнтки побачать їх на карті перед візитом."],
   ];
   box.innerHTML = sections.map(([k, n, d]) => {
     const list = info.gallery.filter((g) => g.kind === k);
     return `<section class="card" style="margin-top:12px"><h3>${n}</h3><p class="small muted">${d}</p>
-      <div class="gal">${list.map((g) => `<div class="it"><img src="${img(g.file)}"><button class="x" data-del="${g.id}">✕</button><input data-cap="${g.id}" value="${esc(g.caption)}" placeholder="${k === "route" ? "Крок: …" : "Підпис"}"></div>`).join("")}</div>
-      <label class="btn ghost block" style="margin-top:10px">＋ Додати фото<input type="file" accept="image/*" multiple data-up="${k}" hidden></label></section>`;
+      <div class="gal">${list.map((g) => `<div class="it">${/\.(mp4|mov)$/i.test(g.file) ? `<video src="${img(g.file)}" muted playsinline preload="metadata" style="aspect-ratio:1;object-fit:cover;border-radius:12px;width:100%"></video>` : `<img src="${img(g.file)}">`}<button class="x" data-del="${g.id}">✕</button><input data-cap="${g.id}" value="${esc(g.caption)}" placeholder="${k === "route" ? "Крок: …" : "Підпис"}"></div>`).join("")}</div>
+      <label class="btn ghost block" style="margin-top:10px">＋ Додати фото<input type="file" accept="${k === "work" ? "image/*,video/mp4,video/quicktime" : "image/*"}" multiple data-up="${k}" hidden></label></section>`;
   }).join("");
   box.querySelectorAll("[data-up]").forEach((inp) => (inp.onchange = async () => {
     const files = [...inp.files];
     for (const [i, f] of files.entries()) {
       toast(`Завантажую ${i + 1} з ${files.length}…`, 1500);
-      await upload(f, inp.dataset.up);
+      try {
+        await upload(f, inp.dataset.up);
+      } catch (e) {
+        toast(`${f.name}: ${e.message}`, 4000);
+      }
     }
     route();
   }));
@@ -557,13 +566,16 @@ async function settings(box) {
       document.head.append(sc);
     });
     const L = window.L;
-    map = L.map("map").setView([s.lat, s.lng], 16);
+    const has = Boolean(Number(s.lat) && Number(s.lng));
+    // Поки точки немає — показуємо Чернівці (Instagram салону .cv)
+    map = L.map("map").setView(has ? [s.lat, s.lng] : [48.2915, 25.9403], has ? 17 : 13);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
-    marker = L.marker([s.lat, s.lng]).addTo(map);
+    marker = L.marker(has ? [s.lat, s.lng] : [48.2915, 25.9403], { opacity: has ? 1 : 0.4 }).addTo(map);
     map.on("click", (e) => {
       latI.value = e.latlng.lat.toFixed(6);
       lngI.value = e.latlng.lng.toFixed(6);
       marker.setLatLng(e.latlng);
+      marker.setOpacity(1);
     });
     latI.onchange = lngI.onchange = setPin;
   } catch {

@@ -1,5 +1,5 @@
 // Service worker: офлайн-оболонка + push-нагадування.
-const CACHE = "salon-v1";
+const CACHE = "salon-v2";
 const SHELL = ["/", "/app.js", "/app.css", "/icon.svg", "/manifest.webmanifest"];
 
 self.addEventListener("install", (e) => {
@@ -19,7 +19,7 @@ self.addEventListener("fetch", (e) => {
   e.respondWith(
     fetch(e.request)
       .then((res) => {
-        if (res.ok && (SHELL.includes(url.pathname) || url.pathname.startsWith("/uploads/"))) {
+        if (res.status === 200 && !/\.(mp4|mov)$/.test(url.pathname) && (SHELL.includes(url.pathname) || url.pathname.startsWith("/uploads/"))) {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(e.request, copy));
         }

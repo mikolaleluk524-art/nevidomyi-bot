@@ -12,7 +12,7 @@
  */
 import { createServer } from "node:http";
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import { existsSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, createReadStream, existsSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { all, getSecret, getSettings, one, run, setSecret, setSettings, UPLOAD_DIR } from "./lib/db.js";
@@ -55,6 +55,8 @@ const MIME = {
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".webp": "image/webp",
+  ".mp4": "video/mp4",
+  ".mov": "video/quicktime",
   ".ico": "image/x-icon",
 };
 
@@ -586,10 +588,11 @@ async function adminApi(req, res, p, m, q) {
   }
 
   if (m === "POST" && p === "/api/admin/upload") {
-    const kind = ["work", "cert", "route", "salon", "master"].includes(q.kind) ? q.kind : "work";
+    const kind = ["work", "cert", "route", "salon", "master", "review"].includes(q.kind) ? q.kind : "work";
     const type = String(req.headers["content-type"] || "");
-    const ext = type.includes("png") ? ".png" : type.includes("webp") ? ".webp" : ".jpg";
-    const buf = await readBody(req, 10 * 1024 * 1024);
+    const video = /video\/(mp4|quicktime)/.test(type);
+    const ext = video ? (type.includes("quicktime") ? ".mov" : ".mp4") : type.includes("png") ? ".png" : type.includes("webp") ? ".webp" : ".jpg";
+    const buf = await readBody(req, (video ? 60 : 10) * 1024 * 1024);
     if (buf.length < 100) throw new HttpError(400, "Порожній файл");
     const file = `${Date.now().toString(36)}${randomBytes(4).toString("hex")}${ext}`;
     writeFileSync(join(UPLOAD_DIR, file), buf);
@@ -683,8 +686,22 @@ function serveStatic(req, res, url) {
   if (p.startsWith("/uploads/")) {
     const f = normalize(join(UPLOAD_DIR, p.slice(9)));
     if (!f.startsWith(UPLOAD_DIR) || !existsSync(f)) return send(res, 404, "Not found");
-    res.writeHead(200, { "content-type": MIME[extname(f)] || "application/octet-stream", "cache-control": "public, max-age=31536000, immutable" });
-    return res.end(readFileSync(f));
+    const size = statSync(f).size;
+    const head = { "content-type": MIME[extname(f)] || "application/octet-stream", "cache-control": "public, max-age=31536000, immutable", "accept-ranges": "bytes" };
+    // Відео на iPhone грає лише з підтримкою Range-запитів.
+    const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || "");
+    if (range) {
+      let start = range[1] ? Number(range[1]) : size - Number(range[2]);
+      let end = range[1] && range[2] ? Number(range[2]) : size - 1;
+      if (!(start >= 0 && start <= end && end < size)) {
+        res.writeHead(416, { "content-range": `bytes */${size}` });
+        return res.end();
+      }
+      res.writeHead(206, { ...head, "content-range": `bytes ${start}-${end}/${size}`, "content-length": end - start + 1 });
+      return createReadStream(f, { start, end }).pipe(res);
+    }
+    res.writeHead(200, { ...head, "content-length": size });
+    return createReadStream(f).pipe(res);
   }
   if (p === "/" || p === "") p = "/index.html";
   if (p === "/admin" || p === "/admin/") p = "/admin.html";
@@ -707,6 +724,42 @@ function serveFile(res, f) {
   });
   res.end(readFileSync(f));
 }
+
+// ---------- стартові фото робіт (папка seed/) — додаються один раз при першому запуску ----------
+(function seedGallery() {
+  const dir = join(ROOT, "seed");
+  if (getSecret("seeded_gallery") || !existsSync(dir)) return;
+  const captions = {
+    "w01-marmur": "Мармуровий дизайн",
+    "w02-marmur-dovgi": "Мармур на довгих нігтях",
+    "w03-french": "Класичний френч",
+    "w04-fuksiia": "Соковита фуксія",
+    "w05-pudra-mygdal": "Пудровий мигдаль",
+    "w06-pudra-ruka": "Ніжний нюд",
+    "w07-chervoni": "Класичний червоний",
+    "w08-chervoni-kulak": "Червоний мигдаль",
+    "w09-konfeti": "Нюд з конфеті",
+    "w10-nude-zoloto": "Нюд із золотою поталлю",
+    "w11-opal": "Опаловий блиск",
+    "w12-vyshnia": "Вишневий квадрат",
+    "v01-pudra": "Пудровий мигдаль — відео",
+    "v02-chervoni": "Червоний мигдаль — відео",
+    "v03-fuksiia": "Фуксія — відео",
+    "v04-marmur": "Мармур — відео",
+    "c01-dont-stop-school": "Навчання в Don't Stop Nail School · листопад 2024",
+  };
+  const files = readdirSync(dir).filter((f) => /\.(jpg|mp4)$/.test(f)).sort();
+  let sort = 0;
+  for (const f of files) {
+    copyFileSync(join(dir, f), join(UPLOAD_DIR, f));
+    if (f.endsWith("-poster.jpg")) continue; // обкладинки для відео
+    const base = f.replace(/\.\w+$/, "");
+    const kind = f.startsWith("c") ? "cert" : "work";
+    // Відео — першими, щоб головна виглядала «живою»
+    run("INSERT INTO gallery(kind, file, caption, sort, created_at) VALUES(?,?,?,?,?)", kind, f, captions[base] || "", f.startsWith("v") ? sort++ - 100 : sort++, Date.now());
+  }
+  setSecret("seeded_gallery", "1");
+})();
 
 // ---------- фонові задачі: нагадування, згорання броней ----------
 async function tick() {
