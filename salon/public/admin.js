@@ -174,6 +174,7 @@ async function bookings(box) {
                 <button class="btn sm" data-dec="confirm" data-id="${b.id}">✓ Без передоплати</button>
                 <button class="btn sm ghost" data-dec="prepay" data-id="${b.id}">💳 З передоплатою</button>
                 <button class="btn sm line" data-st="cancelled" data-id="${b.id}">Відхилити</button>` : ""}
+              ${["cancelled", "no_show"].includes(b.status) ? `<button class="btn sm ghost" data-st="confirmed" data-id="${b.id}">↩ Повернути запис</button>` : ""}
               ${["confirmed", "pending"].includes(b.status) ? `
                 <button class="btn sm" data-st="done" data-id="${b.id}">✓ Прийшла</button>
                 <button class="btn sm ghost" data-st="no_show" data-id="${b.id}">Не прийшла</button>
@@ -203,11 +204,18 @@ async function bookings(box) {
   box.querySelectorAll("[data-st]").forEach((b) => (b.onclick = async () => {
     const st = b.dataset.st;
     let body = { status: st };
-    if (st === "cancelled") {
-      if (!confirm("Скасувати запис? Клієнтка отримає сповіщення, а передоплата повернеться автоматично (якщо вона була через monobank).")) return;
+    const ask = {
+      cancelled: "Скасувати запис? Клієнтка отримає сповіщення. (Якщо помилились — запис можна буде повернути.)",
+      no_show: "Позначити, що клієнтка не прийшла?",
+      confirmed: "Повернути цей запис? Він знову стане активним.",
+    }[st];
+    if (ask && !confirm(ask)) return;
+    try {
+      await api(`/api/admin/bookings/${b.dataset.id}`, { body });
+      toast(st === "done" ? "Візит зараховано, бонуси нараховано 💎" : st === "confirmed" ? "Запис повернено ✓" : "Готово");
+    } catch (e) {
+      toast(e.message, 4000);
     }
-    await api(`/api/admin/bookings/${b.dataset.id}`, { body });
-    toast(st === "done" ? "Візит зараховано, бонуси нараховано 💎" : "Готово");
     route();
   }));
   box.querySelectorAll("[data-unblock]").forEach((b) => (b.onclick = async () => {
@@ -617,6 +625,8 @@ async function settings(box) {
       ${f("birthdayDiscount", "Знижка в тиждень дня народження, %", "number")}</div>
     <button class="btn block big" id="save" style="margin-top:14px">Зберегти</button>
 
+    <section class="section card" id="safety"><h3>🛡 Збереження записів</h3><div class="spinner"></div></section>
+
     <section class="section card"><h3>Сповіщення для вас</h3>
       <p class="small muted">Отримуйте push на цей телефон про кожен новий запис, скасування і відгук.${stats.telegram ? " Telegram також підключено ✓" : ""}</p>
       <button class="btn ghost block" id="push">🔔 Увімкнути на цьому пристрої</button></section>
@@ -645,6 +655,7 @@ async function settings(box) {
     location.reload();
   };
   $("#push").onclick = adminPush;
+  renderSafety();
   $("#bsend").onclick = async () => {
     if (!$("#bt").value.trim()) return toast("Вкажіть заголовок");
     if (!confirm("Надіслати всім клієнткам?")) return;
@@ -695,6 +706,30 @@ async function settings(box) {
   } catch {
     $("#map").remove();
   }
+}
+
+async function renderSafety() {
+  const box = $("#safety");
+  const d = await api("/api/admin/backups");
+  const t = encodeURIComponent(store.get("adminToken") || "");
+  const ago = d.lastBackup ? Math.round((Date.now() - d.lastBackup) / 60000) : null;
+  box.innerHTML = `<h3>🛡 Збереження записів</h3>
+    <div class="small stack">
+      <div>${d.integrity === "ok" ? "✅ База в порядку" : `⚠️ Перевірка бази: ${esc(d.integrity)}`} · ${d.counts.bookings} записів · ${d.counts.clients} клієнток</div>
+      <div>${d.onVolume ? "✅ Дані на постійному диску — оновлення сайту їх не стирають" : "ℹ️ Локальний режим"}</div>
+      <div>✅ Автокопії: щогодини (останні 48) і щодня (останні 90). ${ago !== null ? `Остання — ${ago < 1 ? "щойно" : ago + " хв тому"}.` : ""}</div>
+      <div>${d.telegram ? `✅ Щоденна копія надсилається в Telegram${d.lastTelegram ? ` (остання ${esc(d.lastTelegram)})` : ""}` : "⚪ Копія в Telegram не налаштована"}</div>
+      <div>✅ Записи не видаляються ніколи — лише змінюють статус; історія кожної зміни зберігається.</div>
+    </div>
+    <p class="small muted" style="margin-top:10px">Раз на тиждень-два завантажуйте копію собі (у «Файли» на телефоні чи на Google Диск) — тоді записи не загубляться за жодних обставин.</p>
+    <a class="btn block" style="margin-top:8px" href="/api/admin/export.csv?t=${t}">📊 Завантажити всі записи (таблиця Excel)</a>
+    <a class="btn ghost block" style="margin-top:8px" href="/api/admin/backup?t=${t}">🗄 Завантажити повну копію бази</a>
+    <button class="btn line block" style="margin-top:8px" id="bnow">Зробити копію зараз</button>`;
+  $("#bnow").onclick = async () => {
+    await api("/api/admin/backups", { body: {} });
+    toast("Копію зроблено ✓");
+    renderSafety();
+  };
 }
 
 function b64ToBytes(b64) {

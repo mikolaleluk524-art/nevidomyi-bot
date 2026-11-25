@@ -1,13 +1,39 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 export const DATA_DIR = process.env.DATA_DIR || join(process.cwd(), "data");
-export const UPLOAD_DIR = join(DATA_DIR, "uploads");
-mkdirSync(UPLOAD_DIR, { recursive: true });
 
-export const db = new DatabaseSync(join(DATA_DIR, "salon.sqlite"));
-db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
+// ЗАХИСТ ВІД ВТРАТИ ЗАПИСІВ: на Railway база мусить лежати на постійному томі.
+// Якщо тому немає (або DATA_DIR вказує не на нього) — краще не стартувати, ніж приймати записи,
+// які зникнуть при наступному оновленні.
+if (process.env.RAILWAY_ENVIRONMENT && !process.env.ALLOW_EPHEMERAL) {
+  const vol = process.env.RAILWAY_VOLUME_MOUNT_PATH;
+  if (!vol || !process.env.DATA_DIR || !resolve(DATA_DIR).startsWith(resolve(vol))) {
+    console.error(`[db] СТОП: база (${DATA_DIR}) не на постійному томі Railway (${vol || "том не підключено"}). Записи могли б загубитися.`);
+    process.exit(1);
+  }
+}
+
+export const UPLOAD_DIR = join(DATA_DIR, "uploads");
+export const BACKUP_DIR = join(DATA_DIR, "backups");
+mkdirSync(UPLOAD_DIR, { recursive: true });
+mkdirSync(BACKUP_DIR, { recursive: true });
+export const DB_FILE = join(DATA_DIR, "salon.sqlite");
+
+export const db = new DatabaseSync(DB_FILE);
+// synchronous=FULL: кожен запис гарантовано на диску ще до відповіді клієнтці.
+db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
+
+// Перевірка цілісності бази при кожному старті
+export const integrity = (() => {
+  try {
+    return db.prepare("PRAGMA quick_check").get()?.quick_check || "unknown";
+  } catch (e) {
+    return "error: " + e.message;
+  }
+})();
+if (integrity !== "ok") console.error("[db] УВАГА: перевірка цілісності бази:", integrity);
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
@@ -131,6 +157,28 @@ CREATE TABLE IF NOT EXISTS scans (
   src TEXT PRIMARY KEY,                  -- звідки прийшли: door, entrance, stop...
   scans INTEGER DEFAULT 0
 );
+
+-- Історія кожного запису: створення і кожна зміна статусу. Нічого не видаляється.
+CREATE TABLE IF NOT EXISTS booking_log (
+  id INTEGER PRIMARY KEY,
+  booking_id INTEGER NOT NULL,
+  old_status TEXT,
+  new_status TEXT NOT NULL,
+  at INTEGER NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS booking_log_ins AFTER INSERT ON bookings BEGIN
+  INSERT INTO booking_log(booking_id, old_status, new_status, at) VALUES(NEW.id, NULL, NEW.status, CAST(strftime('%s','now') AS INTEGER) * 1000);
+END;
+CREATE TRIGGER IF NOT EXISTS booking_log_upd AFTER UPDATE OF status ON bookings WHEN OLD.status IS NOT NEW.status BEGIN
+  INSERT INTO booking_log(booking_id, old_status, new_status, at) VALUES(NEW.id, OLD.status, NEW.status, CAST(strftime('%s','now') AS INTEGER) * 1000);
+END;
+-- Записи й клієнток видаляти не можна взагалі — лише змінювати статус.
+CREATE TRIGGER IF NOT EXISTS bookings_no_delete BEFORE DELETE ON bookings BEGIN
+  SELECT RAISE(ABORT, 'Записи не видаляються — змініть статус');
+END;
+CREATE TRIGGER IF NOT EXISTS clients_no_delete BEFORE DELETE ON clients BEGIN
+  SELECT RAISE(ABORT, 'Клієнток не видаляємо');
+END;
 
 CREATE TABLE IF NOT EXISTS bonus_log (
   id INTEGER PRIMARY KEY,

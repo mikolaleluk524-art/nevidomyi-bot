@@ -15,7 +15,8 @@ import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 import { copyFileSync, createReadStream, existsSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
-import { all, getSecret, getSettings, one, run, setSecret, setSettings, UPLOAD_DIR } from "./lib/db.js";
+import { all, db, getSecret, getSettings, integrity, one, run, setSecret, setSettings, UPLOAD_DIR } from "./lib/db.js";
+import { backupPath, listBackups, runBackups, startBackups } from "./lib/backup.js";
 import { addDays, hm, humanDate, isDate, kyivNow, toMin } from "./lib/time.js";
 import { notifyOwner, pushClient, saveSubscription, VAPID_PUBLIC } from "./lib/notify.js";
 import { activateGift, createGift, GIFT_PENDING_MINUTES, giftByCode, giftLog, publicGift, redeemGift } from "./lib/gifts.js";
@@ -154,7 +155,8 @@ function sessionSecret() {
 }
 const adminToken = () => createHmac("sha256", sessionSecret()).update("admin").digest("base64url");
 function isAdmin(req) {
-  const t = String(req.headers["x-admin-token"] || "");
+  // Для завантаження файлів (копія бази, таблиця) токен можна передати в посиланні: ?t=…
+  const t = String(req.headers["x-admin-token"] || new URL(req.url, "http://x").searchParams.get("t") || "");
   const good = adminToken();
   return t.length === good.length && timingSafeEqual(Buffer.from(t), Buffer.from(good));
 }
@@ -555,6 +557,67 @@ async function adminApi(req, res, p, m, q) {
     return send(res, 200, publicGift(a));
   }
 
+  // --- збереження даних ---
+  const hm2 = p.match(/^\/api\/admin\/bookings\/(\d+)\/history$/);
+  if (hm2 && m === "GET") return send(res, 200, all("SELECT old_status, new_status, at FROM booking_log WHERE booking_id = ? ORDER BY id", Number(hm2[1])));
+
+  if (m === "GET" && p === "/api/admin/backups") {
+    const r = (sql) => one(sql).n;
+    return send(res, 200, {
+      integrity,
+      lastBackup: Number(getSecret("last_backup")) || 0,
+      telegram: Boolean(process.env.TG_BOT_TOKEN && process.env.TG_CHAT_ID),
+      lastTelegram: getSecret("tg_backup_day") || "",
+      onVolume: Boolean(process.env.RAILWAY_VOLUME_MOUNT_PATH),
+      counts: { bookings: r("SELECT COUNT(*) n FROM bookings"), clients: r("SELECT COUNT(*) n FROM clients") },
+      backups: listBackups().slice(0, 20),
+    });
+  }
+  if (m === "POST" && p === "/api/admin/backups") {
+    await runBackups();
+    return send(res, 200, { ok: true });
+  }
+  if (m === "GET" && p === "/api/admin/backup") {
+    // Свіжа копія бази — щоб зберегти собі на телефон / компʼютер
+    const f = q.file ? backupPath(q.file) : null;
+    let file = f;
+    if (!file) {
+      await runBackups();
+      file = backupPath(listBackups()[0]?.file || "");
+    }
+    if (!file || !existsSync(file)) throw new HttpError(404, "Копію не знайдено");
+    res.writeHead(200, {
+      "content-type": "application/octet-stream",
+      "content-disposition": `attachment; filename="magiia-krasy-${new Date().toISOString().slice(0, 10)}.sqlite"`,
+      "cache-control": "no-store",
+    });
+    return createReadStream(file).pipe(res);
+  }
+  if (m === "GET" && p === "/api/admin/export.csv") {
+    // Усі записи таблицею — відкривається в Excel / Google Таблицях
+    const rows = all(
+      `SELECT b.id, b.date, b.start, b.service_name, b.price, b.discount, b.bonus_used, b.paid, b.status, b.comment, b.created_at,
+        c.name, c.phone, m.name AS master FROM bookings b JOIN clients c ON c.id = b.client_id JOIN masters m ON m.id = b.master_id
+       ORDER BY b.date DESC, b.start DESC`
+    );
+    const STAT = { request: "заявка", pending: "очікує оплати", confirmed: "підтверджено", done: "прийшла", cancelled: "скасовано", no_show: "не прийшла", expired: "не оплачено" };
+    const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const lines = [
+      ["№", "Дата", "Час", "Клієнтка", "Телефон", "Послуга", "Майстер", "Ціна", "Знижка", "Бонуси", "Сплачено наперед", "Статус", "Коментар", "Створено"].map(cell).join(";"),
+      ...rows.map((b) =>
+        [b.id, b.date, hm(b.start), b.name, b.phone, b.service_name, b.master, b.price, b.discount, b.bonus_used, b.paid, STAT[b.status] || b.status, b.comment, new Date(b.created_at).toLocaleString("uk-UA", { timeZone: "Europe/Kyiv" })]
+          .map(cell)
+          .join(";")
+      ),
+    ];
+    res.writeHead(200, {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": `attachment; filename="zapysy-${new Date().toISOString().slice(0, 10)}.csv"`,
+      "cache-control": "no-store",
+    });
+    return res.end("\ufeff" + lines.join("\r\n"));
+  }
+
   if (m === "GET" && p === "/api/admin/requests") {
     // Усі нерозглянуті заявки нових клієнток, найближчі — першими
     const rows = all(
@@ -594,7 +657,17 @@ async function adminApi(req, res, p, m, q) {
     else if (body.status === "done") completeBooking(id);
     else if (body.status === "cancelled") await cancelBooking(id, { refund: body.refund !== false });
     else if (body.status === "no_show") run("UPDATE bookings SET status = 'no_show' WHERE id = ?", id);
-    else if (body.status === "confirmed") run("UPDATE bookings SET status = 'confirmed' WHERE id = ?", id);
+    else if (body.status === "confirmed") {
+      // «Повернути запис» (напр. скасували помилково) — лише якщо час ще вільний
+      if (["cancelled", "no_show", "expired"].includes(b.status)) {
+        const clash = one(
+          "SELECT id FROM bookings WHERE id != ? AND date = ? AND master_id = ? AND status IN ('request','pending','confirmed','done') AND start < ? AND start + duration > ?",
+          id, b.date, b.master_id, b.start + b.duration, b.start
+        );
+        if (clash) throw new HttpError(409, "Цей час уже зайняв інший запис — запишіть клієнтку на інший час");
+      }
+      run("UPDATE bookings SET status = 'confirmed' WHERE id = ?", id);
+    }
     if (typeof body.paid === "number") run("UPDATE bookings SET paid = ? WHERE id = ?", body.paid, id);
     return send(res, 200, { ok: true });
   }
@@ -933,7 +1006,21 @@ setInterval(async () => {
 }, 60_000);
 
 // ---------- сервер ----------
-createServer(async (req, res) => {
+startBackups();
+if (integrity !== "ok") notifyOwner({ title: "⚠️ Перевірка бази", body: `Перевірка цілісності: ${integrity}. Є резервні копії — напишіть розробнику.` }).catch(() => {});
+
+// Коректне завершення при оновленні: дописуємо все на диск і закриваємо базу.
+for (const sig of ["SIGTERM", "SIGINT"]) {
+  process.on(sig, () => {
+    try {
+      db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+      db.close();
+    } catch {}
+    process.exit(0);
+  });
+}
+
+const server = createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
   try {
     if (url.pathname.startsWith("/api/")) return await api(req, res, url);
