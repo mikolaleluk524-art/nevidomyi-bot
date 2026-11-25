@@ -170,7 +170,7 @@ function birthdayWeek(birthday, date) {
  * Постійна клієнтка = хоча б один візит і жодного пропуску.
  */
 export function prepayDecision(client, s = getSettings()) {
-  if (!(s.prepayPercent > 0)) return "none";
+  if (!s.onlinePay || !(s.prepayPercent > 0)) return "none";
   if (client?.prepay_rule === "never") return "none";
   if (client?.prepay_rule === "always") return "now";
   const visits = client ? one("SELECT COUNT(*) n FROM bookings WHERE client_id = ? AND status = 'done'", client.id).n : 0;

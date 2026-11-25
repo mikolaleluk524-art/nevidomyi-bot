@@ -169,7 +169,7 @@ async function home() {
       <a class="card" href="#/gift" style="display:flex;gap:14px;align-items:center;text-decoration:none;color:inherit;background:linear-gradient(135deg,var(--accent-soft),var(--card))">
         <div style="font-size:38px">🎁</div>
         <div class="grow"><b>Подарунковий сертифікат</b>
-          <div class="small muted">Найкращий подарунок для мами, подруги чи коханої — краса від «${esc(s.name)}». Оплата онлайн, листівка одразу в телефоні.</div>
+          <div class="small muted">Найкращий подарунок для мами, подруги чи коханої — краса від «${esc(s.name)}». Гарна листівка з кодом — одразу в телефон.</div>
         </div>
         <div style="color:var(--accent);font-weight:800">→</div>
       </a>
@@ -311,7 +311,7 @@ function price() {
             <div class="small muted">${s.addon ? "✨ Додається до основної послуги при записі" : `⏱ ${dur(s.duration)}`}</div></div>
           <div class="price">${priceLabel(s)}${s.addon ? "" : '<div class="small" style="color:var(--accent);font-weight:700">Записатись →</div>'}</div>
         </a>`).join("")}
-    </div>`).join("") + `<p class="small muted center" style="margin-top:18px">${info.settings.prepayPercent > 0 ? `Для підтвердження запису — передоплата ${info.settings.prepayPercent}%. Решта — на місці.` : "Оплата на місці."}</p>`;
+    </div>`).join("") + `<p class="small muted center" style="margin-top:18px">${info.settings.onlinePay && info.settings.prepayPercent > 0 ? `Для підтвердження запису — передоплата ${info.settings.prepayPercent}%. Решта — на місці.` : "Оплата на місці."}</p>`;
 }
 
 // ================= Запис =================
@@ -888,6 +888,7 @@ function giftBuy() {
   setTab("home");
   header("Подарунковий сертифікат", true);
   const s = info.settings;
+  if (!s.onlinePay) return giftOrder(s);
   const amounts = String(s.giftAmounts || "").split(/[,\s]+/).map(Number).filter((n) => n >= 200);
   let amount = amounts[1] || amounts[0] || 1000;
   view.innerHTML = `
@@ -945,6 +946,24 @@ function giftBuy() {
       $("#gbuy").disabled = false;
     }
   };
+}
+
+// Поки онлайн-оплата вимкнена: сертифікат замовляють у майстра, а вона надсилає листівку
+function giftOrder(s) {
+  const amounts = String(s.giftAmounts || "").split(/[,\s]+/).map(Number).filter((n) => n >= 200);
+  const text = encodeURIComponent("Добрий день! Хочу замовити подарунковий сертифікат");
+  const num = s.phone.replace(/[^\d+]/g, "");
+  view.innerHTML = `
+    <div class="gift-card"><div class="gift-top">Подарунковий сертифікат</div><div class="gift-name">${esc(s.name)}</div>
+      <div class="gift-sum">${amounts.length ? `від ${money(Math.min(...amounts))}` : "🎁"}</div><div class="gift-sub">манікюр · педикюр · догляд</div></div>
+    <div class="card stack" style="margin-top:14px">
+      <p>Найкращий подарунок — краса й турбота. Сертифікат можна використати на будь-які послуги протягом ${s.giftMonths || 6} міс.</p>
+      ${amounts.length ? `<div class="chips">${amounts.map((a) => `<span class="chip">${money(a)}</span>`).join("")}<span class="chip">або своя сума</span></div>` : ""}
+      <p class="small muted">Напишіть або зателефонуйте майстру — оберемо суму, а гарну листівку з кодом надішлемо вам у телефон, щоб ви переслали її отримувачці.</p>
+      ${s.viber ? `<a class="btn block" href="viber://chat?number=${esc(num.replace("+", "%2B"))}&draft=${text}">Замовити у Viber</a>` : ""}
+      ${s.telegram ? `<a class="btn ghost block" target="_blank" rel="noopener" href="${esc(tgLink(s.telegram))}">Замовити в Telegram</a>` : ""}
+      <a class="btn line block" href="tel:${esc(s.phone)}">📞 Подзвонити</a>
+    </div>`;
 }
 
 async function giftView(code) {

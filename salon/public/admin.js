@@ -90,6 +90,7 @@ const TABS = [
   ["settings", "⚙️ Салон"],
 ];
 let services = [];
+let onlinePay = false; // онлайн-оплата (передоплата, продаж сертифікатів) — поки вимкнена
 let masters = [];
 
 function shell(tab) {
@@ -457,10 +458,10 @@ async function clients(box, q = "") {
       <div class="small"><a href="tel:${esc(c.phone)}">${esc(c.phone)}</a> · візитів: ${c.visits}${c.last_visit ? ` · останній ${c.last_visit}` : ""}</div>
       <div class="small muted">${c.referred_by_name ? `привела: ${esc(c.referred_by_name)} · ` : ""}${c.invited ? `запросила: ${c.invited} · ` : ""}${c.birthday ? `🎂 ${c.birthday.slice(5)} · ` : ""}${c.src ? `QR: ${esc(c.src)}` : ""}</div>
       <label class="f"><span>Нотатка (бачите лише ви)</span><input data-note="${c.id}" value="${esc(c.note)}" placeholder="Алергія, улюблений колір…"></label>
-      <label class="f"><span>Передоплата</span><select data-rule="${c.id}">
+      ${onlinePay ? `<label class="f"><span>Передоплата</span><select data-rule="${c.id}">
         <option value="" ${!c.prepay_rule ? "selected" : ""}>Автоматично (постійна — без, нова — за налаштуваннями)</option>
         <option value="never" ${c.prepay_rule === "never" ? "selected" : ""}>Завжди без передоплати</option>
-        <option value="always" ${c.prepay_rule === "always" ? "selected" : ""}>Завжди з передоплатою</option></select></label>
+        <option value="always" ${c.prepay_rule === "always" ? "selected" : ""}>Завжди з передоплатою</option></select></label>` : ""}
       <div class="row" style="margin-top:8px"><button class="btn sm ghost" data-bonus="${c.id}">± Бонуси</button></div>
     </div>`).join("") || '<div class="empty">Нікого не знайдено</div>'}</div>`;
   let t;
@@ -494,8 +495,8 @@ async function gifts(box) {
       <p class="small muted">Клієнтка назвала код — введіть його, щоб побачити залишок і списати оплату.</p>
       <div class="row"><input id="gcode" placeholder="MK-XXXX-XXXX" style="text-transform:uppercase"><button class="btn" id="gfind">Знайти</button></div>
       <div id="gres"></div></div>
-    <div class="card"><h3>Продати в салоні</h3>
-      <p class="small muted">Якщо сертифікат купили у вас готівкою чи переказом — створіть його тут, і клієнтка отримає листівку за посиланням.</p>
+    <div class="card"><h3>Створити сертифікат</h3>
+      <p class="small muted">Клієнтка замовила сертифікат і оплатила вам (готівкою чи переказом) — створіть його тут і надішліть їй посилання на листівку.</p>
       <div class="two"><label class="f"><span>Сума, грн</span><input id="ns" type="number" inputmode="numeric"></label><label class="f"><span>Для кого</span><input id="nr"></label></div>
       <div class="two"><label class="f"><span>Покупець</span><input id="nn"></label><label class="f"><span>Телефон</span><input id="np" type="tel" value="+380"></label></div>
       <button class="btn ghost block" style="margin-top:10px" id="gnew">Створити сертифікат</button></div>
@@ -504,7 +505,7 @@ async function gifts(box) {
         <div class="row between"><b style="font-family:ui-monospace,monospace">${esc(g.code)}</b><span class="badge ${g.status === "active" ? "ok" : "mute"}">${GSTATUS[g.status] || g.status}</span></div>
         <div class="small">${money(g.amount)} · залишок <b>${money(g.balance)}</b>${g.recipient ? ` · для: ${esc(g.recipient)}` : ""}</div>
         <div class="small muted">купила ${esc(g.buyerName)} ${esc(g.buyerPhone)} · ${new Date(g.createdAt).toLocaleDateString("uk-UA")}${g.expiresAt ? ` · до ${new Date(g.expiresAt).toLocaleDateString("uk-UA")}` : ""}</div>
-      </div>`).join("") : '<p class="muted small">Поки що жодного. Клієнтки купують сертифікати в застосунку: головна → «Подарунковий сертифікат».</p>'}
+      </div>`).join("") : '<p class="muted small">Поки що жодного. Створіть сертифікат вище, коли клієнтка замовить його у вас.</p>'}
     </section>`;
   const find = async () => {
     const res = $("#gres");
@@ -600,17 +601,17 @@ async function settings(box) {
       <div class="two">${f("lat", "Широта", "number", 'step="any"')}${f("lng", "Довгота", "number", 'step="any"')}</div>
       <button class="btn sm ghost" id="geo" style="margin-top:8px">📍 Я зараз біля входу — взяти мою геолокацію</button></div>
     <div class="card"><h3>Запис і оплата</h3>
-      <label class="f"><span>Хто платить передоплату</span><select data-k="prepayMode">
+      ${s.onlinePay ? `<label class="f"><span>Хто платить передоплату</span><select data-k="prepayMode">
         <option value="manual" ${s.prepayMode === "manual" ? "selected" : ""}>Нові клієнтки надсилають заявку — я вирішую сама</option>
         <option value="new" ${s.prepayMode === "new" ? "selected" : ""}>Лише нові клієнтки, одразу при записі</option>
         <option value="all" ${s.prepayMode === "all" ? "selected" : ""}>Усі клієнтки</option></select></label>
       <p class="small muted">Постійна клієнтка — та, що вже була хоча б раз і жодного разу не пропустила запис. Для окремих клієнток правило можна змінити в розділі «Клієнти».</p>
-      <div class="two">${f("prepayPercent", "Передоплата, %", "number")}${f("prepayHours", "Годин на оплату після вашого рішення", "number")}</div>
+      <div class="two">${f("prepayPercent", "Передоплата, %", "number")}${f("prepayHours", "Годин на оплату після вашого рішення", "number")}</div>` : `<p class="small muted">💵 Онлайн-оплата вимкнена: клієнтки записуються одразу, оплата на місці. Подарункові сертифікати створюйте у вкладці «🎁 Подарунки».</p>`}
       ${f("cancelHours", "Безкоштовне скасування, год", "number")}
       <div class="two">${f("slotStep", "Крок запису, хв", "number")}${f("minNoticeHours", "Запис мінімум за, год", "number")}</div>
       ${f("bookingDays", "Запис наперед, днів", "number")}
-      <p class="small" style="margin-top:10px">Оплата: <b>${{ liqpay: "LiqPay підключено ✓", mono: "monobank підключено ✓" }[stats.payments] || "тестовий режим"}</b>${stats.payments === "demo" ? ". Щоб увімкнути справжню передоплату — зареєструйте магазин на liqpay.ua і додайте ключі в Railway: <code>LIQPAY_PUBLIC_KEY</code> і <code>LIQPAY_PRIVATE_KEY</code>." : ""}</p></div>
-    <div class="card"><h3>Бонуси і рефералка</h3>
+      ${s.onlinePay ? `<p class="small" style="margin-top:10px">Оплата: <b>${{ liqpay: "LiqPay підключено ✓", mono: "monobank підключено ✓" }[stats.payments] || "тестовий режим"}</b>${stats.payments === "demo" ? ". Щоб увімкнути справжню передоплату — зареєструйте магазин на liqpay.ua і додайте ключі в Railway: <code>LIQPAY_PUBLIC_KEY</code> і <code>LIQPAY_PRIVATE_KEY</code>." : ""}</p>` : ""}</div>
+    <div class="card"><h3>Бонуси і сертифікати</h3>
       <div class="two">${f("giftAmounts", "Номінали сертифікатів, грн", "text")}${f("giftMonths", "Термін дії, місяців", "number")}</div>
       <div class="two">${f("cashbackPercent", "Кешбек з візиту, %", "number")}${f("maxBonusPercent", "Макс. оплата бонусами, %", "number")}</div>
       ${f("birthdayDiscount", "Знижка в тиждень дня народження, %", "number")}</div>
@@ -712,7 +713,10 @@ async function adminPush() {
 }
 
 async function boot() {
-  fetch("/api/public").then((r) => r.json()).then((i) => (document.documentElement.dataset.theme = i.settings.theme || "rose")).catch(() => {});
+  await fetch("/api/public").then((r) => r.json()).then((i) => {
+    document.documentElement.dataset.theme = i.settings.theme || "rose";
+    onlinePay = Boolean(i.settings.onlinePay);
+  }).catch(() => {});
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
   if (!store.get("adminToken")) return login();
   try {

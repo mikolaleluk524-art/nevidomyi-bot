@@ -380,6 +380,7 @@ async function api(req, res, url) {
     const amount = Math.round(Number(body.amount));
     const name = String(body.name || "").trim().slice(0, 80);
     const phone = normPhone(body.phone);
+    if (!getSettings().onlinePay) throw new HttpError(400, "Онлайн-оплата поки недоступна. Замовте сертифікат у майстра — телефоном чи в месенджері.");
     if (!(amount >= 200 && amount <= 20000)) throw new HttpError(400, "Сума сертифіката — від 200 до 20 000 грн");
     if (name.length < 2) throw new HttpError(400, "Вкажіть, будь ласка, ваше імʼя");
     if (!phone) throw new HttpError(400, "Перевірте номер телефону");
@@ -578,7 +579,7 @@ async function adminApi(req, res, p, m, q) {
       newClients: r("SELECT COUNT(*) n FROM clients WHERE created_at >= ?", Date.now() - 30 * 86400_000).n,
       pendingReviews: r("SELECT COUNT(*) n FROM reviews WHERE status = 'pending'").n,
       requests: r("SELECT COUNT(*) n FROM bookings WHERE status = 'request'").n,
-      payments: provider(),
+      payments: getSettings().onlinePay ? provider() : "off",
       telegram: Boolean(process.env.TG_BOT_TOKEN && process.env.TG_CHAT_ID),
     });
   }
