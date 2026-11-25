@@ -32,6 +32,10 @@ const BTN = {
   search: "🔍 Знайти співрозмовника",
   next: "⏭ Наступний",
   stop: "⛔ Завершити діалог",
+  cancel: "✖️ Скасувати пошук",
+  gift: "🎁 Подарунок",
+  reveal: "👀 Хто це? · 5⭐",
+  settings: "⚙️ Налаштування",
   profile: "👤 Мій профіль",
   form: "📝 Заповнити анкету",
   photo: "📷 Завантажити фото",
@@ -48,6 +52,9 @@ const ACTIONS = {
   [BTN.search]: "search",
   [BTN.next]: "next",
   [BTN.stop]: "stop",
+  [BTN.cancel]: "stop",
+  [BTN.reveal]: "reveal",
+  [BTN.settings]: "settings",
   [BTN.profile]: "profile",
   [BTN.form]: "form",
   [BTN.photo]: "photo",
@@ -65,8 +72,14 @@ const ACTIONS = {
 
 // Ті самі кнопки іншими мовами.
 for (const [key, label] of Object.entries(BTN)) {
-  for (const lang of LANGS) ACTIONS[L(lang, label)] = key === "lang" ? "language" : key;
+  // «🎁 Подарунок» обробляє gifts.js, тут його пропускаємо.
+  if (key === "gift") continue;
+  const action = { lang: "language", cancel: "stop" }[key] ?? key;
+  for (const lang of LANGS) ACTIONS[L(lang, label)] = action;
 }
+// Платні дрібниці (зірки).
+const REVEAL_STARS = 5;
+const BACK_STARS = 5;
 // Відповіді кнопками під час анкети: переклад → український оригінал, який зберігаємо в базі.
 const CHOICE_WORDS = ["Чоловік", "Жінка", "Інше", "Спілкування", "Дружба", "Стосунки", "Флірт", "Без фото"];
 
@@ -227,31 +240,25 @@ function spam(id) {
   return "ok";
 }
 
-function menuKb() {
-  return {
-    keyboard: [
-      // Звичайна кнопка, а не web_app: Mini App з кнопки клавіатури не отримує initData,
-      // тож гра не може впізнати гравця. Бот відповідає інлайн-кнопкою, яка працює.
-      [{ text: BTN.game }],
-      [{ text: BTN.search }],
-      [{ text: BTN.next }, { text: BTN.stop }],
-      [{ text: BTN.form }],
-      [{ text: BTN.photo }],
-      [{ text: BTN.profile }, { text: BTN.premium }],
-      [{ text: BTN.invite }, { text: BTN.report }],
-      [{ text: BTN.rules }, { text: BTN.help }, { text: BTN.lang }],
-    ],
-    resize_keyboard: true,
-    is_persistent: true,
-  };
+// Меню залежить від того, де людина: у лобі, у пошуку чи в діалозі.
+const kb = (rows) => ({ keyboard: rows.map((r) => r.map((text) => ({ text }))), resize_keyboard: true, is_persistent: true });
+// «Гра» — звичайна кнопка, а не web_app: Mini App з кнопки клавіатури не отримує initData.
+// Бот відповідає інлайн-кнопкою, яка працює.
+const lobbyKb = () => kb([[BTN.game], [BTN.search], [BTN.profile, BTN.premium], [BTN.invite, BTN.settings]]);
+const chatKb = () => kb([[BTN.next, BTN.stop], [BTN.gift, BTN.reveal], [BTN.report]]);
+const searchKb = () => kb([[BTN.cancel], [BTN.game]]);
+function menuFor(id) {
+  const status = one("select status from users where id = ?", String(id))?.status;
+  return status === "chat" ? chatKb() : status === "search" ? searchKb() : lobbyKb();
 }
+const menuKb = lobbyKb;
 function placeKb() {
   return { keyboard: [[{ text: "Моє місцезнаходження", request_location: true }], ...menuKb().keyboard], resize_keyboard: true, is_persistent: true };
 }
 function choiceKb(row) {
   return { keyboard: [row.map(text => ({ text })), ...menuKb().keyboard], resize_keyboard: true, is_persistent: true };
 }
-const kbAge = { inline_keyboard: [[{ text: "Мені є 18", callback_data: "age:yes" }, { text: "Мені немає 18", callback_data: "age:no" }]] };
+const kbGender = { inline_keyboard: [[{ text: "👨 Хлопець", callback_data: "gender:Чоловік" }, { text: "👩 Дівчина", callback_data: "gender:Жінка" }], [{ text: "Інше", callback_data: "gender:Інше" }]] };
 
 export async function tg(method, body) {
   const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
@@ -291,7 +298,7 @@ export const tr = (id, text) => L(langOf(id), text);
 
 async function send(chatId, text, reply_markup) {
   const lang = langOf(chatId);
-  await tgRetry("sendMessage", { chat_id: chatId, text: L(lang, text), reply_markup: localizeMarkup(lang, reply_markup ?? menuKb()) });
+  await tgRetry("sendMessage", { chat_id: chatId, text: L(lang, text), reply_markup: localizeMarkup(lang, reply_markup ?? menuFor(chatId)) });
 }
 async function downloadFile(fileId) {
   const file = await tg("getFile", { file_id: fileId });
@@ -369,21 +376,40 @@ function isAdmin(id) {
   return Boolean(one("select id from admin where id = ?", id));
 }
 
+// Знайомство з ботом (після вибору мови): стать → вік числом. Бот лише для 18+.
 async function showAge(chatId) {
-  await send(chatId, "Невідомий — анонімний чат.\n\nСпіврозмовник не бачить твоє ім’я, юзернейм і номер. Не надсилай контакти, адресу чи фото документів.\n\nБот лише для людей від 18 років. Підтверди вік.", kbAge);
+  const id = String(chatId);
+  const me = one("select gender, profile_age from users where id = ?", id);
+  if (me?.profile_age && me.profile_age < 18) return send(chatId, "Вибач, бот лише для людей від 18 років. Повертайся, коли виповниться 18.", { remove_keyboard: true });
+  if (!me?.gender) {
+    run("update users set pending = 'onb_gender' where id = ?", id);
+    return send(chatId, "Невідомий — анонімний чат.\n\nСпіврозмовник не бачить твоє ім’я, юзернейм і номер. Не надсилай контакти, адресу чи фото документів.\n\nХто ти?", kbGender);
+  }
+  run("update users set pending = 'onb_age' where id = ?", id);
+  await send(chatId, "Скільки тобі років? Напиши число.", { remove_keyboard: true });
+}
+async function onboardAge(id, text) {
+  const n = Number(String(text).trim());
+  if (!Number.isInteger(n) || n < 5 || n > 99) return send(id, "Напиши вік числом, наприклад 21.", { remove_keyboard: true });
+  if (n < 18) {
+    run("update users set pending = null, adult = 0, profile_age = ? where id = ?", n, id);
+    return send(id, "Вибач, бот лише для людей від 18 років. Повертайся, коли виповниться 18.", { remove_keyboard: true });
+  }
+  run("update users set adult = 1, profile_age = ?, pending = null, status = case when status = 'new' then 'lobby' else status end where id = ?", n, id);
+  await showLobby(id, "Готово! 🎉\n\n🍾 Гра в бутилочку — спільна гра із завданнями й подарунками.\n🔍 Знайти співрозмовника — анонімний чат один на один.");
 }
 async function showLobby(chatId, lead) {
-  await send(chatId, lead ?? "Ти в лобі.", menuKb());
+  await send(chatId, lead ?? "Ти в лобі.", menuFor(chatId));
 }
 
 async function sendMatch(to, body, bytes, premium) {
   if (bytes?.length && premium) {
     await sendPhoto(to, bytes, body);
-    await send(to, "Пиши. «Наступний» шукає іншу анкету.", menuKb());
+    await send(to, "Пиши. «Наступний» шукає іншу анкету.", menuFor(to));
     return;
   }
   const locked = bytes?.length ? "\nФото є. Його видно лише з Premium." : "";
-  await send(to, `${body}${locked}\n\nПиши. «Наступний» шукає іншу анкету.`, menuKb());
+  await send(to, `${body}${locked}\n\nПиши. «Наступний» шукає іншу анкету.`, menuFor(to));
 }
 function photoOf(userId) {
   return one("select bytes from photos where user_id = ? order by created_at desc limit 1", userId)?.bytes ?? null;
@@ -470,12 +496,14 @@ async function disconnect(id, mode) {
   if (outcome.kind === "left") {
     if (mode === "gone") await showLobby(id, "Співрозмовник недоступний.");
     else if (mode === "next") {
-      try { await showLobby(outcome.partner, "Співрозмовник пішов шукати когось іншого."); }
+      try { await showLobby(outcome.partner, "Співрозмовник пішов шукати когось іншого."); await offerBack(outcome.partner); }
       catch (err) { if (!isGone(err)) console.error("[bot] notify", err.message); }
       await enqueue(id);
     } else {
       await showLobby(id, "Діалог завершено.");
-      try { await showLobby(outcome.partner, "Співрозмовник завершив діалог."); }
+      // Після скарги повернути співрозмовника не пропонуємо нікому.
+      if (mode !== "report") await offerBack(id);
+      try { await showLobby(outcome.partner, "Співрозмовник завершив діалог."); if (mode !== "report") await offerBack(outcome.partner); }
       catch (err) { if (!isGone(err)) console.error("[bot] notify", err.message); }
     }
     return;
@@ -497,7 +525,7 @@ async function showProfile(id) {
   const p = one("select * from users where id = ?", id);
   const pics = one("select count(*) as n from photos where user_id = ?", id);
   const invites = one("select count(*) as n from users where invited_by = ?", id);
-  await send(id, `Профіль\nІм’я: ${p?.display_name ?? "не вказано"}\nСтать: ${p?.gender ?? "не вказано"}\nВік: ${p?.profile_age ?? "не вказано"}\nЗвідки: ${p?.city ?? "не вказано"}\nЦіль: ${p?.aim ?? "не вказано"}\nПро себе: ${p?.interests ?? "не вказано"}\nФото: ${pics?.n ? "є, бачать лише з Premium" : "немає"}\nPremium: ${p && premiumActive(p.premium_until) ? "активний" : "немає"}\nПошуків за анкетою: ${p?.search_credits ?? 0}\nЗапросив друзів: ${invites?.n ?? 0}`);
+  await send(id, `Профіль\nІм’я: ${p?.display_name ?? "не вказано"}\nСтать: ${p?.gender ?? "не вказано"}\nВік: ${p?.profile_age ?? "не вказано"}\nЗвідки: ${p?.city ?? "не вказано"}\nЦіль: ${p?.aim ?? "не вказано"}\nПро себе: ${p?.interests ?? "не вказано"}\nФото: ${pics?.n ? "є, бачать лише з Premium" : "немає"}\nPremium: ${p && premiumActive(p.premium_until) ? "активний" : "немає"}\nПошуків за анкетою: ${p?.search_credits ?? 0}\nЗапросив друзів: ${invites?.n ?? 0}`, { inline_keyboard: [[{ text: "📝 Заповнити анкету", callback_data: "menu:form" }, { text: "📷 Завантажити фото", callback_data: "menu:photo" }]] });
 }
 
 async function showPremium(id) {
@@ -532,12 +560,21 @@ async function sendInvoice(id, planId) {
 }
 
 async function onPreCheckout(query) {
+  const [kind, target] = String(query.invoice_payload).split(":");
+  if (kind === "reveal" || kind === "back") {
+    const price = kind === "reveal" ? REVEAL_STARS : BACK_STARS;
+    const error = query.currency !== "XTR" || query.total_amount !== price ? "Ціна змінилась." : microCheck(String(query.from.id), kind, target);
+    await tg("answerPreCheckoutQuery", { pre_checkout_query_id: query.id, ok: !error, ...(error ? { error_message: tr(query.from.id, error) } : {}) });
+    return;
+  }
   const plan = planOf(query.invoice_payload);
   const ok = Boolean(plan && query.currency === "XTR" && query.total_amount === plan.stars);
   await tg("answerPreCheckoutQuery", { pre_checkout_query_id: query.id, ok, error_message: ok ? undefined : tr(query.from.id, "Тариф змінився. Відкрий Premium ще раз.") });
 }
 
 async function onPaid(id, pay) {
+  const [kind, target] = String(pay.invoice_payload).split(":");
+  if (kind === "reveal" || kind === "back") { ensure(id); return onMicroPaid(id, pay, kind, target); }
   const plan = planOf(pay.invoice_payload);
   ensure(id);
   if (!plan || pay.currency !== "XTR" || pay.total_amount !== plan.stars) { await send(id, "Оплату отримано, але тариф не збігся. Напиши в Premium ще раз."); return; }
@@ -572,7 +609,77 @@ async function showRules(id) {
   await send(id, "📜 Правила\n• Лише 18+.\n• Не надсилай контакти, адресу, документи і посилання на свої профілі.\n• Не ображай співрозмовника.\n• «Завершити діалог» або /stop зупиняє розмову.\n• «Наступний» шукає іншу людину.\n• Скарга — кнопка під час діалогу.");
 }
 async function showHelp(id) {
-  await send(id, "❓ Допомога\n🍾 Гра в бутилочку — гра за столом із подарунками\n🔍 Знайти — випадково безкоштовно або за анкетою з Premium\n⏭ Наступний — інша людина\n⛔ Завершити діалог — вийти\n📝 Заповнити анкету — ім’я, стать, вік, місто, ціль\n📷 Завантажити фото — скріпка, видно лише з Premium\n👤 Мій профіль — що вже збережено\n💎 Premium — зірки за пошук за анкетою\n🎁 Запросити друзів — 3 години Premium\n⚠️ Поскаржитись — лише в діалозі\n📜 Правила\n🌐 Мова — українська, русский, English\n\n/myid — твій Telegram ID\n/stopnews — без новин\n/startnews — знову новини");
+  await send(id, "❓ Допомога\n🍾 Гра в бутилочку — гра за столом із подарунками\n🔍 Знайти співрозмовника — випадково безкоштовно або за анкетою з Premium\n\nУ діалозі:\n⏭ Наступний — інша людина\n⛔ Завершити діалог — вийти\n🎁 Подарунок — подарувати співрозмовнику\n👀 Хто це? — стать, вік, місто і ціль співрозмовника\n⚠️ Поскаржитись\n\n👤 Мій профіль — анкета і фото\n💎 Premium — пошук за віком, статтю і містом\n🎁 Запросити друзів — 3 години Premium\n⚙️ Налаштування — мова, правила, новини\n\n/myid — твій Telegram ID");
+}
+async function showSettings(id) {
+  const off = Boolean(one("select id from optout where id = ?", id));
+  await send(id, "⚙️ Налаштування", { inline_keyboard: [
+    [{ text: "🌐 Мова", callback_data: "menu:lang" }],
+    [{ text: "📜 Правила", callback_data: "menu:rules" }, { text: "❓ Допомога", callback_data: "menu:help" }],
+    [{ text: off ? "🔔 Увімкнути новини" : "🔕 Вимкнути новини", callback_data: "menu:news" }],
+  ] });
+}
+
+// ---------- дрібні платні функції ----------
+async function starInvoice(id, title, description, payload, stars) {
+  await tg("sendInvoice", { chat_id: id, title: tr(id, title), description: tr(id, description), payload, currency: "XTR", provider_token: "", prices: [{ label: tr(id, title), amount: stars }] });
+}
+// 👀 Хто це: стать, вік, місто і ціль співрозмовника у випадковому чаті.
+async function askReveal(id) {
+  const me = one("select status, partner_id from users where id = ?", id);
+  if (me?.status !== "chat" || !me.partner_id) return send(id, "Це працює лише під час діалогу.");
+  await starInvoice(id, "👀 Хто співрозмовник", "Стать, вік, місто і ціль співрозмовника. Ім’я і контакти не показуємо.", `reveal:${me.partner_id}`, REVEAL_STARS);
+}
+// ↩️ Після діалогу: запит колишньому співрозмовнику продовжити розмову.
+async function offerBack(id) {
+  const me = one("select last_partner_id, status from users where id = ?", id);
+  if (!me?.last_partner_id || me.status === "chat") return;
+  await send(id, "↩️ Шкода, що розмова закінчилась? Надішлю колишньому співрозмовнику запит. Якщо прийме — діалог відкриється знову.", { inline_keyboard: [[{ text: `↩️ Повернути співрозмовника · ${BACK_STARS}⭐`, callback_data: "back" }]] });
+}
+async function askBack(id) {
+  const me = one("select last_partner_id, status from users where id = ?", id);
+  if (!me?.last_partner_id) return send(id, "Немає кого повертати.");
+  const error = microCheck(id, "back", me.last_partner_id);
+  if (error) return send(id, error);
+  await starInvoice(id, "↩️ Повернути співрозмовника", "Колишній співрозмовник отримає запит продовжити розмову. Він може відмовитись.", `back:${me.last_partner_id}`, BACK_STARS);
+}
+// Чи можна зараз оплатити reveal/back. Повертає текст помилки або null.
+function microCheck(payer, kind, target) {
+  if (kind === "reveal") {
+    const me = one("select status, partner_id from users where id = ?", payer);
+    return me?.status === "chat" && me.partner_id === target ? null : "Діалог уже завершено.";
+  }
+  const other = one("select id, banned from users where id = ?", target);
+  if (!other || other.banned) return "Цього співрозмовника вже немає.";
+  if (one("select 1 as x from reports where reporter_id = ? and target_id = ?", target, payer)) return "Ця людина не хоче продовжувати розмову.";
+  if (one("select status from users where id = ?", payer)?.status === "chat") return "Спочатку заверши поточний діалог.";
+  return null;
+}
+async function refundStars(id, chargeId, why) {
+  try { await tg("refundStarPayment", { user_id: Number(id), telegram_payment_charge_id: chargeId }); } catch (err) { console.error("[bot] refund", err.message); }
+  run("delete from payments where charge_id = ?", chargeId);
+  await send(id, why);
+}
+async function onMicroPaid(id, pay, kind, target) {
+  const fresh = run("insert into payments (charge_id, user_id, payload, stars) values (?, ?, ?, ?) on conflict (charge_id) do nothing", pay.telegram_payment_charge_id, id, pay.invoice_payload, pay.total_amount).changes;
+  if (!fresh) return;
+  const price = kind === "reveal" ? REVEAL_STARS : BACK_STARS;
+  const error = pay.currency !== "XTR" || pay.total_amount !== price ? "Ціна змінилась." : microCheck(id, kind, target);
+  if (error) return refundStars(id, pay.telegram_payment_charge_id, `${error} Зірки повернено.`);
+  if (kind === "reveal") {
+    const c = one("select gender, profile_age, city, aim from users where id = ?", target);
+    return send(id, `👀 Співрозмовник\nСтать: ${c?.gender ?? "не вказано"}\nВік: ${c?.profile_age ?? "не вказано"}\nМісто: ${c?.city ?? "не вказано"}\nЦіль: ${c?.aim ?? "не вказано"}`);
+  }
+  const req = code(8);
+  run("delete from requests where from_id = ? and to_id = ?", id, target);
+  run("insert into requests (id, from_id, to_id) values (?, ?, ?)", req, id, target);
+  try {
+    await send(target, "↩️ Колишній співрозмовник хоче продовжити розмову.", { inline_keyboard: [[{ text: "Прийняти", callback_data: `meet:yes:${req}` }, { text: "Ні", callback_data: `meet:no:${req}` }]] });
+  } catch (err) {
+    if (isGone(err)) return refundStars(id, pay.telegram_payment_charge_id, "Цього співрозмовника вже немає. Зірки повернено.");
+    console.error("[bot] back", err.message);
+  }
+  await send(id, "Запит надіслано. Якщо людина прийме, діалог відкриється.");
 }
 
 async function startForm(id) {
@@ -629,6 +736,7 @@ async function startDating(id) {
 
 async function saveGender(id, gender) {
   run("update users set gender = ?, pending = null where id = ?", gender, id);
+  if (!one("select adult from users where id = ?", id)?.adult) return showAge(id);
   const goal = one("select goal from users where id = ?", id);
   if (goal?.goal === "dating") return continueDating(id);
   await send(id, `Стать збережено: ${gender}.`);
@@ -744,7 +852,7 @@ async function reportPartner(id) {
   const me = one("select status, partner_id from users where id = ?", id);
   if (!me || me.status !== "chat" || !me.partner_id) return send(id, "Скаржитись можна лише під час діалогу.");
   run("insert into reports (reporter_id, target_id, created_at) values (?, ?, ?)", id, me.partner_id, nowSec());
-  await disconnect(id, "stop");
+  await disconnect(id, "report");
   await send(id, "Скаргу збережено. Діалог завершено.");
 }
 
@@ -832,6 +940,8 @@ async function setLanguage(id, lang, queryId) {
 
 async function onCommand(chatId, id, name, args, from) {
   if (name === "language" || name === "lang") { ensure(id, from); return showLanguage(chatId); }
+  if (name === "settings") { ensure(id, from); return showSettings(id); }
+  if (name === "reveal") { ensure(id, from); return askReveal(id); }
   if (name === "game") return send(chatId, "🍾 Запустити спільну гру:", { inline_keyboard: [[{ text: "ВІДКРИТИ ГРУ", web_app: { url: GAME_URL } }]] });
   run("update users set pending = null where id = ? and pending is not null", id);
   if (name !== "gender" && name !== "age") run("update users set goal = null where id = ? and goal = 'dating'", id);
@@ -916,7 +1026,7 @@ async function onText(message, id, text) {
   if (action) return onCommand(String(message.chat.id), id, action, "", message.from);
   const me = ensure(id, message.from);
   if (me.banned) return send(id, "Доступ до бота обмежено.");
-  if (!me.adult) return showAge(id);
+  if (!me.adult) return me.pending === "onb_age" ? onboardAge(id, text) : showAge(id);
   const pending = one("select pending from users where id = ?", id)?.pending;
   // У діалозі текст завжди йде співрозмовнику, а не в анкету.
   if (pending && me.status !== "chat") return savePending(id, pending, ["form_gender", "form_aim", "form_photo", "gender"].includes(pending) ? toUk(text, CHOICE_WORDS) : text);
@@ -976,6 +1086,20 @@ export async function handleUpdate(update) {
         else await tg("answerCallbackQuery", { callback_query_id: queryId });
       }
       else if (data.startsWith("lang:")) { ensure(id, from); await setLanguage(id, data.slice(5), queryId); }
+      else if (data === "back") { await tg("answerCallbackQuery", { callback_query_id: queryId }); ensure(id, from); await askBack(id); }
+      else if (data.startsWith("menu:")) {
+        await tg("answerCallbackQuery", { callback_query_id: queryId });
+        const item = data.slice(5);
+        if (item === "lang") await showLanguage(id);
+        else if (item === "rules") await showRules(id);
+        else if (item === "help") await showHelp(id);
+        else if (item === "form" || item === "photo") await onCommand(id, id, item, "", from);
+        else if (item === "news") {
+          const off = Boolean(one("select id from optout where id = ?", id));
+          if (off) run("delete from optout where id = ?", id); else run("insert into optout (id) values (?) on conflict (id) do nothing", id);
+          await send(id, off ? "✅ Ти знову підписаний на новини бота." : "✅ Ти відписався від новин бота.");
+        }
+      }
       else if (data.startsWith("buy:")) { await tg("answerCallbackQuery", { callback_query_id: queryId }); await sendInvoice(id, data.slice(4)); }
       else if (data === "find:random") { await tg("answerCallbackQuery", { callback_query_id: queryId }); await enqueue(id, "random"); }
       else if (data === "find:dating") { await tg("answerCallbackQuery", { callback_query_id: queryId }); await startDating(id); }
@@ -1024,7 +1148,7 @@ const COMMANDS = [
   ["start", "Почати"], ["game", "Гра в бутилочку"], ["search", "Знайти співрозмовника"], ["next", "Наступний співрозмовник"],
   ["stop", "Завершити діалог"], ["profile", "Мій профіль"], ["form", "Заповнити анкету"], ["photo", "Завантажити фото"],
   ["premium", "Premium"], ["invite", "Запросити друзів"], ["report", "Поскаржитись"], ["rules", "Правила"], ["help", "Допомога"],
-  ["language", "Змінити мову"], ["myid", "Мій Telegram ID"], ["stopnews", "Відписатись від новин"], ["startnews", "Знову отримувати новини"],
+  ["settings", "Налаштування"], ["language", "Змінити мову"], ["myid", "Мій Telegram ID"], ["stopnews", "Відписатись від новин"], ["startnews", "Знову отримувати новини"],
 ];
 export const commandList = (lang) => COMMANDS.map(([command, description]) => ({ command, description: L(lang, description) }));
 

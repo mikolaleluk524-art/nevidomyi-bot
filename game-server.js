@@ -14,7 +14,7 @@ import { DatabaseSync } from "node:sqlite";
 import { WebSocketServer, WebSocket } from "ws";
 import { BOT_TOKEN, BOT_USERNAME, DB_PATH, langOf, tg } from "./src/bot.js";
 import { L, guessLang } from "./src/i18n.js";
-import { GIFTS, createGiftInvoice, giftList, setGiftHooks } from "./gifts.js";
+import { AIM_STARS, GIFTS, createAimInvoice, createGiftInvoice, giftList, setGiftHooks } from "./gifts.js";
 
 const GAME_PATH = "/game";
 const SEATS = 10;
@@ -299,7 +299,7 @@ function sit(ws) {
     hearts: 0,
     badge: "",
   };
-  send(ws, { type: "joined", seat, gifts: giftList() });
+  send(ws, { type: "joined", seat, gifts: giftList(), aimStars: AIM_STARS });
   refresh(t);
 }
 
@@ -339,7 +339,13 @@ function onSpin(ws, msg) {
   // Пляшка частіше показує на протилежну стать: так гра — про знайомства.
   const me = t.players[ws.seat];
   const opposite = me.g ? targets.filter((i) => t.players[i].g && t.players[i].g !== me.g) : [];
-  const target = pick(opposite.length && Math.random() < 0.8 ? opposite : targets);
+  let target = pick(opposite.length && Math.random() < 0.8 ? opposite : targets);
+  // 🎯 Оплачений вибір: пляшка показує на обраного гравця, якщо він ще за столом.
+  if (me.aimAt) {
+    const forced = targets.find((i) => t.players[i].id === me.aimAt);
+    if (forced !== undefined) target = forced;
+    delete me.aimAt;
+  }
   const selected = CATS.includes(msg.selected) ? msg.selected : "all";
   const category = selected === "all" ? pick(CATS) : selected;
   const tpl = pick(TASKS[category]);
@@ -484,6 +490,21 @@ function onInvite(ws, msg) {
   refresh(t);
 }
 
+async function onAimInvoice(ws, msg) {
+  const t = ws.table;
+  const to = t?.players[Number(msg.toSeat)];
+  const now = Date.now();
+  if (now - (ws.lastInvoice ?? 0) < 2000) return;
+  ws.lastInvoice = now;
+  if (!to || to.id === ws.userId) return send(ws, { type: "error", message: "Обери іншого гравця за столом." });
+  try {
+    send(ws, { type: "invoice", link: await createAimInvoice(ws.userId, to.id) });
+  } catch (err) {
+    console.error("[game] aim invoice", err.message);
+    send(ws, { type: "error", message: "Не вдалося створити рахунок. Спробуй ще раз." });
+  }
+}
+
 async function onGiftInvoice(ws, msg) {
   const t = ws.table;
   const to = t?.players[Number(msg.toSeat)];
@@ -530,6 +551,16 @@ export function attachBottleGame(server) {
         t.invites.set(String(to), { fromId: String(from), at: Date.now() });
         send(target, { type: "gift_invite", from: fromSeat, gift });
       }
+      return true;
+    },
+    aim: (from, to) => {
+      const me = sockets.get(String(from));
+      const t = me?.table;
+      const p = t?.players[me.seat];
+      const seat = t ? t.players.findIndex((x) => x?.id === String(to)) : -1;
+      if (!p || seat < 0) return false;
+      p.aimAt = String(to);
+      send(me, { type: "aim_set", to: seat });
       return true;
     },
   });
@@ -583,6 +614,7 @@ export function attachBottleGame(server) {
       else if (msg.type === "gender") onGender(ws, msg);
       else if (msg.type === "invite") onInvite(ws, msg);
       else if (msg.type === "gift_invoice") void onGiftInvoice(ws, msg);
+      else if (msg.type === "aim_invoice") void onAimInvoice(ws, msg);
       else if (msg.type === "join") join(ws);
     }));
     ws.on("close", safe(() => {

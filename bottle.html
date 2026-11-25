@@ -101,6 +101,7 @@ button:disabled{opacity:.45;cursor:default}
   </div>
   <button class="main" id="spin" disabled>Підключення...</button>
   <button class="giftBtn" id="giftBtn" data-t="🎁 Подарунок">🎁 Подарунок</button>
+  <button class="ghost" id="aimBtn" data-t="🎯 На кого покаже пляшка · 5⭐">🎯 На кого покаже пляшка · 5⭐</button>
   <button class="ghost" id="shareBtn" data-t="📨 Покликати друзів">📨 Покликати друзів</button>
 
   <div class="pair hidden" id="pair">
@@ -169,6 +170,11 @@ const I18N = {
   ["Підключення...", "Подключение...", "Connecting..."],
   ["🎁 Подарунок", "🎁 Подарок", "🎁 Gift"],
   ["📨 Покликати друзів", "📨 Позвать друзей", "📨 Invite friends"],
+  ["🎯 На кого покаже пляшка · 5⭐", "🎯 На кого укажет бутылочка · 5⭐", "🎯 Choose who the bottle picks · 5⭐"],
+  ["🎯 На кого покаже пляшка?", "🎯 На кого укажет бутылочка?", "🎯 Who should the bottle pick?"],
+  ["Це має сенс, коли за столом хоча б двоє інших гравців. Зараз пляшка й так покаже на єдиного суперника.", "Это имеет смысл, когда за столом хотя бы двое других игроков. Сейчас бутылочка и так укажет на единственного соперника.", "This makes sense when there are at least two other players. Right now the bottle will pick your only opponent anyway."],
+  ["Наступного твого ходу пляшка покаже на обраного гравця. Оплата зірками Telegram.", "В твой следующий ход бутылочка укажет на выбранного игрока. Оплата звёздами Telegram.", "On your next turn the bottle will pick the player you choose. Paid with Telegram Stars."],
+  ["🎯 Наступного твого ходу пляшка покаже на {0}", "🎯 В твой следующий ход бутылочка укажет на {0}", "🎯 On your next turn the bottle will pick {0}"],
   ["Грай зі мною в бутилочку 🍾", "Играй со мной в бутылочку 🍾", "Play Spin the Bottle with me 🍾"],
   ["💋 Поцілувати", "💋 Поцеловать", "💋 Kiss"],
   ["👋 Відштовхнути", "👋 Оттолкнуть", "👋 Push away"],
@@ -444,6 +450,34 @@ function pickGiftTarget() {
   $("sheet").classList.remove("hidden");
 }
 $("giftBtn").addEventListener("click", pickGiftTarget);
+
+// 🎯 Обрати, на кого покаже пляшка наступного твого ходу (за зірки).
+function pickAimTarget() {
+  if (!ws || ws.readyState !== 1) return;
+  const others = [];
+  S.players.forEach((p, i) => { if (p && i !== S.seat) others.push(i); });
+  const grid = $("gifts");
+  grid.innerHTML = "";
+  $("sheetTitle").textContent = T("🎯 На кого покаже пляшка?");
+  if (others.length < 2) {
+    $("sheetText").textContent = T("Це має сенс, коли за столом хоча б двоє інших гравців. Зараз пляшка й так покаже на єдиного суперника.");
+  } else {
+    $("sheetText").textContent = T("Наступного твого ходу пляшка покаже на обраного гравця. Оплата зірками Telegram.");
+    others.forEach((i) => {
+      const b = document.createElement("button");
+      b.className = "who-btn";
+      b.textContent = (FACE[S.players[i].g] || "🙂") + " " + S.players[i].name;
+      b.addEventListener("click", () => {
+        ws.send(JSON.stringify({ type: "aim_invoice", toSeat: i }));
+        $("sheet").classList.add("hidden");
+        addFeed(T("Готую оплату..."));
+      });
+      grid.appendChild(b);
+    });
+  }
+  $("sheet").classList.remove("hidden");
+}
+$("aimBtn").addEventListener("click", pickAimTarget);
 // Запрошення друзів: посилання з кодом гравця (за друга — 3 години Premium).
 $("shareBtn").addEventListener("click", () => {
   const link = "https://t.me/" + (S.bot || "nevidomyi_chat_bot") + (S.invite ? "?start=" + S.invite : "");
@@ -572,6 +606,9 @@ function handle(m) {
       [T("🔒 Побути наодинці"), () => { ws.send(JSON.stringify({ type: "invite", yes: true })); hideOver(); }],
       [T("Дякую, лишусь за столом"), () => { ws.send(JSON.stringify({ type: "invite", yes: false })); hideOver(); }],
     ]);
+  } else if (m.type === "aim_set") {
+    addFeed(T("🎯 Наступного твого ходу пляшка покаже на {0}", nameOf(m.to)), true);
+    buzz("notificationOccurred", "success");
   } else if (m.type === "notice") {
     addFeed(m.text);
   } else if (m.type === "invoice") {

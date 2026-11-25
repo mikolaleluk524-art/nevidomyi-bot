@@ -21,8 +21,11 @@ export const GIFTS = {
 const hasGift = (id) => Object.hasOwn(GIFTS, id);
 export const giftList = () => Object.entries(GIFTS).map(([id, g]) => ({ id, ...g }));
 
-// game-server.js підключає сюди перевірку «сидять за одним столом» і показ подарунка за столом.
-let hooks = { sameTable: () => false, tableGift: () => false };
+// 🎯 «На кого покаже пляшка»: наступного ходу пляшка вкаже на обраного гравця.
+export const AIM_STARS = 5;
+
+// game-server.js підключає сюди перевірку «сидять за одним столом», показ подарунка і 🎯.
+let hooks = { sameTable: () => false, tableGift: () => false, aim: () => false };
 export function setGiftHooks(next) {
   hooks = { ...hooks, ...next };
 }
@@ -96,6 +99,39 @@ export async function createGiftInvoice(from, to, giftId, kind) {
   if (!allowed(kind, String(from), String(to))) throw new Error("not_allowed");
   return tg("createInvoiceLink", { ...invoiceFields(GIFTS[giftId], langOf(from)), payload: `gift:${giftId}:${to}:${kind}` });
 }
+
+export async function createAimInvoice(from, to) {
+  if (!hooks.sameTable(String(from), String(to))) throw new Error("not_allowed");
+  const lang = langOf(from);
+  return tg("createInvoiceLink", {
+    title: L(lang, "🎯 Пляшка на гравця"),
+    description: L(lang, "Наступного твого ходу пляшка покаже на обраного гравця."),
+    currency: "XTR",
+    prices: [{ label: L(lang, "🎯 Пляшка на гравця"), amount: AIM_STARS }],
+    payload: `aim:${to}`,
+  });
+}
+
+async function onAimPreCheckout(query) {
+  const to = String(query.invoice_payload).slice(4);
+  const ok = query.currency === "XTR" && query.total_amount === AIM_STARS && hooks.sameTable(String(query.from.id), to);
+  await tg("answerPreCheckoutQuery", { pre_checkout_query_id: query.id, ok, ...(ok ? {} : { error_message: L(langOf(query.from.id), "Гравець уже вийшов зі столу.") }) });
+}
+
+async function onAimPaid(from, pay) {
+  const chargeId = pay.telegram_payment_charge_id;
+  const fresh = withDb((db) => db.prepare("insert into payments (charge_id, user_id, payload, stars) values (?, ?, ?, ?) on conflict (charge_id) do nothing").run(chargeId, from, pay.invoice_payload, pay.total_amount).changes);
+  if (!fresh) return;
+  let ok = false;
+  try { ok = pay.total_amount === AIM_STARS && hooks.aim(from, String(pay.invoice_payload).slice(4)); } catch (err) { console.error("[gift] aim", err.message); }
+  if (ok) return;
+  try { await tg("refundStarPayment", { user_id: Number(from), telegram_payment_charge_id: chargeId }); } catch (err) { console.error("[gift] refund", err.message); }
+  withDb((db) => db.prepare("delete from payments where charge_id = ?").run(chargeId));
+  await say(from, "Гравець уже вийшов зі столу. Зірки повернено.");
+}
+
+// Кнопка «🎁 Подарунок» у діалозі — будь-якою мовою.
+const GIFT_BUTTONS = new Set(LANGS.map((l) => L(l, "🎁 Подарунок")));
 
 async function showGifts(userId) {
   if (!partnerOf(userId)) {
@@ -188,6 +224,14 @@ async function onPaid(from, pay) {
 // true — оновлення наше, bot.js його вже не обробляє.
 export async function handleGiftUpdate(update) {
   try {
+    if (update.pre_checkout_query?.invoice_payload?.startsWith("aim:")) {
+      await onAimPreCheckout(update.pre_checkout_query);
+      return true;
+    }
+    if (update.message?.successful_payment?.invoice_payload?.startsWith("aim:")) {
+      await onAimPaid(String(update.message.from.id), update.message.successful_payment);
+      return true;
+    }
     if (update.pre_checkout_query?.invoice_payload?.startsWith("gift:")) {
       await onPreCheckout(update.pre_checkout_query);
       return true;
@@ -201,7 +245,7 @@ export async function handleGiftUpdate(update) {
       await onCallback(update.callback_query);
       return true;
     }
-    if (msg?.chat?.type === "private" && typeof msg.text === "string" && /^\/gift(@\w+)?(\s|$)/i.test(msg.text.trim())) {
+    if (msg?.chat?.type === "private" && typeof msg.text === "string" && (/^\/gift(@\w+)?(\s|$)/i.test(msg.text.trim()) || GIFT_BUTTONS.has(msg.text.trim()))) {
       await showGifts(String(msg.from.id));
       return true;
     }
