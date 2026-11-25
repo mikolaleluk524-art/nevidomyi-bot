@@ -21,7 +21,7 @@ import {
   tg,
 } from "./src/bot.js";
 import { adminRoutes, setMonitorSource } from "./admin.js";
-import { attachBottleGame, gameStats } from "./game-server.js";
+import { attachBottleGame, gameEvents, gameStats } from "./game-server.js";
 import { handleGiftUpdate, publishGiftCommand } from "./gifts.js";
 
 const DASHBOARD = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "dashboard.html"), "utf8");
@@ -148,7 +148,7 @@ function listen() {
     res.end(fresh ? "ok" : "poll stalled");
   });
   attachBottleGame(server);
-  setMonitorSource(() => ({ beatAgo: Date.now() - beat, startedAt, game: gameStats(), memoryMb: Math.round(process.memoryUsage().rss / 1048576) }));
+  setMonitorSource(() => ({ beatAgo: Date.now() - beat, startedAt, game: gameStats(), events: gameEvents(), memoryMb: Math.round(process.memoryUsage().rss / 1048576) }));
   server.listen(port, "0.0.0.0", () => {
     console.info(`[bot] health + admin + bottle game :${port}`);
   });

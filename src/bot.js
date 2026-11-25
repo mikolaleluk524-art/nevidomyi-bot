@@ -24,6 +24,14 @@ export const GAME_URL = `https://${PUBLIC_DOMAIN}/bottle.html`;
 export const CLAIM_CODE = process.env.CLAIM_CODE || ""; // порожній = /claim вимкнено
 export const ADMIN_ID = Number(process.env.ADMIN_ID || 0);
 const FRIEND_PREMIUM = 3 * 60 * 60;
+// Супер-реферал: за кожного друга 3 години Premium + 🌹, а на рубежах — більше.
+// Друг рахується, коли пройшов перевірку віку. Друг отримує вітальні 🌹🌹.
+const REF_TIERS = [
+  { n: 3, aims: 3, text: "🎯×3" },
+  { n: 5, days: 7, text: "7 днів Premium" },
+  { n: 10, days: 30, text: "30 днів Premium" },
+];
+const WELCOME_ROSES = 2;
 const TZ = "Europe/Kiev"; // працює в усіх версіях ICU
 export const DB_PATH = join(process.env.DATA_DIR || dirname(fileURLToPath(import.meta.url)), "nevidomyi.sqlite");
 
@@ -396,6 +404,7 @@ async function onboardAge(id, text) {
     return send(id, "Вибач, бот лише для людей від 18 років. Повертайся, коли виповниться 18.", { remove_keyboard: true });
   }
   run("update users set adult = 1, profile_age = ?, pending = null, status = case when status = 'new' then 'lobby' else status end where id = ?", n, id);
+  await rewardInvite(id);
   await showLobby(id, "Готово! 🎉\n\n🍾 Гра в бутилочку — спільна гра із завданнями й подарунками.\n🔍 Знайти співрозмовника — анонімний чат один на один.");
 }
 async function showLobby(chatId, lead) {
@@ -598,12 +607,48 @@ async function onPaid(id, pay) {
   await send(id, pay.is_recurring ? `Підписку на чат знайомств продовжено до ${till}.` : "subscribe" in plan ? `Підписку оформлено до ${till}. Далі Telegram продовжить її сам. Скасувати можна в налаштуваннях Telegram.` : `Оплачено. Пошук за анкетою відкрито: ${plan.label}.`);
 }
 
+// Безкоштовні 🌹 / 🎯 у грі — той самий гаманець, що й у щоденної винагороди.
+function addWallet(id, roses = 0, aims = 0) {
+  run("create table if not exists daily (user_id text primary key, last_day text, streak integer not null default 0, roses integer not null default 0, aims integer not null default 0)");
+  run("insert into daily (user_id, roses, aims) values (?, ?, ?) on conflict (user_id) do update set roses = daily.roses + excluded.roses, aims = daily.aims + excluded.aims", id, roses, aims);
+}
+const friendsOf = (id) => one("select count(*) as n from users where invited_by = ? and invite_rewarded = 1", id)?.n ?? 0;
+
+// Друг пройшов перевірку віку: нагорода тому, хто запросив, і вітальний подарунок другу.
+async function rewardInvite(id) {
+  const me = one("select invited_by from users where id = ?", id);
+  if (!me?.invited_by) return;
+  const done = run("update users set invite_rewarded = 1 where id = ? and invite_rewarded = 0", id);
+  if (!done.changes) return;
+  const src = me.invited_by;
+  const now = nowSec();
+  run("update users set premium_until = max(premium_until, ?) + ? where id = ?", now, FRIEND_PREMIUM, src);
+  addWallet(src, 1, 0);
+  addWallet(id, WELCOME_ROSES, 0);
+  run("create table if not exists ref_rewards (user_id text not null, tier integer not null, primary key (user_id, tier))");
+  const n = friendsOf(src);
+  const lines = ["🎁 Друг прийшов за твоїм посиланням: +3 години Premium і 🌹 у грі."];
+  for (const tier of REF_TIERS) {
+    if (n < tier.n) continue;
+    if (!run("insert into ref_rewards (user_id, tier) values (?, ?) on conflict do nothing", src, tier.n).changes) continue;
+    if (tier.aims) addWallet(src, 0, tier.aims);
+    if (tier.days) run("update users set premium_until = max(premium_until, ?) + ? where id = ?", nowSec(), tier.days * 86400, src);
+    lines.push(`🏆 Уже ${tier.n} друзів! Бонус: ${tier.text}.`);
+  }
+  const next = REF_TIERS.find((t) => n < t.n);
+  if (next) lines.push(`Наступний бонус: ${next.n} друзів — ${next.text} (ще ${next.n - n}).`);
+  try { await send(src, lines.join("\n")); } catch (err) { if (!isGone(err)) console.error("[bot] invite", err.message); }
+  try { await send(id, `🎁 Вітальний подарунок: 🌹×${WELCOME_ROSES} у грі — подаруй їх тому, хто сподобається.`); } catch {}
+}
+
 async function showInvite(id) {
   const p = one("select * from users where id = ?", id);
-  const invites = one("select count(*) as n from users where invited_by = ?", id);
+  const invites = { n: friendsOf(id) };
   const link = `https://t.me/${BOT_USERNAME}?start=${p?.invite_code ?? ""}`;
   const share = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(tr(id, "Анонімний чат і гра в бутилочку з подарунками. Заходь 👉"))}`;
-  await send(id, `Надішли другу це посилання:\n${link}\n\nУже запросили: ${invites?.n ?? 0}\nЗа кожного друга — 3 години Premium.`, { inline_keyboard: [[{ text: "📨 Поділитися посиланням", url: share }]] });
+  const ladder = REF_TIERS.map((t) => `${invites.n >= t.n ? "✅" : "▫️"} ${t.n} друзів — ${t.text}`).join("\n");
+  const next = REF_TIERS.find((t) => invites.n < t.n);
+  await send(id, `🎁 Супер-реферал\nНадішли другу це посилання:\n${link}\n\nЗа кожного друга — 3 години Premium + 🌹 у грі.\nДруг теж отримує 🌹🌹.\n\n${ladder}\n\nУже запросили: ${invites.n}${next ? `\nДо наступного бонусу: ще ${next.n - invites.n}` : ""}`, { inline_keyboard: [[{ text: "📨 Поділитися посиланням", url: share }]] });
 }
 async function showRules(id) {
   await send(id, "📜 Правила\n• Лише 18+.\n• Не надсилай контакти, адресу, документи і посилання на свої профілі.\n• Не ображай співрозмовника.\n• «Завершити діалог» або /stop зупиняє розмову.\n• «Наступний» шукає іншу людину.\n• Скарга — кнопка під час діалогу.");
@@ -915,6 +960,29 @@ async function broadcast(adminChat, text) {
   catch (err) { console.error("[bot] broadcast", err.message); }
 }
 
+// Розсилка з монітора: кожен отримує текст своєю мовою (uk, ru, en). Одна розсилка за раз.
+export const broadcastStatus = { running: false, total: 0, sent: 0, blocked: 0, failed: 0, startedAt: 0, finishedAt: 0 };
+export function broadcastAll(texts) {
+  if (broadcastStatus.running) return null;
+  const rows = q("select id, lang, language_code from users where adult = 1 and banned = 0 and id not in (select id from optout)");
+  Object.assign(broadcastStatus, { running: true, total: rows.length, sent: 0, blocked: 0, failed: 0, startedAt: Date.now(), finishedAt: 0 });
+  void (async () => {
+    for (const row of rows) {
+      const lang = LANGS.includes(row.lang) ? row.lang : guessLang(row.language_code);
+      const body = String(texts[lang] || texts.uk || "").trim();
+      if (!body) { broadcastStatus.failed++; continue; }
+      const footer = "\n\n" + L(lang, "Щоб відписатись від новин: /stopnews");
+      try { await tgRetry("sendMessage", { chat_id: row.id, text: body.slice(0, 4096 - footer.length) + footer }); broadcastStatus.sent++; }
+      catch (err) { if (isGone(err)) broadcastStatus.blocked++; else broadcastStatus.failed++; }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    broadcastStatus.running = false;
+    broadcastStatus.finishedAt = Date.now();
+  })();
+  return rows.length;
+}
+export const newsAudience = () => one("select count(*) as n from users where adult = 1 and banned = 0 and id not in (select id from optout)")?.n ?? 0;
+
 async function stats(chatId) {
   const now = nowSec();
   const s = one(`select count(*) as total, sum(adult = 1) as adults, sum(premium_until > ?) as prem, sum(status = 'search') as searching, sum(status = 'chat') as chatting, sum(banned = 1) as banned from users`, now);
@@ -972,12 +1040,8 @@ async function onCommand(chatId, id, name, args, from) {
     if (startCode && me.status === "new") {
       const src = one("select id from users where invite_code = ? and id <> ? limit 1", startCode, id);
       if (src) {
-        const linked = run("update users set invited_by = ?, invite_rewarded = 1 where id = ? and invited_by is null and invite_rewarded = 0", src.id, id);
-        if (linked.changes) {
-          const now = nowSec();
-          run("update users set premium_until = max(premium_until, ?) + ? where id = ?", now, FRIEND_PREMIUM, src.id);
-          try { await send(src.id, "🎁 Друг зайшов за твоїм посиланням. Тобі 3 години Premium."); } catch (err) { if (!isGone(err)) console.error("[bot] invite", err.message); }
-        }
+        // Нагорода — коли друг пройде перевірку віку (rewardInvite).
+        run("update users set invited_by = ? where id = ? and invited_by is null and invite_rewarded = 0", src.id, id);
       }
     }
     if (me.banned) return send(chatId, "Доступ до бота обмежено.");
@@ -1050,6 +1114,7 @@ async function onAge(id, yes, queryId) {
     return;
   }
   run("update users set adult = 1, status = 'lobby' where id = ? and status <> 'chat'", id);
+  await rewardInvite(id);
   await tg("answerCallbackQuery", { callback_query_id: queryId, text: tr(id, "Вік підтверджено") });
   await showLobby(id, "Вік підтверджено.");
 }

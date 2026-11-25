@@ -11,12 +11,12 @@
  * За столом є спільний чат; посилання, @нікнейми й телефони в ньому приховуються.
  */
 
-import { createHmac, createPublicKey, timingSafeEqual, verify } from "node:crypto";
+import { createHmac, createPublicKey, randomBytes, timingSafeEqual, verify } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { WebSocketServer, WebSocket } from "ws";
 import { BOT_TOKEN, BOT_USERNAME, DB_PATH, langOf, tg } from "./src/bot.js";
 import { L, guessLang } from "./src/i18n.js";
-import { AIM_STARS, GIFTS, createAimInvoice, createGiftInvoice, giftList, setGiftHooks } from "./gifts.js";
+import { AIM_STARS, GIFTS, WISH_STARS, createAimInvoice, createGiftInvoice, createWishInvoice, giftList, refundStars, setGiftHooks } from "./gifts.js";
 
 const GAME_PATH = "/game";
 const SEATS = 10;
@@ -38,6 +38,16 @@ export const DAILY = [
 ];
 const kyivDay = (d = new Date()) => d.toLocaleDateString("en-CA", { timeZone: "Europe/Kiev" });
 const prevDay = (day) => { const t = new Date(`${day}T12:00:00Z`); t.setUTCDate(t.getUTCDate() - 1); return t.toISOString().slice(0, 10); };
+// ✨ Бажання: 5 хвилин на відповіді, переможець отримує 👑.
+const WISH_MS = Number(process.env.GAME_WISH_MS) || 5 * 60_000;
+const WISH_HEARTS = 40;
+const CROWN = { id: "crown", emoji: "👑", name: "Корона бажань" };
+
+// Події, які власник запускає з монітора. 💖 Подвійні серця: усі ❤ ×2.
+const events = { doubleUntil: 0 };
+const heartMult = () => (Date.now() < events.doubleUntil ? 2 : 1);
+const eventView = () => ({ type: "event", doubleUntil: events.doubleUntil, now: Date.now() });
+
 // Скільки ❤ дає подарунок: 🌹10⭐ → 2, 💎250⭐ → 50.
 export const giftHearts = (stars) => Math.max(1, Math.round(stars / 5));
 
@@ -357,6 +367,8 @@ function sit(ws) {
   const w = dailyState(ws.userId);
   send(ws, { type: "wallet", roses: w.roses, aims: w.aims });
   if (!w.claimed) send(ws, { type: "daily", day: w.day, streak: w.streak, rewards: DAILY });
+  if (events.doubleUntil > Date.now()) send(ws, eventView());
+  if (t.wish) send(ws, { type: "wish", wish: wishView(t) });
 }
 
 function cancelRound(t, text) {
@@ -374,6 +386,7 @@ function cancelRound(t, text) {
 function leave(ws) {
   const t = ws.table;
   if (!t) return;
+  if (t.wish?.fromId === ws.userId) closeWish(t, null);
   const seat = ws.seat;
   t.players[seat] = null;
   ws.table = null;
@@ -451,7 +464,7 @@ function onReact(ws, msg) {
   const to = t.players.findIndex((p) => p?.id === t.last.id);
   if (to < 0) return;
   t.last.reacted.add(ws.userId);
-  t.players[to].hearts += 1;
+  t.players[to].hearts += heartMult();
   broadcast(t, { type: "react", from: ws.seat, to, emoji: msg.emoji });
   broadcast(t, snapshot(t));
 }
@@ -523,7 +536,7 @@ function finishPair(t) {
   t.phase = "idle";
   let outcome = pa && pb ? pairOutcome(ca, cb) : "none";
   if (outcome === "alone" && !openDialog(pa.id, pb.id)) outcome = "busy";
-  if (outcome === "kiss") { pa.hearts += 1; pb.hearts += 1; }
+  if (outcome === "kiss") { pa.hearts += heartMult(); pb.hearts += heartMult(); }
   broadcast(t, { type: "pair_done", a, b, ca, cb, outcome });
   if (outcome === "alone") goPrivate(t, pa, pb, "🔒 Ви обрали побути наодинці. Пиши: я передам повідомлення без твого імені. «Завершити діалог» зупиняє розмову.");
   t.turn = nextSeat(t, t.spinner);
@@ -547,13 +560,13 @@ function onInvite(ws, msg) {
 }
 
 // Подарунок за столом: ❤, значок на аватарці і запрошення побути наодинці.
-function deliverTableGift(from, to, gift) {
+function deliverTableGift(from, to, gift, baseHearts) {
   const target = sockets.get(String(to));
   const t = target?.table;
   if (!t) return false;
   const sender = sockets.get(String(from));
   const fromSeat = sender?.table === t ? sender.seat : -1;
-  const hearts = giftHearts(GIFTS[gift.id]?.stars ?? 5);
+  const hearts = (baseHearts ?? giftHearts(GIFTS[gift.id]?.stars ?? 5)) * heartMult();
   const p = t.players[target.seat];
   if (p) { p.hearts += hearts; p.badge = gift.emoji; }
   broadcast(t, { type: "gift", from: fromSeat, to: target.seat, gift, hearts });
@@ -564,6 +577,116 @@ function deliverTableGift(from, to, gift) {
   }
   return true;
 }
+
+// ---------- ✨ бажання ----------
+const seatOf = (t, id) => t.players.findIndex((p) => p?.id === String(id));
+function wishView(t) {
+  const w = t.wish;
+  if (!w) return null;
+  return {
+    from: seatOf(t, w.fromId),
+    text: w.text,
+    left: Math.max(0, w.until - Date.now()),
+    hearts: WISH_HEARTS,
+    answers: w.answers.map((a) => ({ seat: seatOf(t, a.userId), name: a.name, text: a.text })),
+  };
+}
+const broadcastWish = (t) => broadcast(t, { type: "wish", wish: wishView(t) });
+
+async function onWishInvoice(ws, msg) {
+  const t = ws.table;
+  if (!t) return;
+  const now = Date.now();
+  if (now - (ws.lastInvoice ?? 0) < 2000) return;
+  ws.lastInvoice = now;
+  if (t.wish) return send(ws, { type: "error", message: "За столом уже є бажання. Зачекай, поки його виконають." });
+  if (seated(t).length < 2) return send(ws, { type: "error", message: "Потрібен хоча б ще один гравець за столом." });
+  const text = clean(msg.text, 150);
+  if (text.length < 3) return send(ws, { type: "error", message: "Напиши бажання, хоча б кілька слів." });
+  ws.pendingWish = { id: randomBytes(6).toString("hex"), text };
+  try {
+    send(ws, { type: "invoice", link: await createWishInvoice(ws.userId, ws.pendingWish.id) });
+  } catch (err) {
+    console.error("[game] wish invoice", err.message);
+    send(ws, { type: "error", message: "Не вдалося створити рахунок. Спробуй ще раз." });
+  }
+}
+
+function wishReady(from, id) {
+  const ws = sockets.get(String(from));
+  return Boolean(ws?.table && ws.pendingWish?.id === id && !ws.table.wish);
+}
+
+function wishPaid(from, id, chargeId) {
+  if (!wishReady(from, id)) return false;
+  const ws = sockets.get(String(from));
+  const t = ws.table;
+  t.wish = { id, fromId: ws.userId, text: ws.pendingWish.text, until: Date.now() + WISH_MS, answers: [], chargeId };
+  delete ws.pendingWish;
+  clearTimeout(t.timers.wish);
+  t.timers.wish = setTimeout(safe(() => closeWish(t, null)), WISH_MS);
+  broadcastWish(t);
+  return true;
+}
+
+function onWishAnswer(ws, msg) {
+  const t = ws.table;
+  const w = t?.wish;
+  if (!w || ws.userId === w.fromId || w.answers.some((a) => a.userId === ws.userId)) return;
+  const text = clean(msg.text, 150);
+  if (!text) return;
+  w.answers.push({ userId: ws.userId, name: t.players[ws.seat]?.name ?? "", text });
+  broadcastWish(t);
+}
+
+function onWishPick(ws, msg) {
+  const t = ws.table;
+  const w = t?.wish;
+  if (!w || ws.userId !== w.fromId) return;
+  const a = w.answers[Number(msg.idx)];
+  if (a) closeWish(t, a);
+}
+
+// Кінець бажання: 👑 обраному (або першому, хто ще за столом); якщо відповідей немає — повертаємо зірки.
+function closeWish(t, pick) {
+  const w = t.wish;
+  if (!w) return;
+  clearTimeout(t.timers.wish);
+  delete t.timers.wish;
+  t.wish = null;
+  const present = (a) => seatOf(t, a.userId) >= 0;
+  const winner = pick && present(pick) ? pick : w.answers.find(present);
+  if (!winner) {
+    broadcast(t, { type: "wish_done", from: seatOf(t, w.fromId), to: -1, text: w.text });
+    void refundStars(w.fromId, w.chargeId, "✨ Твоє бажання ніхто не виконав — зірки повернено.");
+    return;
+  }
+  broadcast(t, { type: "wish_done", from: seatOf(t, w.fromId), to: seatOf(t, winner.userId), text: w.text, answer: winner.text });
+  deliverTableGift(w.fromId, winner.userId, CROWN, WISH_HEARTS);
+  withDb((db) => {
+    db.exec("create table if not exists gifts (id integer primary key autoincrement, from_id text not null, to_id text not null, gift text not null, stars integer not null, charge_id text unique, created_at integer not null)");
+    db.prepare("insert into gifts (from_id, to_id, gift, stars, charge_id, created_at) values (?, ?, 'crown', ?, ?, ?)").run(w.fromId, winner.userId, WISH_STARS, w.chargeId, Math.floor(Date.now() / 1000));
+  });
+}
+
+// ---------- події від власника ----------
+export function setGameEvent(type, hours) {
+  if (type === "double_hearts") {
+    events.doubleUntil = Date.now() + Math.max(0.25, Math.min(24, Number(hours) || 1)) * 3600_000;
+    for (const ws of sockets.values()) send(ws, eventView());
+    return { doubleUntil: events.doubleUntil };
+  }
+  if (type === "free_rose") {
+    withDb((db) => {
+      db.exec("create table if not exists daily (user_id text primary key, last_day text, streak integer not null default 0, roses integer not null default 0, aims integer not null default 0)");
+      db.prepare("insert into daily (user_id, roses) select id, 1 from users where adult = 1 and banned = 0 on conflict (user_id) do update set roses = daily.roses + 1").run();
+    });
+    for (const ws of sockets.values()) { sendWallet(ws); send(ws, { type: "notice", text: "🌹 Подарунок від бота: безкоштовна троянда кожному!" }); }
+    return { ok: true };
+  }
+  return null;
+}
+export const gameEvents = () => ({ doubleUntil: events.doubleUntil > Date.now() ? events.doubleUntil : 0 });
 
 function onDailyClaim(ws) {
   const res = claimDaily(ws.userId);
@@ -650,6 +773,8 @@ export function attachBottleGame(server) {
       return Boolean(x?.table && x.table === y?.table);
     },
     tableGift: deliverTableGift,
+    wishReady,
+    wishPaid,
     aim: (from, to) => {
       const me = sockets.get(String(from));
       const t = me?.table;
@@ -713,6 +838,9 @@ export function attachBottleGame(server) {
       else if (msg.type === "gift_invoice") void onGiftInvoice(ws, msg);
       else if (msg.type === "aim_invoice") void onAimInvoice(ws, msg);
       else if (msg.type === "daily_claim") onDailyClaim(ws);
+      else if (msg.type === "wish_invoice") void onWishInvoice(ws, msg);
+      else if (msg.type === "wish_answer") onWishAnswer(ws, msg);
+      else if (msg.type === "wish_pick") onWishPick(ws, msg);
       else if (msg.type === "free_gift") onFreeGift(ws, msg);
       else if (msg.type === "free_aim") onFreeAim(ws, msg);
       else if (msg.type === "join") join(ws);

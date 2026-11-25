@@ -8,7 +8,9 @@
 
 import { DatabaseSync } from "node:sqlite";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { DB_PATH } from "./src/bot.js";
+import { DB_PATH, broadcastAll, broadcastStatus, newsAudience } from "./src/bot.js";
+import { gameEvents, setGameEvent } from "./game-server.js";
+import { aiEnabled, getSuggestions } from "./assistant.js";
 
 // Порівняння ключа за постійний час (хеші однакової довжини).
 function sameKey(given, expected) {
@@ -99,6 +101,55 @@ function monitorData(db) {
   };
 }
 
+const json = (res, code, data) => { res.writeHead(code, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(data)); };
+function readBody(req) {
+  return new Promise((resolve) => {
+    let raw = "";
+    req.on("data", (c) => { raw += c; if (raw.length > 20000) req.destroy(); });
+    req.on("end", () => { try { resolve(JSON.parse(raw || "{}")); } catch { resolve({}); } });
+    req.on("error", () => resolve({}));
+  });
+}
+
+// 🤖 Помічник: ідеї новин і подій, розсилка, запуск подій.
+async function assistantRoute(req, res, path, url) {
+  if (path === "/admin/assistant" && req.method === "GET") {
+    const db = openReadOnly();
+    let ctx;
+    try {
+      const d = monitorData(db);
+      ctx = {
+        online: d.users.online ?? 0, total: d.users.total ?? 0, new24: d.users.new24 ?? 0,
+        players: d.process?.game?.players ?? 0,
+        doubleActive: Boolean(gameEvents().doubleUntil),
+        time: new Date().toLocaleString("uk-UA", { timeZone: "Europe/Kiev", weekday: "long", hour: "2-digit", minute: "2-digit" }),
+      };
+    } finally {
+      db.close();
+    }
+    const s = await getSuggestions(ctx, url.searchParams.get("refresh") === "1");
+    return json(res, 200, { ai: aiEnabled(), source: s.source, at: s.at, items: s.items, audience: newsAudience(), events: gameEvents(), broadcast: broadcastStatus });
+  }
+  if (path === "/admin/broadcast" && req.method === "GET") return json(res, 200, broadcastStatus);
+  if (path === "/admin/broadcast" && req.method === "POST") {
+    const body = await readBody(req);
+    const texts = { uk: String(body.uk ?? "").slice(0, 3500), ru: String(body.ru ?? "").slice(0, 3500), en: String(body.en ?? "").slice(0, 3500) };
+    if (!texts.uk.trim()) return json(res, 400, { error: "empty" });
+    const total = broadcastAll(texts);
+    if (total === null) return json(res, 409, { error: "busy", status: broadcastStatus });
+    console.info(`[admin] розсилка з монітора: ${total} отримувачів`);
+    return json(res, 200, { started: true, total });
+  }
+  if (path === "/admin/event" && req.method === "POST") {
+    const body = await readBody(req);
+    const result = setGameEvent(String(body.type), Number(body.hours) || 1);
+    if (!result) return json(res, 400, { error: "unknown_event" });
+    console.info(`[admin] подія з монітора: ${body.type}`);
+    return json(res, 200, { ok: true, ...result, events: gameEvents() });
+  }
+  return json(res, 404, { error: "not_found" });
+}
+
 export function adminRoutes(req, res) {
   const key = process.env.ADMIN_KEY;
   if (!key || !sameKey(req.headers["x-admin-key"], key)) {
@@ -109,6 +160,14 @@ export function adminRoutes(req, res) {
 
   const url = new URL(req.url, "http://localhost");
   const path = url.pathname;
+
+  if (path === "/admin/assistant" || path === "/admin/broadcast" || path === "/admin/event") {
+    assistantRoute(req, res, path, url).catch((err) => {
+      console.error("[admin] assistant", err.message);
+      if (!res.headersSent) json(res, 500, { error: "failed" });
+    });
+    return true;
+  }
 
   if (path === "/admin/monitor") {
     const db = openReadOnly();

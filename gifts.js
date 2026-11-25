@@ -23,9 +23,11 @@ export const giftList = () => Object.entries(GIFTS).map(([id, g]) => ({ id, ...g
 
 // 🎯 «На кого покаже пляшка»: наступного ходу пляшка вкаже на обраного гравця.
 export const AIM_STARS = 5;
+// ✨ Бажання: гравець оплачує 👑 «Корону бажань», а отримує її той, хто найкраще виконає бажання.
+export const WISH_STARS = 100;
 
 // game-server.js підключає сюди перевірку «сидять за одним столом», показ подарунка і 🎯.
-let hooks = { sameTable: () => false, tableGift: () => false, aim: () => false };
+let hooks = { sameTable: () => false, tableGift: () => false, aim: () => false, wishReady: () => false, wishPaid: () => false };
 export function setGiftHooks(next) {
   hooks = { ...hooks, ...next };
 }
@@ -130,6 +132,39 @@ async function onAimPaid(from, pay) {
   await say(from, "Гравець уже вийшов зі столу. Зірки повернено.");
 }
 
+// Повернути зірки (наприклад, бажання ніхто не виконав).
+export async function refundStars(userId, chargeId, why) {
+  try { await tg("refundStarPayment", { user_id: Number(userId), telegram_payment_charge_id: chargeId }); } catch (err) { console.error("[gift] refund", err.message); }
+  withDb((db) => db.prepare("delete from payments where charge_id = ?").run(chargeId));
+  if (why) await say(userId, why);
+}
+
+export async function createWishInvoice(from, wishId) {
+  const lang = langOf(from);
+  return tg("createInvoiceLink", {
+    title: L(lang, "👑 Корона бажань"),
+    description: L(lang, "Твоє бажання побачить увесь стіл. Хто виконає найкраще — отримає 👑 від тебе. Якщо ніхто не відповість за 5 хвилин, зірки повернуться."),
+    currency: "XTR",
+    prices: [{ label: L(lang, "👑 Корона бажань"), amount: WISH_STARS }],
+    payload: `wish:${wishId}`,
+  });
+}
+
+async function onWishPreCheckout(query) {
+  const id = String(query.invoice_payload).slice(5);
+  const ok = query.currency === "XTR" && query.total_amount === WISH_STARS && hooks.wishReady(String(query.from.id), id);
+  await tg("answerPreCheckoutQuery", { pre_checkout_query_id: query.id, ok, ...(ok ? {} : { error_message: L(langOf(query.from.id), "Бажання вже неактуальне: ти вийшов зі столу або там уже є інше бажання.") }) });
+}
+
+async function onWishPaid(from, pay) {
+  const chargeId = pay.telegram_payment_charge_id;
+  const fresh = withDb((db) => db.prepare("insert into payments (charge_id, user_id, payload, stars) values (?, ?, ?, ?) on conflict (charge_id) do nothing").run(chargeId, from, pay.invoice_payload, pay.total_amount).changes);
+  if (!fresh) return;
+  let ok = false;
+  try { ok = pay.total_amount === WISH_STARS && hooks.wishPaid(from, String(pay.invoice_payload).slice(5), chargeId); } catch (err) { console.error("[gift] wish", err.message); }
+  if (!ok) await refundStars(from, chargeId, "Бажання вже неактуальне. Зірки повернено.");
+}
+
 // Кнопка «🎁 Подарунок» у діалозі — будь-якою мовою.
 const GIFT_BUTTONS = new Set(LANGS.map((l) => L(l, "🎁 Подарунок")));
 
@@ -224,6 +259,14 @@ async function onPaid(from, pay) {
 // true — оновлення наше, bot.js його вже не обробляє.
 export async function handleGiftUpdate(update) {
   try {
+    if (update.pre_checkout_query?.invoice_payload?.startsWith("wish:")) {
+      await onWishPreCheckout(update.pre_checkout_query);
+      return true;
+    }
+    if (update.message?.successful_payment?.invoice_payload?.startsWith("wish:")) {
+      await onWishPaid(String(update.message.from.id), update.message.successful_payment);
+      return true;
+    }
     if (update.pre_checkout_query?.invoice_payload?.startsWith("aim:")) {
       await onAimPreCheckout(update.pre_checkout_query);
       return true;
