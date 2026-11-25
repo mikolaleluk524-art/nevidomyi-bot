@@ -52,10 +52,8 @@ function endRoom(room, leavingId) {
   timers.delete(room.id);
   rooms.delete(room.id);
   for (const player of room.players) {
-    if (player.id !== leavingId) {
-      send(player.ws, { type: "opponent_left" });
-      player.ws.room = null;
-    }
+    if (player.id !== leavingId) send(player.ws, { type: "opponent_left" });
+    player.ws.room = null;
   }
 }
 function matchPlayers() {
@@ -139,7 +137,7 @@ export function attachBottleGame(server) {
   server.on("upgrade", (req, socket, head) => {
     let pathname;
     try { pathname = new URL(req.url, "http://localhost").pathname; } catch { socket.destroy(); return; }
-    if (pathname !== GAME_PATH) return;
+    if (pathname !== GAME_PATH) { socket.destroy(); return; }
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
   });
 
