@@ -7,7 +7,15 @@
  */
 
 import { DatabaseSync } from "node:sqlite";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { DB_PATH } from "./src/bot.js";
+
+// Порівняння ключа за постійний час (хеші однакової довжини).
+function sameKey(given, expected) {
+  const a = createHash("sha256").update(String(given ?? "")).digest();
+  const b = createHash("sha256").update(String(expected)).digest();
+  return timingSafeEqual(a, b);
+}
 
 function openReadOnly() {
   return new DatabaseSync(DB_PATH, { readOnly: true });
@@ -19,7 +27,7 @@ function nowSec() {
 
 export function adminRoutes(req, res) {
   const key = process.env.ADMIN_KEY;
-  if (!key || req.headers["x-admin-key"] !== key) {
+  if (!key || !sameKey(req.headers["x-admin-key"], key)) {
     res.writeHead(401, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: "unauthorized" }));
     return true;
@@ -54,14 +62,15 @@ export function adminRoutes(req, res) {
 
       const total = db.prepare("select count(*) as c from users").get().c;
 
-      const todayStart = now - (now % 86400);
+      // Останні 24 години (а не з опівночі UTC, щоб не залежати від часового поясу сервера).
+      const since = now - 86400;
       const paymentsToday = db.prepare(
-        "select coalesce(sum(stars), 0) as stars, count(*) as c from payments where charge_id is not null"
-      ).get();
+        "select coalesce(sum(stars), 0) as stars, count(*) as c from payments where created_at > ?"
+      ).get(since);
 
       const reportsToday = db.prepare(
         "select count(*) as c from reports where created_at > ?"
-      ).get(todayStart).c;
+      ).get(since).c;
 
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({
