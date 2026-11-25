@@ -20,12 +20,26 @@ import {
   publishCommands,
   tg,
 } from "./src/bot.js";
-import { adminRoutes } from "./admin.js";
-import { attachBottleGame } from "./game-server.js";
+import { adminRoutes, setMonitorSource } from "./admin.js";
+import { attachBottleGame, gameEvents, gameStats } from "./game-server.js";
 import { handleGiftUpdate, publishGiftCommand } from "./gifts.js";
 
 const DASHBOARD = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "dashboard.html"), "utf8");
 const BOTTLE_GAME = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "bottle.html"), "utf8");
+// Окремий додаток власника для спостереження за ботом (можна додати на головний екран).
+const MONITOR = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "monitor.html"), "utf8");
+const MONITOR_MANIFEST = JSON.stringify({
+  name: "Невідомий — монітор",
+  short_name: "Монітор",
+  start_url: "/monitor",
+  scope: "/monitor",
+  display: "standalone",
+  background_color: "#0c0b0a",
+  theme_color: "#0c0b0a",
+  icons: [{ src: "/monitor-icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" }],
+});
+const MONITOR_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#191613"/><path d="M96 336l88-96 72 64 72-112 88 80" fill="none" stroke="#d4a574" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/><circle cx="416" cy="272" r="28" fill="#e87eb0"/></svg>';
+const startedAt = Date.now();
 
 let beat = Date.now();
 let generation = 0;
@@ -109,6 +123,22 @@ function listen() {
       return;
     }
 
+    if (req.url === "/monitor" || req.url === "/monitor/" || req.url.startsWith("/monitor?")) {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+      res.end(MONITOR);
+      return;
+    }
+    if (req.url === "/monitor.webmanifest") {
+      res.writeHead(200, { "content-type": "application/manifest+json" });
+      res.end(MONITOR_MANIFEST);
+      return;
+    }
+    if (req.url === "/monitor-icon.svg") {
+      res.writeHead(200, { "content-type": "image/svg+xml", "cache-control": "max-age=86400" });
+      res.end(MONITOR_ICON);
+      return;
+    }
+
     if (req.url.startsWith("/admin/")) {
       if (adminRoutes(req, res)) return;
     }
@@ -118,6 +148,7 @@ function listen() {
     res.end(fresh ? "ok" : "poll stalled");
   });
   attachBottleGame(server);
+  setMonitorSource(() => ({ beatAgo: Date.now() - beat, startedAt, game: gameStats(), events: gameEvents(), memoryMb: Math.round(process.memoryUsage().rss / 1048576) }));
   server.listen(port, "0.0.0.0", () => {
     console.info(`[bot] health + admin + bottle game :${port}`);
   });

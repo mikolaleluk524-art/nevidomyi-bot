@@ -82,12 +82,25 @@ button:disabled{opacity:.45;cursor:default}
 .day.done{opacity:.45}
 .day.now{border-color:var(--accent);background:#3a2a1a;color:var(--accent);box-shadow:0 0 12px #d4a57455}
 .gift.free{border-color:var(--pink);background:#2a1820}
+.event{margin:0 0 10px;padding:8px 10px;border-radius:12px;background:linear-gradient(90deg,#3a1626,#2a1820);border:1px solid var(--pink);font-size:13px;font-weight:600}
+.wishbtn{width:100%;margin-top:6px;padding:12px;border-radius:13px;border:1px solid #c9a227;background:linear-gradient(90deg,#2b2412,#1f1a0e);color:#f3d77a;font-size:15px;font-weight:700}
+.wish{margin-top:12px;padding:12px;border-radius:14px;background:linear-gradient(160deg,#2b2412,#191613 70%);border:1px solid #c9a227;text-align:left}
+.wish .h{font-size:13px;color:#f3d77a;font-weight:700}
+.wish .w{font-size:17px;margin:6px 0 4px;line-height:1.35}
+.wish .p{font-size:12px;color:var(--muted)}
+.wish .ans{margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--bg);border:1px solid var(--border);font-size:14px;display:flex;gap:8px;align-items:center}
+.wish .ans span{flex:1}
+.wish .ans b{color:var(--accent);font-weight:600}
+.wish .pick{padding:6px 10px;border-radius:9px;border:0;background:#c9a227;color:#17110c;font-weight:800;font-size:12px}
+.wish textarea{width:100%;margin-top:8px;padding:9px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;resize:none}
+.wish .main{margin-top:6px;padding:11px;font-size:14px}
 .ghost{width:100%;padding:11px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);margin-top:6px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1 data-t="🍾 Гра в бутилочку">🍾 Гра в бутилочку</h1>
+  <div class="event hidden" id="eventBar"></div>
   <div class="status" id="status" data-t="Підключення до столу...">Підключення до столу...</div>
 
   <div class="table" id="table">
@@ -107,6 +120,7 @@ button:disabled{opacity:.45;cursor:default}
   </div>
   <button class="main" id="spin" disabled>Підключення...</button>
   <button class="giftBtn" id="giftBtn" data-t="🎁 Подарунок">🎁 Подарунок</button>
+  <button class="wishbtn" id="wishBtn" data-t="✨ Загадати бажання · 👑 100⭐">✨ Загадати бажання · 👑 100⭐</button>
   <button class="ghost" id="aimBtn" data-t="🎯 На кого покаже пляшка · 5⭐">🎯 На кого покаже пляшка · 5⭐</button>
   <button class="ghost" id="shareBtn" data-t="📨 Покликати друзів">📨 Покликати друзів</button>
 
@@ -128,6 +142,7 @@ button:disabled{opacity:.45;cursor:default}
     <div class="wait" data-t="На відповідь є хвилина. Її побачать усі за столом.">На відповідь є хвилина. Її побачать усі за столом.</div>
   </div>
 
+  <div class="wish hidden" id="wishBox"></div>
   <div class="result" id="result"></div>
   <div class="feed" id="feed"></div>
   <form class="chatf" id="chatForm">
@@ -188,6 +203,22 @@ const I18N = {
   ["ще {0} · +2 ❤", "ещё {0} · +2 ❤", "{0} left · +2 ❤"],
   ["У тебе є безкоштовні 🎯: {0}. Обери гравця.", "У тебя есть бесплатные 🎯: {0}. Выбери игрока.", "You have free 🎯: {0}. Pick a player."],
   ["🎁 Щоденна винагорода, день {0}: {1}", "🎁 Ежедневная награда, день {0}: {1}", "🎁 Daily reward, day {0}: {1}"],
+  ["✨ Загадати бажання · 👑 100⭐", "✨ Загадать желание · 👑 100⭐", "✨ Make a wish · 👑 100⭐"],
+  ["✨ Загадай бажання", "✨ Загадай желание", "✨ Make a wish"],
+  ["За столом уже є бажання. Зачекай, поки його виконають.", "За столом уже есть желание. Подожди, пока его исполнят.", "There's already a wish at this table. Wait until it's granted."],
+  ["Потрібен хоча б ще один гравець за столом.", "Нужен хотя бы ещё один игрок за столом.", "You need at least one more player at the table."],
+  ["Напиши, чого хочеш: вірш, комплімент, зізнання, смішну історію… Бажання побачить увесь стіл. Хто виконає найкраще — отримає від тебе 👑 Корону бажань (+40 ❤). Якщо ніхто не відповість за 5 хвилин, зірки повернуться.", "Напиши, чего хочешь: стих, комплимент, признание, смешную историю… Желание увидит весь стол. Кто исполнит лучше всех — получит от тебя 👑 Корону желаний (+40 ❤). Если никто не ответит за 5 минут, звёзды вернутся.", "Write what you want: a poem, a compliment, a confession, a funny story… The whole table will see it. Whoever grants it best gets your 👑 Wish Crown (+40 ❤). If nobody answers in 5 minutes, your Stars are refunded."],
+  ["Моє бажання…", "Моё желание…", "My wish…"],
+  ["✨ Загадати · 100⭐", "✨ Загадать · 100⭐", "✨ Make it · 100⭐"],
+  ["✨ Бажання від {0}", "✨ Желание от {0}", "✨ A wish from {0}"],
+  ["Хто виконає найкраще — отримає 👑 Корону бажань (+{0} ❤). Лишилось ~{1} хв.", "Кто исполнит лучше всех — получит 👑 Корону желаний (+{0} ❤). Осталось ~{1} мин.", "Whoever grants it best gets the 👑 Wish Crown (+{0} ❤). About {1} min left."],
+  ["👑 Обрати", "👑 Выбрать", "👑 Pick"],
+  ["Чекаємо, хто виконає твоє бажання…", "Ждём, кто исполнит твоё желание…", "Waiting for someone to grant your wish…"],
+  ["Виконай бажання тут…", "Исполни желание здесь…", "Grant the wish here…"],
+  ["✨ Виконати", "✨ Исполнить", "✨ Grant it"],
+  ["👑 {0} виконав(ла) бажання {1} і отримує Корону бажань!", "👑 {0} исполнил(а) желание {1} и получает Корону желаний!", "👑 {0} granted {1}'s wish and gets the Wish Crown!"],
+  ["✨ Бажання {0} ніхто не виконав — зірки повернуто.", "✨ Желание {0} никто не исполнил — звёзды возвращены.", "✨ Nobody granted {0}'s wish — Stars refunded."],
+  ["💖 Подвійні серця! Ще {0} хв подарунки, реакції й поцілунки дають ×2 ❤", "💖 Двойные сердца! Ещё {0} мин подарки, реакции и поцелуи дают ×2 ❤", "💖 Double hearts! For {0} more min gifts, reactions and kisses give ×2 ❤"],
   ["🎯 На кого покаже пляшка?", "🎯 На кого укажет бутылочка?", "🎯 Who should the bottle pick?"],
   ["Це має сенс, коли за столом хоча б двоє інших гравців. Зараз пляшка й так покаже на єдиного суперника.", "Это имеет смысл, когда за столом хотя бы двое других игроков. Сейчас бутылочка и так укажет на единственного соперника.", "This makes sense when there are at least two other players. Right now the bottle will pick your only opponent anyway."],
   ["Наступного твого ходу пляшка покаже на обраного гравця. Оплата зірками Telegram.", "В твой следующий ход бутылочка укажет на выбранного игрока. Оплата звёздами Telegram.", "On your next turn the bottle will pick the player you choose. Paid with Telegram Stars."],
@@ -533,6 +564,101 @@ function pickAimTarget() {
   $("sheet").classList.remove("hidden");
 }
 $("aimBtn").addEventListener("click", pickAimTarget);
+
+/* ---------- ✨ бажання ---------- */
+function askWish() {
+  if (!ws || ws.readyState !== 1) return;
+  const grid = $("gifts");
+  grid.innerHTML = "";
+  $("sheetTitle").textContent = T("✨ Загадай бажання");
+  if (S.wish) {
+    $("sheetText").textContent = T("За столом уже є бажання. Зачекай, поки його виконають.");
+  } else if (S.players.filter(Boolean).length < 2) {
+    $("sheetText").textContent = T("Потрібен хоча б ще один гравець за столом.");
+  } else {
+    $("sheetText").textContent = T("Напиши, чого хочеш: вірш, комплімент, зізнання, смішну історію… Бажання побачить увесь стіл. Хто виконає найкраще — отримає від тебе 👑 Корону бажань (+40 ❤). Якщо ніхто не відповість за 5 хвилин, зірки повернуться.");
+    const ta = document.createElement("textarea");
+    ta.maxLength = 150; ta.rows = 3; ta.placeholder = T("Моє бажання…");
+    ta.style.cssText = "grid-column:1/-1;width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:15px;font-family:inherit;resize:none";
+    const go = document.createElement("button");
+    go.className = "main"; go.style.gridColumn = "1/-1";
+    go.textContent = T("✨ Загадати · 100⭐");
+    go.addEventListener("click", () => {
+      const text = ta.value.trim();
+      if (text.length < 3) { ta.focus(); return; }
+      ws.send(JSON.stringify({ type: "wish_invoice", text }));
+      $("sheet").classList.add("hidden");
+      addFeed(T("Готую оплату..."));
+    });
+    grid.append(ta, go);
+    setTimeout(() => { try { ta.focus(); } catch (e) {} }, 100);
+  }
+  $("sheet").classList.remove("hidden");
+}
+$("wishBtn").addEventListener("click", askWish);
+
+let wishTimer = null;
+function renderWish() {
+  const box = $("wishBox");
+  const w = S.wish;
+  clearInterval(wishTimer);
+  if (!w) { box.classList.add("hidden"); box.replaceChildren(); return; }
+  const mine = w.from === S.seat;
+  const answered = w.answers.some((a) => a.seat === S.seat);
+  // Чернетка відповіді не має зникати, коли приходять чужі відповіді.
+  const draft = box.querySelector("textarea")?.value || "";
+  box.replaceChildren();
+  const h = document.createElement("div"); h.className = "h";
+  h.textContent = T("✨ Бажання від {0}", nameOf(w.from));
+  const t = document.createElement("div"); t.className = "w"; t.textContent = "«" + w.text + "»";
+  const p = document.createElement("div"); p.className = "p";
+  const tick = () => { const left = Math.max(0, Math.ceil((w.endsAt - Date.now()) / 60000)); p.textContent = T("Хто виконає найкраще — отримає 👑 Корону бажань (+{0} ❤). Лишилось ~{1} хв.", w.hearts, left); };
+  tick(); wishTimer = setInterval(tick, 15000);
+  box.append(h, t, p);
+  w.answers.forEach((a, i) => {
+    const row = document.createElement("div"); row.className = "ans";
+    const sp = document.createElement("span");
+    const nm = document.createElement("b"); nm.textContent = (a.seat >= 0 ? nameOf(a.seat) : a.name) + ": ";
+    sp.append(nm, document.createTextNode(a.text));
+    row.appendChild(sp);
+    if (mine) {
+      const b = document.createElement("button"); b.className = "pick"; b.textContent = T("👑 Обрати");
+      b.addEventListener("click", () => ws.send(JSON.stringify({ type: "wish_pick", idx: i })));
+      row.appendChild(b);
+    }
+    box.appendChild(row);
+  });
+  if (mine && !w.answers.length) {
+    const e = document.createElement("div"); e.className = "p"; e.style.marginTop = "8px";
+    e.textContent = T("Чекаємо, хто виконає твоє бажання…");
+    box.appendChild(e);
+  }
+  if (!mine && !answered) {
+    const ta = document.createElement("textarea"); ta.rows = 2; ta.maxLength = 150; ta.placeholder = T("Виконай бажання тут…"); ta.value = draft;
+    const go = document.createElement("button"); go.className = "main"; go.textContent = T("✨ Виконати");
+    go.addEventListener("click", () => {
+      const text = ta.value.trim();
+      if (!text) { ta.focus(); return; }
+      ws.send(JSON.stringify({ type: "wish_answer", text }));
+    });
+    box.append(ta, go);
+  }
+  box.classList.remove("hidden");
+}
+
+/* ---------- 💖 подія ---------- */
+let eventTimer = null;
+function renderEvent() {
+  const bar = $("eventBar");
+  clearInterval(eventTimer);
+  const tick = () => {
+    const left = Math.ceil((S.doubleUntil - Date.now()) / 60000);
+    if (left <= 0) { bar.classList.add("hidden"); clearInterval(eventTimer); return; }
+    bar.textContent = T("💖 Подвійні серця! Ще {0} хв подарунки, реакції й поцілунки дають ×2 ❤", left);
+    bar.classList.remove("hidden");
+  };
+  tick(); eventTimer = setInterval(tick, 30000);
+}
 // Запрошення друзів: посилання з кодом гравця (за друга — 3 години Premium).
 $("shareBtn").addEventListener("click", () => {
   const link = "https://t.me/" + (S.bot || "nevidomyi_chat_bot") + (S.invite ? "?start=" + S.invite : "");
@@ -670,6 +796,20 @@ function handle(m) {
     addFeed(T("🎁 Щоденна винагорода, день {0}: {1}", m.day, rewardText(m.reward)), true);
     fly(S.seat, "🎁");
     buzz("notificationOccurred", "success");
+  } else if (m.type === "wish") {
+    S.wish = m.wish ? { ...m.wish, endsAt: Date.now() + m.wish.left } : null;
+    renderWish();
+  } else if (m.type === "wish_done") {
+    S.wish = null;
+    renderWish();
+    if (m.to >= 0) {
+      addFeed(T("👑 {0} виконав(ла) бажання {1} і отримує Корону бажань!", nameOf(m.to), nameOf(m.from)), m.to === S.seat);
+      fly(m.to, "👑");
+      if (m.to === S.seat) buzz("notificationOccurred", "success");
+    } else addFeed(T("✨ Бажання {0} ніхто не виконав — зірки повернуто.", nameOf(m.from)), m.from === S.seat);
+  } else if (m.type === "event") {
+    S.doubleUntil = Date.now() + Math.max(0, m.doubleUntil - m.now);
+    renderEvent();
   } else if (m.type === "aim_set") {
     addFeed(T("🎯 Наступного твого ходу пляшка покаже на {0}", nameOf(m.to)), true);
     buzz("notificationOccurred", "success");
