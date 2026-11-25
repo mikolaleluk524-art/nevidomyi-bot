@@ -27,6 +27,7 @@ const TZ = "Europe/Kiev"; // працює в усіх версіях ICU
 export const DB_PATH = join(process.env.DATA_DIR || dirname(fileURLToPath(import.meta.url)), "nevidomyi.sqlite");
 
 const BTN = {
+  game: "🍾 Гра в бутилочку",
   search: "🔍 Знайти співрозмовника",
   next: "⏭ Наступний",
   stop: "⛔ Завершити діалог",
@@ -41,6 +42,7 @@ const BTN = {
 };
 
 const ACTIONS = {
+  [BTN.game]: "game",
   [BTN.search]: "search",
   [BTN.next]: "next",
   [BTN.stop]: "stop",
@@ -216,7 +218,9 @@ function spam(id) {
 function menuKb() {
   return {
     keyboard: [
-      [{ text: "🍾 Гра в бутилочку", web_app: { url: GAME_URL } }],
+      // Звичайна кнопка, а не web_app: Mini App з кнопки клавіатури не отримує initData,
+      // тож гра не може впізнати гравця. Бот відповідає інлайн-кнопкою, яка працює.
+      [{ text: BTN.game }],
       [{ text: BTN.search }],
       [{ text: BTN.next }, { text: BTN.stop }],
       [{ text: BTN.form }],
