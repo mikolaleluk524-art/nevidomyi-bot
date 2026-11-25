@@ -146,6 +146,8 @@ for (const [table, col, def] of [
   ["clients", "src", "TEXT DEFAULT ''"],
   ["services", "addon", "INTEGER DEFAULT 0"], // 1 = доповнення до основної послуги (френч, ремонт)
   ["services", "price_from", "INTEGER DEFAULT 0"], // 1 = показувати ціну як «від …»
+  ["clients", "prepay_rule", "TEXT DEFAULT ''"], // '' = автоматично, never = без передоплати, always = завжди з передоплатою
+  ["bookings", "pay_until", "INTEGER DEFAULT 0"], // до коли треба сплатити передоплату (після рішення майстра)
 ]) {
   if (!db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
 }
@@ -183,6 +185,8 @@ export const DEFAULT_SETTINGS = {
   lat: 0, // 0 = точку на карті ще не поставлено: маршрут будується за адресою
   lng: 0,
   prepayPercent: 30, // передоплата у % від вартості; 0 = без передоплати
+  prepayMode: "manual", // manual = нові клієнтки надсилають заявку, майстер вирішує; new = лише нові платять одразу; all = всі
+  prepayHours: 3, // скільки годин має клієнтка на передоплату після рішення майстра
   slotStep: 30, // крок сітки запису, хв
   bookingDays: 30, // на скільки днів вперед можна записатися
   minNoticeHours: 2, // мінімум годин до запису

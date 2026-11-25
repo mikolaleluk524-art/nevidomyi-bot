@@ -93,6 +93,7 @@ function setTab(tab) {
 
 const statusBadge = (s) =>
   ({
+    request: '<span class="badge warn">Очікує підтвердження</span>',
     pending: '<span class="badge warn">Очікує оплати</span>',
     confirmed: '<span class="badge ok">Підтверджено</span>',
     done: '<span class="badge mute">Візит відбувся</span>',
@@ -118,7 +119,7 @@ async function home() {
   const s = info.settings;
   top.innerHTML = "";
   const me = await loadMe();
-  const next = me?.bookings.filter((b) => ["confirmed", "pending"].includes(b.status) && b.startUtc > Date.now()).sort((a, b) => a.startUtc - b.startUtc)[0];
+  const next = me?.bookings.filter((b) => ["confirmed", "pending", "request"].includes(b.status) && b.startUtc > Date.now()).sort((a, b) => a.startUtc - b.startUtc)[0];
   const works = info.gallery.filter((g) => g.kind === "work").slice(0, 10);
   const certs = info.gallery.filter((g) => g.kind === "cert");
   const n = info.nearest;
@@ -493,7 +494,8 @@ async function renderConfirm(back) {
       <div class="tot">До сплати</div><div class="tot">${money(q.total)}</div>
       ${q.prepay ? `<div class="tot" style="color:var(--accent)">Передоплата зараз</div><div class="tot" style="color:var(--accent)">${money(q.prepay)}</div>` : ""}`;
     if (svc().priceFrom) $("#sum").insertAdjacentHTML("beforeend", `<div class="small muted" style="grid-column:1/-1">Остаточна ціна залежить від довжини й дизайну — майстер уточнить на місці.</div>`);
-    $("#go").textContent = q.prepay ? `Записатись і сплатити ${money(q.prepay)}` : "Записатись";
+    if (q.prepayMode === "ask") $("#sum").insertAdjacentHTML("beforeend", `<div class="small" style="grid-column:1/-1;margin-top:6px">✨ Ви в нас уперше — майстер підтвердить запис найближчим часом. Можливо, попросить передоплату ${money(q.prepayAmount)}, щоб закріпити час. Постійні клієнтки записуються без передоплати.</div>`);
+    $("#go").textContent = q.prepay ? `Записатись і сплатити ${money(q.prepay)}` : q.prepayMode === "ask" ? "Надіслати заявку" : "Записатись";
   };
   $("#useBonus")?.addEventListener("change", refresh);
   refresh();
@@ -563,13 +565,15 @@ async function done(id) {
   const me = await loadMe(true);
   const b = me?.bookings.find((x) => x.id === Number(id));
   if (!b) return (location.hash = "#/me");
+  const isReq = b.status === "request";
   view.innerHTML = `
-    <div class="center" style="padding:20px 0 6px"><div style="font-size:56px">🎉</div><h1>Ви записані!</h1>
+    <div class="center" style="padding:20px 0 6px"><div style="font-size:56px">${isReq ? "📩" : "🎉"}</div><h1>${isReq ? "Заявку надіслано!" : "Ви записані!"}</h1>
       <p class="muted">${esc(b.service)}<br><b style="color:var(--ink)">${esc(b.when)}</b></p>
+      ${isReq ? `<p class="small">Час уже заброньовано за вами. Майстер підтвердить запис найближчим часом — ми одразу повідомимо.</p>` : ""}
       ${b.paid ? `<span class="badge ok">Передоплата ${money(b.paid)} отримана</span>` : ""}</div>
     <div class="card stack">
-      ${pushOn() ? `<div class="row"><span style="font-size:24px">🔔</span><div>Нагадаємо за добу і за 2 години до візиту, а перед виходом відкриємо карту.</div></div>`
-        : `<div><b>Увімкніть нагадування</b><p class="small muted">Надішлемо сповіщення за добу і за 2 години, а натиснувши на нього — побачите карту, як дійти до кабінету.</p><button class="btn block" id="push">🔔 Увімкнути нагадування</button></div>`}
+      ${pushOn() ? `<div class="row"><span style="font-size:24px">🔔</span><div>${isReq ? "Повідомимо, щойно майстер підтвердить запис, а потім нагадаємо перед візитом." : "Нагадаємо за добу і за 2 години до візиту, а перед виходом відкриємо карту."}</div></div>`
+        : `<div><b>Увімкніть сповіщення</b><p class="small muted">${isReq ? "Так ви одразу дізнаєтесь, що запис підтверджено, і отримаєте нагадування перед візитом." : "Надішлемо сповіщення за добу і за 2 години, а натиснувши на нього — побачите карту, як дійти до кабінету."}</p><button class="btn block" id="push">🔔 Увімкнути сповіщення</button></div>`}
       <a class="btn line block" href="/api/bookings/${b.id}/ics?token=${encodeURIComponent(token())}">📅 Додати в календар</a>
       <a class="btn line block" href="#/visit/${b.id}">🧭 Як нас знайти</a>
     </div>
@@ -695,7 +699,7 @@ async function me() {
     return;
   }
   const s = info.settings;
-  const upcoming = m.bookings.filter((b) => ["confirmed", "pending"].includes(b.status) && b.startUtc > Date.now() - 3600_000).reverse();
+  const upcoming = m.bookings.filter((b) => ["confirmed", "pending", "request"].includes(b.status) && b.startUtc > Date.now() - 3600_000).reverse();
   const past = m.bookings.filter((b) => !upcoming.includes(b));
   view.innerHTML = `
     <div class="bonus-card">
@@ -712,6 +716,8 @@ async function me() {
           <div class="row between"><b>${esc(b.service)}</b>${statusBadge(b.status)}</div>
           <div class="muted">${esc(b.when)}</div>
           ${b.paid ? `<div class="small" style="color:var(--ok)">Передоплата ${money(b.paid)} ✓</div>` : ""}
+          ${b.status === "request" ? `<div class="small muted">Майстер підтвердить запис найближчим часом</div>` : ""}
+          ${b.status === "pending" && b.payUntil ? `<div class="small" style="color:var(--warn);font-weight:700">Сплатіть передоплату до ${new Date(b.payUntil).toLocaleString("uk-UA", { timeZone: "Europe/Kyiv", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}, щоб закріпити час</div>` : ""}
           <div class="row wrap" style="margin-top:10px">
             ${b.status === "pending" ? `<button class="btn sm" data-pay="${b.id}">Сплатити ${money(b.prepay)}</button>` : `<a class="btn sm" href="#/visit/${b.id}">🧭 Маршрут</a>`}
             <a class="btn sm ghost" href="/api/bookings/${b.id}/ics?token=${encodeURIComponent(token())}">📅</a>

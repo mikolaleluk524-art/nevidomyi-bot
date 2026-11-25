@@ -36,6 +36,7 @@ import {
   PENDING_MINUTES,
   quote,
   upsertClient,
+  decideRequest,
   when,
   withAddons,
 } from "./lib/booking.js";
@@ -174,6 +175,7 @@ function publicBooking(b) {
     discount: b.discount,
     bonusUsed: b.bonus_used,
     prepay: b.prepay,
+    payUntil: b.pay_until || 0,
     paid: b.paid,
     status: b.status,
     reviewed: Boolean(one("SELECT id FROM reviews WHERE booking_id = ?", b.id)),
@@ -465,14 +467,26 @@ async function adminApi(req, res, p, m, q) {
     const to = isDate(q.to) ? q.to : addDays(from, 6);
     const rows = all(
       `SELECT b.*, c.name AS client_name, c.phone AS client_phone, c.note AS client_note, m.name AS master_name,
-        (SELECT COUNT(*) FROM bookings x WHERE x.client_id = b.client_id AND x.status = 'done') AS visits
+        (SELECT COUNT(*) FROM bookings x WHERE x.client_id = b.client_id AND x.status = 'done') AS visits,
+        (SELECT COUNT(*) FROM bookings x WHERE x.client_id = b.client_id AND x.status = 'no_show') AS no_shows
        FROM bookings b JOIN clients c ON c.id = b.client_id JOIN masters m ON m.id = b.master_id
        WHERE b.date BETWEEN ? AND ? AND b.status != 'expired' ORDER BY b.date, b.start`,
       from,
       to
-    ).map((b) => ({ ...publicBooking(b), clientName: b.client_name, clientPhone: b.client_phone, clientNote: b.client_note, comment: b.comment, visits: b.visits, source: b.source, clientId: b.client_id }));
+    ).map((b) => ({ ...publicBooking(b), clientName: b.client_name, clientPhone: b.client_phone, clientNote: b.client_note, comment: b.comment, visits: b.visits, noShows: b.no_shows, source: b.source, clientId: b.client_id }));
     const blocks = all("SELECT * FROM blocks WHERE date BETWEEN ? AND ? ORDER BY date, start", from, to);
     return send(res, 200, { from, to, bookings: rows, blocks });
+  }
+
+  if (m === "GET" && p === "/api/admin/requests") {
+    // Усі нерозглянуті заявки нових клієнток, найближчі — першими
+    const rows = all(
+      `SELECT b.*, c.name AS client_name, c.phone AS client_phone, c.note AS client_note, m.name AS master_name,
+        (SELECT COUNT(*) FROM bookings x WHERE x.client_id = b.client_id AND x.status = 'no_show') AS no_shows
+       FROM bookings b JOIN clients c ON c.id = b.client_id JOIN masters m ON m.id = b.master_id
+       WHERE b.status = 'request' ORDER BY b.start_utc`
+    ).map((b) => ({ ...publicBooking(b), clientName: b.client_name, clientPhone: b.client_phone, clientNote: b.client_note, comment: b.comment, noShows: b.no_shows }));
+    return send(res, 200, rows);
   }
 
   if (m === "GET" && p === "/api/admin/stats") {
@@ -487,6 +501,7 @@ async function adminApi(req, res, p, m, q) {
       clients: r("SELECT COUNT(*) n FROM clients").n,
       newClients: r("SELECT COUNT(*) n FROM clients WHERE created_at >= ?", Date.now() - 30 * 86400_000).n,
       pendingReviews: r("SELECT COUNT(*) n FROM reviews WHERE status = 'pending'").n,
+      requests: r("SELECT COUNT(*) n FROM bookings WHERE status = 'request'").n,
       payments: provider(),
       telegram: Boolean(process.env.TG_BOT_TOKEN && process.env.TG_CHAT_ID),
     });
@@ -498,7 +513,8 @@ async function adminApi(req, res, p, m, q) {
     const id = Number(bm[1]);
     const b = getBooking(id);
     if (!b) throw new HttpError(404, "Запис не знайдено");
-    if (body.status === "done") completeBooking(id);
+    if (body.decision === "confirm" || body.decision === "prepay") decideRequest(id, { withPrepay: body.decision === "prepay", remember: Boolean(body.remember) });
+    else if (body.status === "done") completeBooking(id);
     else if (body.status === "cancelled") await cancelBooking(id, { refund: body.refund !== false });
     else if (body.status === "no_show") run("UPDATE bookings SET status = 'no_show' WHERE id = ?", id);
     else if (body.status === "confirmed") run("UPDATE bookings SET status = 'confirmed' WHERE id = ?", id);
@@ -636,7 +652,7 @@ async function adminApi(req, res, p, m, q) {
       res,
       200,
       all(
-        `SELECT c.id, c.name, c.phone, c.bonus, c.birthday, c.note, c.ref_code, c.src, c.created_at,
+        `SELECT c.id, c.name, c.phone, c.bonus, c.birthday, c.note, c.ref_code, c.src, c.prepay_rule, c.created_at,
           (SELECT name FROM clients r WHERE r.id = c.referred_by) AS referred_by_name,
           (SELECT COUNT(*) FROM bookings b WHERE b.client_id = c.id AND b.status = 'done') AS visits,
           (SELECT MAX(date) FROM bookings b WHERE b.client_id = c.id AND b.status = 'done') AS last_visit,
@@ -652,6 +668,7 @@ async function adminApi(req, res, p, m, q) {
     const body = await json(req);
     const id = Number(cm[1]);
     if (typeof body.note === "string") run("UPDATE clients SET note = ? WHERE id = ?", body.note.slice(0, 1000), id);
+    if (["", "never", "always"].includes(body.prepayRule)) run("UPDATE clients SET prepay_rule = ? WHERE id = ?", body.prepayRule, id);
     if (Number(body.bonusDelta)) addBonus(id, Math.trunc(Number(body.bonusDelta)), body.reason || "Коригування від майстра");
     return send(res, 200, { ok: true });
   }
@@ -765,13 +782,27 @@ function serveFile(res, f) {
 async function tick() {
   const now = Date.now();
   // Неоплачені броні звільняють час через PENDING_MINUTES хв.
-  for (const b of all("SELECT * FROM bookings WHERE status = 'pending' AND created_at < ?", now - PENDING_MINUTES * 60_000)) {
+  // pay_until > 0 — передоплату попросила майстер, у клієнтки є кілька годин; інакше — 20 хв.
+  for (const b of all(
+    "SELECT * FROM bookings WHERE status = 'pending' AND ((pay_until > 0 AND pay_until < ?) OR (pay_until = 0 AND created_at < ?))",
+    now,
+    now - PENDING_MINUTES * 60_000
+  )) {
     const fresh = await syncPayment(b).catch(() => b);
     if (fresh.status === "pending") {
       run("UPDATE bookings SET status = 'expired' WHERE id = ?", b.id);
       if (b.bonus_used) addBonus(b.client_id, b.bonus_used, `Повернення бонусів, бронь #${b.id} не оплачена`);
       notifyWaitlist(b.date, b.service_id);
+      if (b.pay_until) {
+        const c = one("SELECT name, phone FROM clients WHERE id = ?", b.client_id);
+        notifyOwner({ title: "⌛ Передоплату не внесено", body: `${c.name} (${c.phone}): ${b.service_name}, ${b.date} ${hm(b.start)} — час знову вільний.`, url: "/admin" }).catch(() => {});
+      }
     }
+  }
+  // Заявки, які так і не розглянули до початку візиту
+  for (const b of all("SELECT * FROM bookings WHERE status = 'request' AND start_utc < ?", now)) {
+    run("UPDATE bookings SET status = 'expired' WHERE id = ?", b.id);
+    if (b.bonus_used) addBonus(b.client_id, b.bonus_used, `Повернення бонусів, заявка #${b.id} не розглянута`);
   }
   const s = getSettings();
   for (const b of all("SELECT * FROM bookings WHERE status = 'confirmed' AND reminded24 = 0 AND start_utc - ? BETWEEN 0 AND ?", now, 24 * 3600_000)) {

@@ -112,13 +112,13 @@ async function route() {
 
 // ---------- записи ----------
 let curDay = today();
-const STATUS = { pending: "очікує оплати", confirmed: "підтверджено", done: "прийшла ✓", cancelled: "скасовано", no_show: "не прийшла" };
+const STATUS = { request: "заявка — чекає вашого рішення", pending: "очікує передоплати", confirmed: "підтверджено", done: "прийшла ✓", cancelled: "скасовано", no_show: "не прийшла" };
 
 async function bookings(box) {
-  const [stats, data] = await Promise.all([api("/api/admin/stats"), api(`/api/admin/bookings?from=${addDays(curDay, -3)}&to=${addDays(curDay, 10)}`)]);
+  const [stats, data, requests] = await Promise.all([api("/api/admin/stats"), api(`/api/admin/bookings?from=${addDays(curDay, -3)}&to=${addDays(curDay, 10)}`), api("/api/admin/requests")]);
   const day = data.bookings.filter((b) => b.date === curDay);
   const blocks = data.blocks.filter((b) => b.date === curDay);
-  const count = (d) => data.bookings.filter((b) => b.date === d && ["confirmed", "pending", "done"].includes(b.status)).length;
+  const count = (d) => data.bookings.filter((b) => b.date === d && ["request", "confirmed", "pending", "done"].includes(b.status)).length;
   const strip = Array.from({ length: 14 }, (_, i) => addDays(curDay, i - 3));
   const items = [...day.map((b) => ({ t: Number(b.time.replace(":", "").slice(0, 2)) * 60 + Number(b.time.slice(3)), b })), ...blocks.map((k) => ({ t: k.start, k }))].sort((a, b) => a.t - b.t);
   box.innerHTML = `
@@ -131,6 +131,19 @@ async function bookings(box) {
       <div class="stat"><b>${stats.clients}</b><span>клієнток</span></div>
       <div class="stat"><b>+${stats.newClients}</b><span>нових за 30 дн</span></div>
     </div>
+    ${requests.length ? `<section class="section"><h2>📩 Нові заявки (${requests.length})</h2>
+      <p class="small muted">Нові клієнтки. Час уже заброньовано — вирішіть, чи потрібна передоплата.</p>
+      ${requests.map((b) => `<div class="card" style="border:1.5px solid var(--accent)">
+        <div class="row between"><b>${esc(b.clientName)}</b><a href="tel:${esc(b.clientPhone)}">${esc(b.clientPhone)}</a></div>
+        <div>${esc(b.service)}</div>
+        <div class="small muted">${esc(b.when)} · ${money(b.price - b.discount - b.bonusUsed)}${b.noShows ? ` · ⚠️ пропусків: ${b.noShows}` : ""}</div>
+        ${b.comment ? `<div class="small">💬 ${esc(b.comment)}</div>` : ""}
+        <div class="stack" style="margin-top:10px">
+          <button class="btn block" data-dec="confirm" data-id="${b.id}">✓ Підтвердити без передоплати</button>
+          <button class="btn ghost block" data-dec="prepay" data-id="${b.id}">💳 Попросити передоплату ${money(b.prepay)}</button>
+          <label class="check small" style="margin-top:4px;font-weight:500"><input type="checkbox" data-remember="${b.id}"> Запамʼятати для цієї клієнтки</label>
+          <button class="btn sm line" data-st="cancelled" data-id="${b.id}">Відхилити заявку</button>
+        </div></div>`).join("")}</section>` : ""}
     ${stats.pendingReviews ? `<a class="card row" href="#reviews" style="margin-top:10px;text-decoration:none;color:inherit">⭐ <b class="grow">Нові відгуки: ${stats.pendingReviews}</b> →</a>` : ""}
     <div class="days" style="margin-top:14px">${strip.map((d) => {
       const dt = new Date(d + "T12:00");
@@ -155,6 +168,10 @@ async function bookings(box) {
             <div class="row wrap" style="margin-top:8px">
               <a class="btn sm line" href="tel:${esc(b.clientPhone)}">📞</a>
               <a class="btn sm line" href="viber://chat?number=${esc(b.clientPhone.replace("+", "%2B"))}">Viber</a>
+              ${b.status === "request" ? `
+                <button class="btn sm" data-dec="confirm" data-id="${b.id}">✓ Без передоплати</button>
+                <button class="btn sm ghost" data-dec="prepay" data-id="${b.id}">💳 З передоплатою</button>
+                <button class="btn sm line" data-st="cancelled" data-id="${b.id}">Відхилити</button>` : ""}
               ${["confirmed", "pending"].includes(b.status) ? `
                 <button class="btn sm" data-st="done" data-id="${b.id}">✓ Прийшла</button>
                 <button class="btn sm ghost" data-st="no_show" data-id="${b.id}">Не прийшла</button>
@@ -168,6 +185,18 @@ async function bookings(box) {
   box.querySelectorAll(".day").forEach((el) => (el.onclick = () => { curDay = el.dataset.d; route(); }));
   $("#pick").onchange = (e) => { curDay = e.target.value || today(); route(); };
   $("#add").onclick = () => manualBooking();
+  box.querySelectorAll("[data-dec]").forEach((btn) => (btn.onclick = async () => {
+    const id = btn.dataset.id;
+    const remember = $(`[data-remember="${id}"]`)?.checked;
+    btn.disabled = true;
+    try {
+      await api(`/api/admin/bookings/${id}`, { body: { decision: btn.dataset.dec, remember } });
+      toast(btn.dataset.dec === "prepay" ? "Клієнтці надіслано прохання внести передоплату 💳" : "Запис підтверджено, клієнтка отримала сповіщення ✓", 3500);
+    } catch (e) {
+      toast(e.message);
+    }
+    route();
+  }));
   $("#close").onclick = () => blockForm(curDay);
   box.querySelectorAll("[data-st]").forEach((b) => (b.onclick = async () => {
     const st = b.dataset.st;
@@ -427,6 +456,10 @@ async function clients(box, q = "") {
       <div class="small"><a href="tel:${esc(c.phone)}">${esc(c.phone)}</a> · візитів: ${c.visits}${c.last_visit ? ` · останній ${c.last_visit}` : ""}</div>
       <div class="small muted">${c.referred_by_name ? `привела: ${esc(c.referred_by_name)} · ` : ""}${c.invited ? `запросила: ${c.invited} · ` : ""}${c.birthday ? `🎂 ${c.birthday.slice(5)} · ` : ""}${c.src ? `QR: ${esc(c.src)}` : ""}</div>
       <label class="f"><span>Нотатка (бачите лише ви)</span><input data-note="${c.id}" value="${esc(c.note)}" placeholder="Алергія, улюблений колір…"></label>
+      <label class="f"><span>Передоплата</span><select data-rule="${c.id}">
+        <option value="" ${!c.prepay_rule ? "selected" : ""}>Автоматично (постійна — без, нова — за налаштуваннями)</option>
+        <option value="never" ${c.prepay_rule === "never" ? "selected" : ""}>Завжди без передоплати</option>
+        <option value="always" ${c.prepay_rule === "always" ? "selected" : ""}>Завжди з передоплатою</option></select></label>
       <div class="row" style="margin-top:8px"><button class="btn sm ghost" data-bonus="${c.id}">± Бонуси</button></div>
     </div>`).join("") || '<div class="empty">Нікого не знайдено</div>'}</div>`;
   let t;
@@ -434,6 +467,10 @@ async function clients(box, q = "") {
     clearTimeout(t);
     t = setTimeout(() => clients(box, e.target.value).then(() => $("#cq").focus()), 400);
   };
+  box.querySelectorAll("[data-rule]").forEach((sel) => (sel.onchange = async () => {
+    await api(`/api/admin/clients/${sel.dataset.rule}`, { body: { prepayRule: sel.value } });
+    toast("Збережено");
+  }));
   box.querySelectorAll("[data-note]").forEach((inp) => (inp.onchange = async () => {
     await api(`/api/admin/clients/${inp.dataset.note}`, { body: { note: inp.value } });
     toast("Нотатку збережено");
@@ -493,7 +530,13 @@ async function settings(box) {
       <div class="two">${f("lat", "Широта", "number", 'step="any"')}${f("lng", "Довгота", "number", 'step="any"')}</div>
       <button class="btn sm ghost" id="geo" style="margin-top:8px">📍 Я зараз біля входу — взяти мою геолокацію</button></div>
     <div class="card"><h3>Запис і оплата</h3>
-      <div class="two">${f("prepayPercent", "Передоплата, %", "number")}${f("cancelHours", "Безкошт. скасування, год", "number")}</div>
+      <label class="f"><span>Хто платить передоплату</span><select data-k="prepayMode">
+        <option value="manual" ${s.prepayMode === "manual" ? "selected" : ""}>Нові клієнтки надсилають заявку — я вирішую сама</option>
+        <option value="new" ${s.prepayMode === "new" ? "selected" : ""}>Лише нові клієнтки, одразу при записі</option>
+        <option value="all" ${s.prepayMode === "all" ? "selected" : ""}>Усі клієнтки</option></select></label>
+      <p class="small muted">Постійна клієнтка — та, що вже була хоча б раз і жодного разу не пропустила запис. Для окремих клієнток правило можна змінити в розділі «Клієнти».</p>
+      <div class="two">${f("prepayPercent", "Передоплата, %", "number")}${f("prepayHours", "Годин на оплату після вашого рішення", "number")}</div>
+      ${f("cancelHours", "Безкоштовне скасування, год", "number")}
       <div class="two">${f("slotStep", "Крок запису, хв", "number")}${f("minNoticeHours", "Запис мінімум за, год", "number")}</div>
       ${f("bookingDays", "Запис наперед, днів", "number")}
       <p class="small" style="margin-top:10px">Оплата: <b>${{ liqpay: "LiqPay підключено ✓", mono: "monobank підключено ✓" }[stats.payments] || "тестовий режим"}</b>${stats.payments === "demo" ? ". Щоб увімкнути справжню передоплату — зареєструйте магазин на liqpay.ua і додайте ключі в Railway: <code>LIQPAY_PUBLIC_KEY</code> і <code>LIQPAY_PRIVATE_KEY</code>." : ""}</p></div>
@@ -518,7 +561,7 @@ async function settings(box) {
   box.querySelectorAll('input[name="theme"]').forEach((r) => (r.onchange = () => {
     $('[data-k="theme"]').value = r.value;
     box.querySelectorAll(".theme").forEach((l) => l.classList.toggle("on", l.contains(r)));
-    document.documentElement.dataset.theme = r.value;
+    document.documentElement.dataset.theme = r.value; // кабінет теж перемикається — одразу видно, як буде
   }));
   $("#save").onclick = async () => {
     const body = {};
@@ -599,6 +642,7 @@ async function adminPush() {
 }
 
 async function boot() {
+  fetch("/api/public").then((r) => r.json()).then((i) => (document.documentElement.dataset.theme = i.settings.theme || "rose")).catch(() => {});
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
   if (!store.get("adminToken")) return login();
   try {

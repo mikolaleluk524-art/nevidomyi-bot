@@ -5,7 +5,8 @@ import { addDays, hm, humanDate, kyivNow, kyivToUtc, toMin, weekday } from "./ti
 import { notifyOwner, pushClient } from "./notify.js";
 import { paymentsLive, refundPayment } from "./payments.js";
 
-const ACTIVE = "('pending','confirmed','done')";
+// request — заявка нової клієнтки, яку ще не розглянула майстер (час уже утримується)
+const ACTIVE = "('request','pending','confirmed','done')";
 export const PENDING_MINUTES = 20;
 
 export const activeMasters = () => all("SELECT * FROM masters WHERE active = 1 ORDER BY sort, id");
@@ -161,7 +162,26 @@ function birthdayWeek(birthday, date) {
   return false;
 }
 
-/** Розрахунок ціни. Повертає { price, discount, discountReason, bonusUse, total, prepay } */
+/**
+ * Чи потрібна передоплата цій клієнтці:
+ *   "none" — записується одразу без передоплати
+ *   "now"  — платить передоплату, щоб записатися
+ *   "ask"  — надсилає заявку, а майстер вирішує (з передоплатою чи без)
+ * Постійна клієнтка = хоча б один візит і жодного пропуску.
+ */
+export function prepayDecision(client, s = getSettings()) {
+  if (!(s.prepayPercent > 0)) return "none";
+  if (client?.prepay_rule === "never") return "none";
+  if (client?.prepay_rule === "always") return "now";
+  const visits = client ? one("SELECT COUNT(*) n FROM bookings WHERE client_id = ? AND status = 'done'", client.id).n : 0;
+  const noShows = client ? one("SELECT COUNT(*) n FROM bookings WHERE client_id = ? AND status = 'no_show'", client.id).n : 0;
+  const regular = visits > 0 && noShows === 0;
+  if (s.prepayMode === "all") return "now";
+  if (s.prepayMode === "new") return regular ? "none" : "now";
+  return regular ? "none" : "ask"; // manual
+}
+
+/** Розрахунок ціни. Повертає { price, discount, discountReason, bonusUse, total, prepay, prepayAmount, prepayMode } */
 export function quote({ service, client, date, useBonus, ref }) {
   const s = getSettings();
   const price = service.price;
@@ -185,8 +205,9 @@ export function quote({ service, client, date, useBonus, ref }) {
     bonusUse = Math.min(client.bonus, Math.floor((price * s.maxBonusPercent) / 100), price - discount);
   }
   const total = Math.max(0, price - discount - bonusUse);
-  const prepay = s.prepayPercent > 0 ? Math.ceil((total * Math.min(100, s.prepayPercent)) / 100) : 0;
-  return { price, discount, discountReason, bonusUse, total, prepay };
+  const prepayAmount = s.prepayPercent > 0 ? Math.ceil((total * Math.min(100, s.prepayPercent)) / 100) : 0;
+  const prepayMode = prepayAmount > 0 ? prepayDecision(client, s) : "none";
+  return { price, discount, discountReason, bonusUse, total, prepay: prepayMode === "now" ? prepayAmount : 0, prepayAmount, prepayMode };
 }
 
 export class BookingError extends Error {}
@@ -212,8 +233,10 @@ export function createBooking({ serviceId, addonIds = [], masterId, date, start,
       if (clash) throw new BookingError("На цей час уже є запис");
     }
     const q = quote({ service, client, date, useBonus });
-    const prepay = skipPrepay ? 0 : q.prepay;
-    const status = prepay > 0 ? "pending" : "confirmed";
+    const mode = skipPrepay ? "none" : q.prepayMode;
+    // Для заявки зберігаємо суму передоплати — на випадок, якщо майстер її попросить.
+    const prepay = mode === "none" ? 0 : q.prepayAmount;
+    const status = mode === "now" ? "pending" : mode === "ask" ? "request" : "confirmed";
     const r = run(
       `INSERT INTO bookings(client_id, master_id, service_id, service_name, date, start, duration, start_utc, price, discount,
         bonus_used, prepay, status, comment, source, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -237,6 +260,15 @@ export function createBooking({ serviceId, addonIds = [], masterId, date, start,
     if (q.bonusUse) addBonus(client.id, -q.bonusUse, `Оплата бонусами, запис #${r.lastInsertRowid}`);
     const b = getBooking(r.lastInsertRowid);
     if (status === "confirmed") onConfirmed(b);
+    if (status === "request") {
+      notifyOwner({
+        title: "📩 Нова заявка — нова клієнтка",
+        body: `${b.client_name} (${b.client_phone})\n${b.service_name} — ${when(b)}\nПідтвердіть без передоплати або попросіть передоплату.`,
+        url: "/admin",
+        tag: "booking-" + b.id,
+        requireInteraction: true,
+      }).catch(() => {});
+    }
     return b;
   });
 }
@@ -259,6 +291,35 @@ function onConfirmed(b) {
     url: "/admin",
     tag: "booking-" + b.id,
   }).catch(() => {});
+}
+
+/**
+ * Рішення майстра щодо заявки: без передоплати (запис підтверджено) або з передоплатою
+ * (клієнтка отримує сповіщення і має сплатити протягом prepayHours годин).
+ * remember=true запамʼятовує вибір для цієї клієнтки на майбутнє.
+ */
+export function decideRequest(id, { withPrepay, remember = false }) {
+  const b = getBooking(id);
+  if (!b || b.status !== "request") throw new BookingError("Ця заявка вже розглянута");
+  const s = getSettings();
+  if (remember) run("UPDATE clients SET prepay_rule = ? WHERE id = ?", withPrepay ? "always" : "never", b.client_id);
+  if (!withPrepay || !b.prepay) {
+    run("UPDATE bookings SET status = 'confirmed', prepay = 0 WHERE id = ?", id);
+    pushClient(b.client_id, { title: "Ваш запис підтверджено ✓", body: `${b.service_name} — ${when(b)}. Чекаємо на вас!`, url: "/#/me", tag: "booking-" + id }).catch(() => {});
+    return getBooking(id);
+  }
+  // Час на оплату: prepayHours, але не пізніше ніж за 1 год до візиту (і не менше 20 хв).
+  const until = Math.max(Date.now() + PENDING_MINUTES * 60_000, Math.min(Date.now() + (s.prepayHours || 3) * 3600_000, b.start_utc - 3600_000));
+  run("UPDATE bookings SET status = 'pending', pay_until = ?, created_at = ? WHERE id = ?", until, Date.now(), id);
+  const t = new Date(until).toLocaleTimeString("uk-UA", { timeZone: "Europe/Kyiv", hour: "2-digit", minute: "2-digit" });
+  pushClient(b.client_id, {
+    title: `Підтвердіть запис передоплатою ${b.prepay} грн`,
+    body: `${b.service_name} — ${when(b)}. Сплатіть до ${t}, щоб закріпити час.`,
+    url: "/#/me",
+    tag: "booking-" + id,
+    requireInteraction: true,
+  }).catch(() => {});
+  return getBooking(id);
 }
 
 /** Позначити оплату (з вебхука або тестової оплати). */
@@ -288,7 +349,7 @@ export async function applyPayment(id, amount) {
 /** Скасування. byClient=true перевіряє дедлайн. */
 export async function cancelBooking(id, { byClient = false, refund = true } = {}) {
   const b = getBooking(id);
-  if (!b || !["pending", "confirmed"].includes(b.status)) throw new BookingError("Цей запис уже не можна скасувати");
+  if (!b || !["request", "pending", "confirmed"].includes(b.status)) throw new BookingError("Цей запис уже не можна скасувати");
   const s = getSettings();
   const late = b.start_utc - Date.now() < s.cancelHours * 3600_000;
   if (byClient && late && b.paid) throw new BookingError(`Безкоштовне скасування — не пізніше ніж за ${s.cancelHours} год. Напишіть, будь ласка, майстру.`);
