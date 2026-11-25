@@ -8,7 +8,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Секрети — лише зі змінних середовища, не в коді.
-export const BOT_TOKEN = process.env.BOT_TOKEN || "";
+// trim(): пробіл чи перенос рядка, скопійований разом із токеном, Telegram API
+// пропускає (URL їх відкидає), але підпис Mini App тоді не сходиться.
+export const BOT_TOKEN = (process.env.BOT_TOKEN || "").trim();
+if (process.env.BOT_TOKEN && process.env.BOT_TOKEN !== BOT_TOKEN) {
+  console.warn("[bot] BOT_TOKEN містив пробіли або перенос рядка — їх прибрано");
+}
 if (!BOT_TOKEN) throw new Error("Не задано змінну середовища BOT_TOKEN");
 export const BOT_USERNAME = process.env.BOT_USERNAME || "nevidomyi_chat_bot";
 export const CLAIM_CODE = process.env.CLAIM_CODE || ""; // порожній = /claim вимкнено
