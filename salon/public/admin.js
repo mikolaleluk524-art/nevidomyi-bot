@@ -85,6 +85,7 @@ const TABS = [
   ["photos", "🖼️ Фото"],
   ["reviews", "⭐ Відгуки"],
   ["clients", "👥 Клієнти"],
+  ["gifts", "🎁 Подарунки"],
   ["qr", "🔳 QR-постери"],
   ["settings", "⚙️ Салон"],
 ];
@@ -104,7 +105,7 @@ async function route() {
   const box = $("#tab");
   box.innerHTML = '<div class="spinner"></div>';
   try {
-    await ({ bookings, schedule, services: servicesTab, photos, reviews, clients, qr, settings }[tab] || bookings)(box);
+    await ({ bookings, schedule, services: servicesTab, photos, reviews, clients, gifts, qr, settings }[tab] || bookings)(box);
   } catch (e) {
     box.innerHTML = `<div class="empty">${esc(e.message)}</div>`;
   }
@@ -484,6 +485,75 @@ async function clients(box, q = "") {
   }));
 }
 
+// ---------- подарункові сертифікати ----------
+const GSTATUS = { active: "діє", used: "використано", expired: "термін минув" };
+async function gifts(box) {
+  const list = await api("/api/admin/gifts");
+  box.innerHTML = `
+    <div class="card"><h3>Перевірити сертифікат</h3>
+      <p class="small muted">Клієнтка назвала код — введіть його, щоб побачити залишок і списати оплату.</p>
+      <div class="row"><input id="gcode" placeholder="MK-XXXX-XXXX" style="text-transform:uppercase"><button class="btn" id="gfind">Знайти</button></div>
+      <div id="gres"></div></div>
+    <div class="card"><h3>Продати в салоні</h3>
+      <p class="small muted">Якщо сертифікат купили у вас готівкою чи переказом — створіть його тут, і клієнтка отримає листівку за посиланням.</p>
+      <div class="two"><label class="f"><span>Сума, грн</span><input id="ns" type="number" inputmode="numeric"></label><label class="f"><span>Для кого</span><input id="nr"></label></div>
+      <div class="two"><label class="f"><span>Покупець</span><input id="nn"></label><label class="f"><span>Телефон</span><input id="np" type="tel" value="+380"></label></div>
+      <button class="btn ghost block" style="margin-top:10px" id="gnew">Створити сертифікат</button></div>
+    <section class="section"><h3>Продані сертифікати</h3>
+      ${list.length ? list.map((g) => `<div class="card">
+        <div class="row between"><b style="font-family:ui-monospace,monospace">${esc(g.code)}</b><span class="badge ${g.status === "active" ? "ok" : "mute"}">${GSTATUS[g.status] || g.status}</span></div>
+        <div class="small">${money(g.amount)} · залишок <b>${money(g.balance)}</b>${g.recipient ? ` · для: ${esc(g.recipient)}` : ""}</div>
+        <div class="small muted">купила ${esc(g.buyerName)} ${esc(g.buyerPhone)} · ${new Date(g.createdAt).toLocaleDateString("uk-UA")}${g.expiresAt ? ` · до ${new Date(g.expiresAt).toLocaleDateString("uk-UA")}` : ""}</div>
+      </div>`).join("") : '<p class="muted small">Поки що жодного. Клієнтки купують сертифікати в застосунку: головна → «Подарунковий сертифікат».</p>'}
+    </section>`;
+  const find = async () => {
+    const res = $("#gres");
+    try {
+      const g = await api(`/api/admin/gifts/lookup?code=${encodeURIComponent($("#gcode").value)}`);
+      res.innerHTML = `<div style="margin-top:12px;padding:12px;border-radius:12px;background:var(--accent-soft)">
+        <div class="row between"><b>${money(g.balance)}</b><span class="badge ${g.status === "active" ? "ok" : "mute"}">${GSTATUS[g.status] || g.status}</span></div>
+        <div class="small">номінал ${money(g.amount)}${g.recipient ? ` · для: ${esc(g.recipient)}` : ""} · від ${esc(g.buyerName)}</div>
+        ${g.expiresAt ? `<div class="small muted">діє до ${new Date(g.expiresAt).toLocaleDateString("uk-UA")}</div>` : ""}
+        ${g.log.length > 1 ? `<div class="small muted" style="margin-top:6px">${g.log.slice(1).map((l) => `${new Date(l.created_at).toLocaleDateString("uk-UA")}: ${l.delta} грн ${esc(l.note)}`).join("<br>")}</div>` : ""}
+        ${g.status === "active" ? `<div class="row" style="margin-top:10px"><input id="gamt" type="number" inputmode="numeric" placeholder="Сума до списання" value="${g.balance}"><button class="btn" id="gred">Списати</button></div>` : ""}
+      </div>`;
+      $("#gred")?.addEventListener("click", async () => {
+        const amt = Number($("#gamt").value);
+        if (!amt) return;
+        if (!confirm(`Списати ${amt} грн з сертифіката ${g.code}?`)) return;
+        try {
+          const r = await api(`/api/admin/gifts/${g.id}/redeem`, { body: { amount: amt, note: "Оплата послуги" } });
+          toast(`Списано. Залишок: ${money(r.balance)}`, 3500);
+          find();
+        } catch (e) {
+          toast(e.message);
+        }
+      });
+    } catch (e) {
+      res.innerHTML = `<div class="err">${esc(e.message)}</div>`;
+    }
+  };
+  $("#gfind").onclick = find;
+  $("#gcode").onkeydown = (e) => e.key === "Enter" && find();
+  $("#gnew").onclick = async () => {
+    try {
+      const g = await api("/api/admin/gifts", { body: { amount: $("#ns").value, recipient: $("#nr").value, name: $("#nn").value, phone: $("#np").value } });
+      const url = `${location.origin}/#/gift/${g.code}`;
+      sheet(`<h2>Сертифікат створено ✓</h2><p>Код: <b style="font-family:ui-monospace,monospace">${esc(g.code)}</b></p><p class="small muted">Надішліть клієнтці посилання на листівку:</p><input value="${esc(url)}" readonly onclick="this.select()"><button class="btn block" style="margin-top:12px" id="cp">Скопіювати посилання</button>`, (el, close) => {
+        $("#cp", el).onclick = async () => {
+          if (navigator.share) {
+            try { await navigator.share({ url }); } catch {}
+          } else await navigator.clipboard?.writeText(url);
+          close();
+          route();
+        };
+      });
+    } catch (e) {
+      toast(e.message);
+    }
+  };
+}
+
 // ---------- QR-постери ----------
 async function qr(box) {
   const sources = await api("/api/admin/sources");
@@ -541,7 +611,7 @@ async function settings(box) {
       ${f("bookingDays", "Запис наперед, днів", "number")}
       <p class="small" style="margin-top:10px">Оплата: <b>${{ liqpay: "LiqPay підключено ✓", mono: "monobank підключено ✓" }[stats.payments] || "тестовий режим"}</b>${stats.payments === "demo" ? ". Щоб увімкнути справжню передоплату — зареєструйте магазин на liqpay.ua і додайте ключі в Railway: <code>LIQPAY_PUBLIC_KEY</code> і <code>LIQPAY_PRIVATE_KEY</code>." : ""}</p></div>
     <div class="card"><h3>Бонуси і рефералка</h3>
-      <div class="two">${f("refBonus", "Бонус тій, що привела", "number")}${f("refDiscount", "Знижка подрузі, грн", "number")}</div>
+      <div class="two">${f("giftAmounts", "Номінали сертифікатів, грн", "text")}${f("giftMonths", "Термін дії, місяців", "number")}</div>
       <div class="two">${f("cashbackPercent", "Кешбек з візиту, %", "number")}${f("maxBonusPercent", "Макс. оплата бонусами, %", "number")}</div>
       ${f("birthdayDiscount", "Знижка в тиждень дня народження, %", "number")}</div>
     <button class="btn block big" id="save" style="margin-top:14px">Зберегти</button>

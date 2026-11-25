@@ -166,11 +166,12 @@ async function home() {
       </section>` : ""}
 
     <section class="section">
-      <a class="card" href="#/me" style="display:flex;gap:14px;align-items:center;text-decoration:none;color:inherit;background:linear-gradient(135deg,var(--accent-soft),var(--card))">
+      <a class="card" href="#/gift" style="display:flex;gap:14px;align-items:center;text-decoration:none;color:inherit;background:linear-gradient(135deg,var(--accent-soft),var(--card))">
         <div style="font-size:38px">🎁</div>
-        <div class="grow"><b>Приведи подругу</b>
-          <div class="small muted">Подрузі — ${money(s.refDiscount)} знижки на перший візит, вам — ${s.refBonus} бонусів. Ще й ${s.cashbackPercent}% кешбеку з кожного візиту.</div>
+        <div class="grow"><b>Подарунковий сертифікат</b>
+          <div class="small muted">Найкращий подарунок для мами, подруги чи коханої — краса від «${esc(s.name)}». Оплата онлайн, листівка одразу в телефоні.</div>
         </div>
+        <div style="color:var(--accent);font-weight:800">→</div>
       </a>
     </section>
 
@@ -577,10 +578,8 @@ async function done(id) {
       <a class="btn line block" href="/api/bookings/${b.id}/ics?token=${encodeURIComponent(token())}">📅 Додати в календар</a>
       <a class="btn line block" href="#/visit/${b.id}">🧭 Як нас знайти</a>
     </div>
-    <div class="card" style="margin-top:14px"><b>🎁 Запросіть подругу</b><p class="small muted">Вона отримає ${money(info.settings.refDiscount)} знижки, а ви — ${info.settings.refBonus} бонусів після її візиту.</p><button class="btn ghost block" id="share">Поділитися посиланням</button></div>
     <a class="btn block" style="margin-top:14px" href="#/">На головну</a>`;
   $("#push")?.addEventListener("click", async () => (await enablePush()) && done(id));
-  $("#share").onclick = () => shareRef(me);
 }
 
 // ================= Роботи та сертифікати =================
@@ -659,19 +658,6 @@ function reviewForm(id) {
 }
 
 // ================= Мій кабінет =================
-async function shareRef(m) {
-  const url = `${location.origin}/?ref=${m.refCode}`;
-  const text = `Записуйся до ${info.settings.name} за моїм посиланням — отримаєш ${money(info.settings.refDiscount)} знижки на перший візит 💅`;
-  if (navigator.share) {
-    try {
-      await navigator.share({ title: info.settings.name, text, url });
-    } catch {}
-  } else {
-    await navigator.clipboard?.writeText(`${text}\n${url}`);
-    toast("Посилання скопійовано");
-  }
-}
-
 let qrLib = null;
 async function qrSvg(text) {
   if (!qrLib) {
@@ -726,15 +712,7 @@ async function me() {
         </div>`).join("") : `<div class="card center"><p class="muted">Немає майбутніх записів</p><a class="btn" href="#/book">Записатись</a></div>`}
     </section>
 
-    <section class="section">
-      <h2>Приведи подругу 🎁</h2>
-      <div class="card">
-        <p>Подруга отримає <b>${money(s.refDiscount)}</b> знижки на перший візит, а ви — <b>${s.refBonus} бонусів</b>, щойно вона прийде.</p>
-        <div class="refbox"><div class="qr" id="qr"></div><div><div class="small muted">Ваш код</div><div class="code">${esc(m.refCode)}</div><div class="small muted">Покажіть QR подрузі або надішліть посилання</div></div></div>
-        <button class="btn block" style="margin-top:12px" id="share">Поділитися посиланням</button>
-        ${m.invited.length ? `<div style="margin-top:12px">${m.invited.map((i) => `<div class="row between small"><span>${esc(i.name)}</span>${i.came ? '<span class="badge ok">+' + s.refBonus + "</span>" : '<span class="badge mute">чекаємо візит</span>'}</div>`).join("")}</div>` : ""}
-      </div>
-    </section>
+    <a class="card row" href="#/gift" style="margin-top:14px;text-decoration:none;color:inherit"><span style="font-size:28px">🎁</span><div class="grow"><b>Подарунковий сертифікат</b><div class="small muted">Подаруйте красу близькій людині</div></div><b style="color:var(--accent)">→</b></a>
 
     ${past.length ? `<section class="section"><h2>Історія</h2>${past.map((b) => `
       <div class="card">
@@ -756,8 +734,6 @@ async function me() {
 
     ${m.bonusLog.length ? `<section class="section"><h3>Рух бонусів</h3><div class="card">${m.bonusLog.map((l) => `<div class="row between small" style="padding:4px 0"><span class="grow">${esc(l.reason)}</span><b style="color:${l.delta > 0 ? "var(--ok)" : "var(--bad)"}">${l.delta > 0 ? "+" : ""}${l.delta}</b></div>`).join("")}</div></section>` : ""}
   `;
-  qrSvg(`${location.origin}/?ref=${m.refCode}`).then((svg) => ($("#qr").innerHTML = svg)).catch(() => $("#qr")?.remove());
-  $("#share").onclick = () => shareRef(m);
   $("#push")?.addEventListener("click", async () => (await enablePush()) && me());
   $("#psave").onclick = async () => {
     try {
@@ -907,6 +883,119 @@ async function visit(id) {
   }
 }
 
+// ================= Подарункові сертифікати =================
+function giftBuy() {
+  setTab("home");
+  header("Подарунковий сертифікат", true);
+  const s = info.settings;
+  const amounts = String(s.giftAmounts || "").split(/[,\s]+/).map(Number).filter((n) => n >= 200);
+  let amount = amounts[1] || amounts[0] || 1000;
+  view.innerHTML = `
+    <div class="gift-card"><div class="gift-top">Подарунковий сертифікат</div><div class="gift-name">${esc(s.name)}</div>
+      <div class="gift-sum" id="gsum">${money(amount)}</div><div class="gift-sub">манікюр · педикюр · догляд</div></div>
+    <div class="card" style="margin-top:14px">
+      <b>Сума</b>
+      <div class="chips" id="chips">${amounts.map((a) => `<button class="chip ${a === amount ? "on" : ""}" data-a="${a}">${money(a)}</button>`).join("")}<button class="chip" data-a="other">Інша</button></div>
+      <label class="f hidden" id="otherWrap"><span>Своя сума, грн (від 200)</span><input id="other" type="number" inputmode="numeric" min="200" step="50"></label>
+      <p class="small muted" style="margin-top:8px">Сертифікатом можна оплатити будь-які послуги. Діє ${s.giftMonths || 6} міс. з дня покупки.</p>
+    </div>
+    <div class="card">
+      <label class="f" style="margin-top:0"><span>Для кого (імʼя на сертифікаті)</span><input id="grec" placeholder="Для мами"></label>
+      <label class="f"><span>Побажання (необовʼязково)</span><textarea id="gmsg" maxlength="300" placeholder="З днем народження! Нехай кожен день буде красивим 💛"></textarea></label>
+      <label class="f"><span>Ваше імʼя</span><input id="gname" autocomplete="name" value="${esc(store.get("name") || "")}"></label>
+      <label class="f"><span>Ваш телефон</span><input id="gphone" type="tel" inputmode="tel" value="${esc(store.get("phone") || "+380")}"></label>
+    </div>
+    <div class="err" id="gerr"></div>
+    <button class="btn block big" id="gbuy" style="margin-top:12px">Оплатити ${money(amount)}</button>`;
+  const setAmount = (a) => {
+    amount = a;
+    $("#gsum").textContent = money(a || 0);
+    $("#gbuy").textContent = `Оплатити ${money(a || 0)}`;
+  };
+  view.querySelectorAll(".chip").forEach((c) => (c.onclick = () => {
+    view.querySelectorAll(".chip").forEach((x) => x.classList.toggle("on", x === c));
+    const other = c.dataset.a === "other";
+    $("#otherWrap").classList.toggle("hidden", !other);
+    if (other) $("#other").focus();
+    else setAmount(Number(c.dataset.a));
+  }));
+  $("#other").oninput = (e) => setAmount(Number(e.target.value) || 0);
+  $("#gbuy").onclick = async () => {
+    $("#gerr").textContent = "";
+    $("#gbuy").disabled = true;
+    try {
+      const r = await api("/api/gifts", { body: { amount, recipient: $("#grec").value, message: $("#gmsg").value, name: $("#gname").value, phone: $("#gphone").value } });
+      store.set("name", $("#gname").value);
+      store.set("phone", $("#gphone").value);
+      const mine = JSON.parse(store.get("gifts") || "[]");
+      store.set("gifts", JSON.stringify([r.code, ...mine].slice(0, 20)));
+      if (r.payUrl) return (location.href = r.payUrl);
+      sheet(`<div class="center"><div style="font-size:44px">💳</div><h2>Оплата ${money(amount)}</h2>
+        <p class="muted small">Тестовий режим: справжня оплата увімкнеться, щойно салон підключить LiqPay. Зараз гроші не списуються.</p></div>
+        <button class="btn block big" id="gdp">Сплатити (тест)</button>`, (el, close) => {
+        $("#gdp", el).onclick = async () => {
+          await api(`/api/gifts/${r.code}/demo-pay`, { body: {} });
+          close();
+          location.hash = `#/gift/${r.code}`;
+        };
+      });
+    } catch (e) {
+      $("#gerr").textContent = e.message;
+    } finally {
+      $("#gbuy").disabled = false;
+    }
+  };
+}
+
+async function giftView(code) {
+  setTab("home");
+  header("Ваш сертифікат", () => (location.hash = "#/"));
+  const s = info.settings;
+  let g = null;
+  for (let i = 0; i < 6; i++) {
+    g = await api(`/api/gifts/${encodeURIComponent(code)}`);
+    if (g.status !== "pending") break;
+    view.innerHTML = '<div class="spinner"></div><p class="center muted">Перевіряємо оплату…</p>';
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  if (g.status === "pending") {
+    view.innerHTML = `<div class="card center"><div style="font-size:40px">⏳</div><h3>Оплата ще обробляється</h3><p class="muted">Оновіть сторінку за хвилину. Якщо оплата не пройшла — спробуйте купити сертифікат ще раз.</p><button class="btn" onclick="location.reload()">Оновити</button></div>`;
+    return;
+  }
+  const until = g.expiresAt ? new Date(g.expiresAt).toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric" }) : "";
+  const label = { active: "", used: "Використано", expired: "Термін дії минув" }[g.status] || "";
+  const url = `${location.origin}/#/gift/${g.code}`;
+  view.innerHTML = `
+    <div class="gift-card big">
+      <div class="gift-top">Подарунковий сертифікат</div>
+      <div class="gift-name">${esc(s.name)}</div>
+      ${g.recipient ? `<div class="gift-for">${esc(g.recipient)}</div>` : ""}
+      <div class="gift-sum">${money(g.amount)}</div>
+      ${g.message ? `<div class="gift-msg">«${esc(g.message)}»</div>` : ""}
+      <div class="gift-from">від ${esc(g.from)}</div>
+      <div class="gift-code">${esc(g.code)}</div>
+      <div class="gift-sub">${until ? `Діє до ${until}` : ""}${label ? ` · ${label}` : ""}</div>
+      <div class="gift-sub">📍 ${esc(s.address)} · ☎ ${esc(s.phone)}</div>
+    </div>
+    ${g.status === "active" && g.balance < g.amount ? `<p class="center" style="margin-top:10px">Залишок: <b>${money(g.balance)}</b></p>` : ""}
+    <div class="card stack" style="margin-top:14px">
+      <button class="btn block" id="gshare">💌 Надіслати отримувачці</button>
+      <p class="small muted">Або зробіть скріншот листівки. Щоб скористатися — запишіться і назвіть майстру код сертифіката.</p>
+      <a class="btn line block" href="#/book">Записатись</a>
+    </div>`;
+  $("#gshare").onclick = async () => {
+    const text = `${g.recipient ? g.recipient + ", для тебе" : "Для тебе"} подарунковий сертифікат «${s.name}» на ${money(g.amount)} 💛 Код: ${g.code}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Подарунковий сертифікат", text, url });
+      } catch {}
+    } else {
+      await navigator.clipboard?.writeText(`${text}\n${url}`);
+      toast("Посилання скопійовано");
+    }
+  };
+}
+
 // ================= Роутер =================
 const routes = [
   [/^\/?$/, home],
@@ -916,6 +1005,8 @@ const routes = [
   [/^\/reviews$/, reviews],
   [/^\/me$/, me],
   [/^\/map$/, () => visit(null)],
+  [/^\/gift$/, giftBuy],
+  [/^\/gift\/([A-Za-z0-9-]+)$/, (m) => giftView(m[1])],
   [/^\/visit\/(\d+)$/, (m) => visit(m[1])],
   [/^\/paid\/(\d+)$/, (m) => paid(m[1])],
   [/^\/done\/(\d+)$/, (m) => done(m[1])],

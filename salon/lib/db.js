@@ -191,13 +191,21 @@ export const DEFAULT_SETTINGS = {
   bookingDays: 30, // на скільки днів вперед можна записатися
   minNoticeHours: 2, // мінімум годин до запису
   cancelHours: 24, // безкоштовне скасування не пізніше ніж за N годин
-  refBonus: 100, // бонусів тому, хто привів подругу (після її візиту)
-  refDiscount: 100, // знижка подрузі на перший візит, грн
+  refBonus: 0, // «Приведи подругу» вимкнено (власниця вирішила не давати знижок за запрошення)
+  refDiscount: 0,
+  giftAmounts: "500, 800, 1000, 1500, 2000", // номінали подарункових сертифікатів
+  giftMonths: 6, // термін дії сертифіката, місяців
   cashbackPercent: 5, // кешбек бонусами з кожного візиту
   maxBonusPercent: 50, // якою частиною вартості можна оплатити бонусами
   birthdayDiscount: 10, // % знижки в тиждень дня народження
   rules: "Будь ласка, приходьте за 5 хвилин до початку. Якщо запізнюєтесь більше ніж на 15 хвилин — запис може бути перенесено.",
 };
+
+// Одноразово: вимикаємо «Приведи подругу» на вже запущеному салоні
+if (!one("SELECT 1 FROM settings WHERE key = '_ref_off_v1'")) {
+  run("DELETE FROM settings WHERE key IN ('refBonus', 'refDiscount')");
+  run("INSERT INTO settings(key, value) VALUES('_ref_off_v1', '1')");
+}
 
 export function getSettings() {
   const rows = all("SELECT key, value FROM settings WHERE key NOT LIKE '\\_%' ESCAPE '\\'");

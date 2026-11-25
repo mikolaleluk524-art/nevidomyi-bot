@@ -48,7 +48,7 @@
     <div class="perks">
       <div class="perk"><b>🗓️</b>Бачите вільні вікна 24/7</div>
       <div class="perk"><b>🔔</b>Нагадаємо перед візитом</div>
-      <div class="perk"><b>🎁</b><span id="perk3">Бонуси за подруг</span></div>
+      <div class="perk"><b>🎁</b><span id="perk3">Подарункові сертифікати</span></div>
     </div>
     <div class="foot"><div id="addr"></div><div class="url" id="url"></div></div>
   </div>
@@ -76,7 +76,6 @@
       document.getElementById("name").textContent = s.name;
       document.getElementById("tagline").textContent = s.tagline;
       document.getElementById("addr").textContent = `📍 ${s.address}${s.cabinet ? ", " + s.cabinet : ""} · ☎ ${s.phone}`;
-      if (s.refDiscount) document.getElementById("perk3").textContent = `−${s.refDiscount} грн подрузі, бонуси вам`;
     });
   </script>
 </body>

@@ -259,3 +259,24 @@ nav.bar a.cta .ic { background: var(--accent); width: 46px; height: 46px; border
 
 .spinner { width: 28px; height: 28px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 40px auto; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Подарунковий сертифікат */
+.gift-card {
+  position: relative; overflow: hidden; text-align: center; color: #fff8ec;
+  border-radius: 22px; padding: 26px 18px;
+  background: radial-gradient(120% 80% at 100% 0%, rgba(255, 255, 255, 0.18), transparent 55%), linear-gradient(135deg, var(--g1), var(--g2) 55%, var(--g3));
+  box-shadow: 0 14px 34px color-mix(in srgb, var(--g2) 40%, transparent);
+}
+.gift-card::after { content: ""; position: absolute; inset: 10px; border: 1px solid rgba(255, 248, 236, 0.45); border-radius: 16px; pointer-events: none; }
+.gift-top { letter-spacing: 0.22em; text-transform: uppercase; font-size: 11px; font-weight: 700; opacity: 0.85; }
+.gift-name { font-family: var(--serif); font-size: 34px; font-weight: 600; margin-top: 4px; }
+.gift-for { font-family: var(--serif); font-size: 22px; font-style: italic; margin-top: 8px; }
+.gift-sum { font-family: var(--serif); font-size: 52px; font-weight: 700; line-height: 1.1; margin: 10px 0 4px; }
+.gift-msg { font-family: var(--serif); font-size: 18px; font-style: italic; margin: 8px auto 0; max-width: 300px; }
+.gift-from { font-size: 13px; opacity: 0.85; margin-top: 6px; }
+.gift-code { display: inline-block; margin: 14px 0 6px; padding: 6px 14px; border-radius: 10px; background: rgba(0, 0, 0, 0.22); font: 800 18px ui-monospace, monospace; letter-spacing: 0.12em; }
+.gift-sub { font-size: 12px; opacity: 0.85; margin-top: 4px; }
+.gift-card.big { padding: 34px 20px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.chip { border: 1.5px solid var(--line); background: var(--card); color: var(--ink); border-radius: 99px; padding: 9px 14px; font: 700 14px var(--sans); cursor: pointer; }
+.chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }

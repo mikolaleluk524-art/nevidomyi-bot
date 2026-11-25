@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { all, getSecret, getSettings, one, run, setSecret, setSettings, UPLOAD_DIR } from "./lib/db.js";
 import { addDays, hm, humanDate, isDate, kyivNow, toMin } from "./lib/time.js";
 import { notifyOwner, pushClient, saveSubscription, VAPID_PUBLIC } from "./lib/notify.js";
+import { activateGift, createGift, GIFT_PENDING_MINUTES, giftByCode, giftLog, publicGift, redeemGift } from "./lib/gifts.js";
 import { createPayment, liqpayCallback, paymentStatus, paymentsLive, provider } from "./lib/payments.js";
 import {
   addBonus,
@@ -237,6 +238,12 @@ async function startPayment(req, b) {
   return { payUrl: pay.pageUrl };
 }
 
+async function syncGift(g) {
+  if (!g?.invoice_id || g.status !== "pending" || !paymentsLive()) return g;
+  const st = await paymentStatus(g.invoice_id);
+  return st.paid ? activateGift(g.id, st.amount) : g;
+}
+
 async function syncPayment(b) {
   if (!b?.invoice_id || b.paid || !paymentsLive()) return b;
   const st = await paymentStatus(b.invoice_id);
@@ -366,6 +373,40 @@ async function api(req, res, url) {
     }
   }
 
+  // --- подарункові сертифікати ---
+  if (m === "POST" && p === "/api/gifts") {
+    rateLimit(req, "gift", 10, 3600_000);
+    const body = await json(req);
+    const amount = Math.round(Number(body.amount));
+    const name = String(body.name || "").trim().slice(0, 80);
+    const phone = normPhone(body.phone);
+    if (!(amount >= 200 && amount <= 20000)) throw new HttpError(400, "Сума сертифіката — від 200 до 20 000 грн");
+    if (name.length < 2) throw new HttpError(400, "Вкажіть, будь ласка, ваше імʼя");
+    if (!phone) throw new HttpError(400, "Перевірте номер телефону");
+    const g = createGift({ amount, buyerName: name, buyerPhone: phone, recipient: body.recipient, message: body.message });
+    if (!paymentsLive()) return send(res, 200, { code: g.code, demoPay: true });
+    const base = baseUrl(req);
+    const pay = await createPayment({
+      amount,
+      orderId: `gift-${g.id}-${Date.now().toString(36)}`,
+      description: `Подарунковий сертифікат «${getSettings().name}» на ${amount} грн`,
+      resultUrl: `${base}/#/gift/${g.code}`,
+      serverUrl: `${base}/api/pay/webhook`,
+    });
+    run("UPDATE gift_certs SET invoice_id = ? WHERE id = ?", pay.ref, g.id);
+    return send(res, 200, { code: g.code, payUrl: pay.pageUrl });
+  }
+  const gc = p.match(/^\/api\/gifts\/([A-Za-z0-9-]+)(\/demo-pay)?$/);
+  if (gc) {
+    let g = giftByCode(gc[1]);
+    if (!g || g.status === "cancelled") throw new HttpError(404, "Сертифікат не знайдено");
+    if (gc[2] && m === "POST") {
+      if (paymentsLive()) throw new HttpError(400, "Тестова оплата вимкнена");
+      g = activateGift(g.id, g.amount);
+    } else g = await syncGift(g).catch(() => g);
+    return send(res, 200, publicGift(g));
+  }
+
   if (m === "GET" && p === "/api/me") return send(res, 200, me(client()));
 
   if (m === "POST" && p === "/api/me") {
@@ -435,6 +476,8 @@ async function api(req, res, url) {
     }
     const b = ref ? one("SELECT * FROM bookings WHERE invoice_id = ?", String(ref)) : null;
     if (b) await syncPayment(b).catch((e) => console.error("[webhook]", e.message));
+    const g = ref && !b ? one("SELECT * FROM gift_certs WHERE invoice_id = ?", String(ref)) : null;
+    if (g) await syncGift(g).catch((e) => console.error("[webhook gift]", e.message));
     return send(res, 200, { ok: true });
   }
 
@@ -476,6 +519,39 @@ async function adminApi(req, res, p, m, q) {
     ).map((b) => ({ ...publicBooking(b), clientName: b.client_name, clientPhone: b.client_phone, clientNote: b.client_note, comment: b.comment, visits: b.visits, noShows: b.no_shows, source: b.source, clientId: b.client_id }));
     const blocks = all("SELECT * FROM blocks WHERE date BETWEEN ? AND ? ORDER BY date, start", from, to);
     return send(res, 200, { from, to, bookings: rows, blocks });
+  }
+
+  if (m === "GET" && p === "/api/admin/gifts") {
+    const q2 = `%${String(q.q || "").trim()}%`;
+    const rows = all(
+      "SELECT * FROM gift_certs WHERE status != 'pending' AND status != 'cancelled' AND (code LIKE ? OR buyer_name LIKE ? OR buyer_phone LIKE ? OR recipient LIKE ?) ORDER BY id DESC LIMIT 200",
+      q2, q2, q2, q2
+    );
+    return send(res, 200, rows.map((g) => ({ ...publicGift(g), id: g.id, buyerName: g.buyer_name, buyerPhone: g.buyer_phone, createdAt: g.created_at, log: giftLog(g.id) })));
+  }
+  if (m === "GET" && p === "/api/admin/gifts/lookup") {
+    const g = giftByCode(q.code);
+    if (!g || g.status === "pending" || g.status === "cancelled") throw new HttpError(404, "Сертифікат з таким кодом не знайдено");
+    return send(res, 200, { ...publicGift(g), id: g.id, buyerName: g.buyer_name, buyerPhone: g.buyer_phone, log: giftLog(g.id) });
+  }
+  const gr = p.match(/^\/api\/admin\/gifts\/(\d+)\/redeem$/);
+  if (gr && m === "POST") {
+    const body = await json(req);
+    try {
+      return send(res, 200, publicGift(redeemGift(Number(gr[1]), Number(body.amount), body.note || "")));
+    } catch (e) {
+      throw new HttpError(400, e.message);
+    }
+  }
+  if (m === "POST" && p === "/api/admin/gifts") {
+    // Сертифікат, проданий у салоні за готівку / на картку
+    const body = await json(req);
+    const amount = Math.round(Number(body.amount));
+    if (!(amount > 0)) throw new HttpError(400, "Вкажіть суму");
+    const g = createGift({ amount, buyerName: String(body.name || "Салон").trim() || "Салон", buyerPhone: normPhone(body.phone) || "", recipient: body.recipient, message: body.message });
+    run("UPDATE gift_certs SET status = 'pending' WHERE id = ?", g.id);
+    const a = activateGift(g.id, amount);
+    return send(res, 200, publicGift(a));
   }
 
   if (m === "GET" && p === "/api/admin/requests") {
@@ -798,6 +874,11 @@ async function tick() {
         notifyOwner({ title: "⌛ Передоплату не внесено", body: `${c.name} (${c.phone}): ${b.service_name}, ${b.date} ${hm(b.start)} — час знову вільний.`, url: "/admin" }).catch(() => {});
       }
     }
+  }
+  // Неоплачені сертифікати
+  for (const g of all("SELECT * FROM gift_certs WHERE status = 'pending' AND created_at < ?", now - GIFT_PENDING_MINUTES * 60_000)) {
+    const fresh = await syncGift(g).catch(() => g);
+    if (fresh.status === "pending") run("UPDATE gift_certs SET status = 'cancelled' WHERE id = ?", g.id);
   }
   // Заявки, які так і не розглянули до початку візиту
   for (const b of all("SELECT * FROM bookings WHERE status = 'request' AND start_utc < ?", now)) {
