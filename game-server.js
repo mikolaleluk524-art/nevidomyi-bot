@@ -6,6 +6,8 @@
  * якщо обоє обрали). Імена беруться з анкети бота, а не з Telegram.
  * Подарунки (за зірки): дають ❤ (корона найпопулярнішого), видно на аватарці, і отримувач
  * одразу отримує запрошення побути наодинці з тим, хто подарував.
+ * Щоденна винагорода: серія днів дає безкоштовні 🌹 (справжній подарунок), 🎯 і на 7-й день
+ * день Premium. Пропущений день — серія спочатку. День рахується за київським часом.
  * За столом є спільний чат; посилання, @нікнейми й телефони в ньому приховуються.
  */
 
@@ -28,6 +30,14 @@ const REACTIONS = ["❤️", "😂", "🔥", "😮"];
 const GENDERS = { Чоловік: "m", Жінка: "f" };
 const CHOICES = ["kiss", "push", "alone"];
 const INVITE_MS = 5 * 60_000;
+// Щоденна винагорода за днями серії (1–7, далі по колу).
+export const DAILY = [
+  { roses: 1 }, { roses: 1 }, { roses: 1, aims: 1 },
+  { roses: 2 }, { roses: 2 }, { roses: 2, aims: 1 },
+  { roses: 3, premium: 1 },
+];
+const kyivDay = (d = new Date()) => d.toLocaleDateString("en-CA", { timeZone: "Europe/Kiev" });
+const prevDay = (day) => { const t = new Date(`${day}T12:00:00Z`); t.setUTCDate(t.getUTCDate() - 1); return t.toISOString().slice(0, 10); };
 // Скільки ❤ дає подарунок: 🌹10⭐ → 2, 💎250⭐ → 50.
 export const giftHearts = (stars) => Math.max(1, Math.round(stars / 5));
 
@@ -174,6 +184,49 @@ function withDb(fn) {
   }
 }
 
+// ---------- щоденна винагорода і гаманець безкоштовних 🌹 / 🎯 ----------
+function dailyRow(db, id) {
+  db.exec("create table if not exists daily (user_id text primary key, last_day text, streak integer not null default 0, roses integer not null default 0, aims integer not null default 0)");
+  return db.prepare("select * from daily where user_id = ?").get(id) ?? { last_day: null, streak: 0, roses: 0, aims: 0 };
+}
+function dailyNext(row) {
+  const today = kyivDay();
+  const claimed = row.last_day === today;
+  const streak = claimed ? row.streak : row.last_day === prevDay(today) ? row.streak + 1 : 1;
+  return { today, claimed, streak, day: ((streak - 1) % DAILY.length) + 1 };
+}
+function dailyState(id) {
+  return withDb((db) => { const row = dailyRow(db, id); return { ...dailyNext(row), roses: row.roses, aims: row.aims }; });
+}
+function claimDaily(id) {
+  return withDb((db) => {
+    db.exec("begin immediate");
+    try {
+      const row = dailyRow(db, id);
+      const next = dailyNext(row);
+      if (next.claimed) { db.exec("rollback"); return null; }
+      const reward = DAILY[next.day - 1];
+      db.prepare("insert into daily (user_id, last_day, streak, roses, aims) values (?, ?, ?, ?, ?) on conflict (user_id) do update set last_day = excluded.last_day, streak = excluded.streak, roses = daily.roses + ?, aims = daily.aims + ?")
+        .run(id, next.today, next.streak, row.roses + (reward.roses ?? 0), row.aims + (reward.aims ?? 0), reward.roses ?? 0, reward.aims ?? 0);
+      if (reward.premium) {
+        const now = Math.floor(Date.now() / 1000);
+        db.prepare("update users set premium_until = max(premium_until, ?) + ? where id = ?").run(now, reward.premium * 86400, id);
+      }
+      db.exec("commit");
+      const after = dailyRow(db, id);
+      return { day: next.day, streak: next.streak, reward, roses: after.roses, aims: after.aims };
+    } catch (err) {
+      try { db.exec("rollback"); } catch { /* вже закрито */ }
+      throw err;
+    }
+  });
+}
+// Списати одну безкоштовну 🌹 або 🎯. true — списано.
+function spend(id, kind) {
+  return withDb((db) => { dailyRow(db, id); return db.prepare(`update daily set ${kind} = ${kind} - 1 where user_id = ? and ${kind} > 0`).run(id).changes > 0; });
+}
+const sendWallet = (ws) => { const w = dailyState(ws.userId); send(ws, { type: "wallet", roses: w.roses, aims: w.aims }); };
+
 // Звичайний діалог у боті, як після прийнятого запиту. true — відкрито.
 function openDialog(a, b) {
   return withDb((db) => {
@@ -301,6 +354,9 @@ function sit(ws) {
   };
   send(ws, { type: "joined", seat, gifts: giftList(), aimStars: AIM_STARS });
   refresh(t);
+  const w = dailyState(ws.userId);
+  send(ws, { type: "wallet", roses: w.roses, aims: w.aims });
+  if (!w.claimed) send(ws, { type: "daily", day: w.day, streak: w.streak, rewards: DAILY });
 }
 
 function cancelRound(t, text) {
@@ -490,6 +546,58 @@ function onInvite(ws, msg) {
   refresh(t);
 }
 
+// Подарунок за столом: ❤, значок на аватарці і запрошення побути наодинці.
+function deliverTableGift(from, to, gift) {
+  const target = sockets.get(String(to));
+  const t = target?.table;
+  if (!t) return false;
+  const sender = sockets.get(String(from));
+  const fromSeat = sender?.table === t ? sender.seat : -1;
+  const hearts = giftHearts(GIFTS[gift.id]?.stars ?? 5);
+  const p = t.players[target.seat];
+  if (p) { p.hearts += hearts; p.badge = gift.emoji; }
+  broadcast(t, { type: "gift", from: fromSeat, to: target.seat, gift, hearts });
+  broadcast(t, snapshot(t));
+  if (fromSeat >= 0) {
+    t.invites.set(String(to), { fromId: String(from), at: Date.now() });
+    send(target, { type: "gift_invite", from: fromSeat, gift });
+  }
+  return true;
+}
+
+function onDailyClaim(ws) {
+  const res = claimDaily(ws.userId);
+  if (!res) return sendWallet(ws);
+  send(ws, { type: "daily_done", day: res.day, reward: res.reward });
+  send(ws, { type: "wallet", roses: res.roses, aims: res.aims });
+}
+
+// Безкоштовна 🌹 з щоденної винагороди — такий самий подарунок, як оплачений.
+function onFreeGift(ws, msg) {
+  const t = ws.table;
+  const to = t?.players[Number(msg.toSeat)];
+  if (!to || to.id === ws.userId) return send(ws, { type: "error", message: "Обери іншого гравця за столом." });
+  if (!spend(ws.userId, "roses")) { sendWallet(ws); return send(ws, { type: "notice", text: "Безкоштовних троянд немає." }); }
+  const g = GIFTS.rose;
+  deliverTableGift(ws.userId, to.id, { id: "rose", emoji: g.emoji, name: g.name });
+  withDb((db) => {
+    db.exec("create table if not exists gifts (id integer primary key autoincrement, from_id text not null, to_id text not null, gift text not null, stars integer not null, charge_id text unique, created_at integer not null)");
+    db.prepare("insert into gifts (from_id, to_id, gift, stars, charge_id, created_at) values (?, ?, 'rose', 0, null, ?)").run(ws.userId, to.id, Math.floor(Date.now() / 1000));
+  });
+  sendWallet(ws);
+}
+
+function onFreeAim(ws, msg) {
+  const t = ws.table;
+  const to = t?.players[Number(msg.toSeat)];
+  const me = t?.players[ws.seat];
+  if (!me || !to || to.id === ws.userId) return send(ws, { type: "error", message: "Обери іншого гравця за столом." });
+  if (!spend(ws.userId, "aims")) { sendWallet(ws); return send(ws, { type: "notice", text: "Безкоштовних 🎯 немає." }); }
+  me.aimAt = to.id;
+  send(ws, { type: "aim_set", to: Number(msg.toSeat) });
+  sendWallet(ws);
+}
+
 async function onAimInvoice(ws, msg) {
   const t = ws.table;
   const to = t?.players[Number(msg.toSeat)];
@@ -535,24 +643,7 @@ export function attachBottleGame(server) {
       const y = sockets.get(b);
       return Boolean(x?.table && x.table === y?.table);
     },
-    tableGift: (from, to, gift) => {
-      const target = sockets.get(to);
-      const t = target?.table;
-      if (!t) return false;
-      const sender = sockets.get(from);
-      const fromSeat = sender?.table === t ? sender.seat : -1;
-      const hearts = giftHearts(GIFTS[gift.id]?.stars ?? 5);
-      const p = t.players[target.seat];
-      if (p) { p.hearts += hearts; p.badge = gift.emoji; }
-      broadcast(t, { type: "gift", from: fromSeat, to: target.seat, gift, hearts });
-      broadcast(t, snapshot(t));
-      // Подарунок = запрошення побути наодинці з тим, хто подарував.
-      if (fromSeat >= 0) {
-        t.invites.set(String(to), { fromId: String(from), at: Date.now() });
-        send(target, { type: "gift_invite", from: fromSeat, gift });
-      }
-      return true;
-    },
+    tableGift: deliverTableGift,
     aim: (from, to) => {
       const me = sockets.get(String(from));
       const t = me?.table;
@@ -615,6 +706,9 @@ export function attachBottleGame(server) {
       else if (msg.type === "invite") onInvite(ws, msg);
       else if (msg.type === "gift_invoice") void onGiftInvoice(ws, msg);
       else if (msg.type === "aim_invoice") void onAimInvoice(ws, msg);
+      else if (msg.type === "daily_claim") onDailyClaim(ws);
+      else if (msg.type === "free_gift") onFreeGift(ws, msg);
+      else if (msg.type === "free_aim") onFreeAim(ws, msg);
       else if (msg.type === "join") join(ws);
     }));
     ws.on("close", safe(() => {

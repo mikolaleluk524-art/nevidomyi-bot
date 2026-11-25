@@ -76,6 +76,12 @@ button:disabled{opacity:.45;cursor:default}
 .gift i{display:block;font-size:12px;font-style:normal;color:var(--accent);margin-top:2px}
 .giftBtn{width:100%;margin-top:8px;padding:12px;border-radius:13px;border:1px solid var(--pink);background:#2a1820;color:var(--text);font-size:15px;font-weight:700}
 .who-btn{padding:12px 6px;background:var(--bg);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:14px}
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin:2px 0 12px}
+.day{padding:7px 1px;border-radius:9px;background:var(--bg);border:1px solid var(--border);font-size:9px;color:var(--muted);line-height:1.3}
+.day b{display:block;font-size:12px;color:var(--text);font-weight:400;margin-top:2px}
+.day.done{opacity:.45}
+.day.now{border-color:var(--accent);background:#3a2a1a;color:var(--accent);box-shadow:0 0 12px #d4a57455}
+.gift.free{border-color:var(--pink);background:#2a1820}
 .ghost{width:100%;padding:11px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);margin-top:6px}
 </style>
 </head>
@@ -171,6 +177,17 @@ const I18N = {
   ["🎁 Подарунок", "🎁 Подарок", "🎁 Gift"],
   ["📨 Покликати друзів", "📨 Позвать друзей", "📨 Invite friends"],
   ["🎯 На кого покаже пляшка · 5⭐", "🎯 На кого укажет бутылочка · 5⭐", "🎯 Choose who the bottle picks · 5⭐"],
+  ["🎁 Подарунок · 🌹×{0} безкоштовно", "🎁 Подарок · 🌹×{0} бесплатно", "🎁 Gift · 🌹×{0} free"],
+  ["🎯 На кого покаже пляшка · безкоштовно ×{0}", "🎯 На кого укажет бутылочка · бесплатно ×{0}", "🎯 Choose who the bottle picks · free ×{0}"],
+  ["💎 {0} день Premium", "💎 {0} день Premium", "💎 {0} day of Premium"],
+  ["🎁 Щоденна винагорода · день {0}", "🎁 Ежедневная награда · день {0}", "🎁 Daily reward · day {0}"],
+  ["Заходь щодня: що довша серія, то кращі подарунки. Пропустиш день — серія почнеться спочатку.", "Заходи каждый день: чем длиннее серия, тем лучше подарки. Пропустишь день — серия начнётся сначала.", "Come back every day: the longer your streak, the better the rewards. Miss a day and the streak starts over."],
+  ["Забрати", "Забрать", "Claim"],
+  ["День {0}", "День {0}", "Day {0}"],
+  ["Безкоштовно", "Бесплатно", "Free"],
+  ["ще {0} · +2 ❤", "ещё {0} · +2 ❤", "{0} left · +2 ❤"],
+  ["У тебе є безкоштовні 🎯: {0}. Обери гравця.", "У тебя есть бесплатные 🎯: {0}. Выбери игрока.", "You have free 🎯: {0}. Pick a player."],
+  ["🎁 Щоденна винагорода, день {0}: {1}", "🎁 Ежедневная награда, день {0}: {1}", "🎁 Daily reward, day {0}: {1}"],
   ["🎯 На кого покаже пляшка?", "🎯 На кого укажет бутылочка?", "🎯 Who should the bottle pick?"],
   ["Це має сенс, коли за столом хоча б двоє інших гравців. Зараз пляшка й так покаже на єдиного суперника.", "Это имеет смысл, когда за столом хотя бы двое других игроков. Сейчас бутылочка и так укажет на единственного соперника.", "This makes sense when there are at least two other players. Right now the bottle will pick your only opponent anyway."],
   ["Наступного твого ходу пляшка покаже на обраного гравця. Оплата зірками Telegram.", "В твой следующий ход бутылочка укажет на выбранного игрока. Оплата звёздами Telegram.", "On your next turn the bottle will pick the player you choose. Paid with Telegram Stars."],
@@ -268,11 +285,36 @@ function applyLang() {
   document.title = T("Гра в бутилочку");
   document.querySelectorAll("[data-t]").forEach((el) => { el.textContent = T(el.dataset.t); });
   document.querySelectorAll("[data-tp]").forEach((el) => { el.placeholder = T(el.dataset.tp); });
+  updateWalletLabels();
+}
+// Безкоштовні 🌹 / 🎯 зі щоденної винагороди — видно прямо на кнопках.
+function updateWalletLabels() {
+  const w = S.wallet;
+  $("giftBtn").textContent = w.roses > 0 ? T("🎁 Подарунок · 🌹×{0} безкоштовно", w.roses) : T("🎁 Подарунок");
+  $("aimBtn").textContent = w.aims > 0 ? T("🎯 На кого покаже пляшка · безкоштовно ×{0}", w.aims) : T("🎯 На кого покаже пляшка · 5⭐");
+}
+const rewardText = (r) => [r.roses ? "🌹×" + r.roses : "", r.aims ? "🎯×" + r.aims : "", r.premium ? T("💎 {0} день Premium", r.premium) : ""].filter(Boolean).join("  ");
+function showDaily(m) {
+  showOver(T("🎁 Щоденна винагорода · день {0}", m.day), T("Заходь щодня: що довша серія, то кращі подарунки. Пропустиш день — серія почнеться спочатку."), [
+    [T("Забрати"), () => { ws.send(JSON.stringify({ type: "daily_claim" })); hideOver(); }],
+  ]);
+  const days = document.createElement("div");
+  days.className = "days";
+  m.rewards.forEach((r, i) => {
+    const d = document.createElement("div");
+    d.className = "day" + (i + 1 < m.day ? " done" : i + 1 === m.day ? " now" : "");
+    d.textContent = T("День {0}", i + 1);
+    const b = document.createElement("b");
+    b.textContent = (r.roses > 1 ? r.roses + "🌹" : "🌹") + (r.aims ? "🎯" : "") + (r.premium ? "💎" : "");
+    d.appendChild(b);
+    days.appendChild(d);
+  });
+  $("overBtns").prepend(days);
 }
 
 const N = 10;
 const CAT_NAMES = { truth: "ПРАВДА", action: "ДІЯ", kiss: "ПОЦІЛУНОК", adult: "18+" };
-const S = { seat: -1, players: [], turn: -1, phase: "wait", spinner: -1, pair: null, task: null, answered: [], gifts: [], selected: "all", myChoice: null, fatal: false };
+const S = { wallet: { roses: 0, aims: 0 }, seat: -1, players: [], turn: -1, phase: "wait", spinner: -1, pair: null, task: null, answered: [], gifts: [], selected: "all", myChoice: null, fatal: false };
 const FACE = { m: "👨", f: "👩" };
 const giftHearts = (stars) => Math.max(1, Math.round(stars / 5));
 let ws = null;
@@ -408,6 +450,18 @@ function openGift(i) {
   $("sheetText").textContent = T("💌 Разом із подарунком {0} отримає запрошення побути з тобою наодинці. Подарунок дає ❤ (у кого найбільше — той носить 👑) і видно на аватарці. Оплата зірками Telegram.", S.players[i].name);
   const grid = $("gifts");
   grid.innerHTML = "";
+  if (S.wallet.roses > 0) {
+    const f = document.createElement("button");
+    f.className = "gift free";
+    f.innerHTML = "<b>🌹</b><span></span><i></i>";
+    f.querySelector("span").textContent = T("Безкоштовно");
+    f.querySelector("i").textContent = T("ще {0} · +2 ❤", S.wallet.roses);
+    f.addEventListener("click", () => {
+      ws.send(JSON.stringify({ type: "free_gift", toSeat: giftSeat }));
+      $("sheet").classList.add("hidden");
+    });
+    grid.appendChild(f);
+  }
   S.gifts.forEach((g) => {
     const b = document.createElement("button");
     b.className = "gift";
@@ -462,15 +516,16 @@ function pickAimTarget() {
   if (others.length < 2) {
     $("sheetText").textContent = T("Це має сенс, коли за столом хоча б двоє інших гравців. Зараз пляшка й так покаже на єдиного суперника.");
   } else {
-    $("sheetText").textContent = T("Наступного твого ходу пляшка покаже на обраного гравця. Оплата зірками Telegram.");
+    const free = S.wallet.aims > 0;
+    $("sheetText").textContent = free ? T("У тебе є безкоштовні 🎯: {0}. Обери гравця.", S.wallet.aims) : T("Наступного твого ходу пляшка покаже на обраного гравця. Оплата зірками Telegram.");
     others.forEach((i) => {
       const b = document.createElement("button");
       b.className = "who-btn";
       b.textContent = (FACE[S.players[i].g] || "🙂") + " " + S.players[i].name;
       b.addEventListener("click", () => {
-        ws.send(JSON.stringify({ type: "aim_invoice", toSeat: i }));
+        ws.send(JSON.stringify({ type: free ? "free_aim" : "aim_invoice", toSeat: i }));
         $("sheet").classList.add("hidden");
-        addFeed(T("Готую оплату..."));
+        if (!free) addFeed(T("Готую оплату..."));
       });
       grid.appendChild(b);
     });
@@ -606,6 +661,15 @@ function handle(m) {
       [T("🔒 Побути наодинці"), () => { ws.send(JSON.stringify({ type: "invite", yes: true })); hideOver(); }],
       [T("Дякую, лишусь за столом"), () => { ws.send(JSON.stringify({ type: "invite", yes: false })); hideOver(); }],
     ]);
+  } else if (m.type === "wallet") {
+    S.wallet = { roses: m.roses || 0, aims: m.aims || 0 };
+    updateWalletLabels();
+  } else if (m.type === "daily") {
+    showDaily(m);
+  } else if (m.type === "daily_done") {
+    addFeed(T("🎁 Щоденна винагорода, день {0}: {1}", m.day, rewardText(m.reward)), true);
+    fly(S.seat, "🎁");
+    buzz("notificationOccurred", "success");
   } else if (m.type === "aim_set") {
     addFeed(T("🎯 Наступного твого ходу пляшка покаже на {0}", nameOf(m.to)), true);
     buzz("notificationOccurred", "success");
