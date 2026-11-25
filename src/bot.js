@@ -780,6 +780,7 @@ async function stats(chatId) {
 }
 
 async function onCommand(chatId, id, name, args, from) {
+  if (name === "game") return send(chatId, "🍾 Запустити спільну гру:", { inline_keyboard: [[{ text: "ВІДКРИТИ ГРУ", web_app: { url: "https://nevidomyi-bot-production-045b32cd.up.railway.app/bottle.html" } }]] });
   run("update users set pending = null where id = ? and pending is not null", id);
   if (name !== "gender" && name !== "age") run("update users set goal = null where id = ? and goal = 'dating'", id);
   if (name === "myid") return send(chatId, `Твій ID: ${id}`);
@@ -968,6 +969,7 @@ export async function publishCommands() {
   await tg("setMyCommands", {
     commands: [
       { command: "start", description: "Почати" },
+      { command: "game", description: "Гра в бутилочку" },
       { command: "search", description: "Знайти співрозмовника" },
       { command: "next", description: "Наступний співрозмовник" },
       { command: "stop", description: "Завершити діалог" },
