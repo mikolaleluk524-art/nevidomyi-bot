@@ -1,0 +1,337 @@
+
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Гра в бутилочку</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+<style>
+:root {
+  --bg:#0c0b0a;
+  --card:#191613;
+  --border:#302923;
+  --text:#f5f0ea;
+  --muted:#a89f94;
+  --accent:#d4a574;
+  --green:#3b6b4f;
+}
+* {box-sizing:border-box;margin:0;padding:0}
+body {
+  background:var(--bg);
+  color:var(--text);
+  font-family:system-ui,sans-serif;
+  min-height:100vh;
+  padding:24px 16px;
+  text-align:center;
+}
+h1 {font-size:23px;margin-bottom:5px}
+.sub {font-size:13px;color:var(--muted);margin-bottom:20px}
+.stats {
+  display:flex;
+  justify-content:space-between;
+  max-width:360px;
+  margin:0 auto 18px;
+  color:var(--muted);
+  font-size:13px;
+}
+.table {
+  width:min(82vw,320px);
+  height:min(82vw,320px);
+  margin:0 auto 22px;
+  border-radius:50%;
+  border:2px solid var(--border);
+  background:radial-gradient(circle,#24201b,#14110f);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  position:relative;
+  box-shadow:0 0 35px #0008;
+}
+.side {
+  position:absolute;
+  top:50%;
+  transform:translateY(-50%);
+  font-size:12px;
+  color:var(--muted);
+  width:65px;
+}
+.left {left:4px}
+.right {right:4px}
+#bottle {
+  width:56px;
+  height:210px;
+  transform:rotate(0deg);
+  transition:transform 4s cubic-bezier(.12,.72,.18,1);
+}
+.categories {
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:9px;
+  max-width:360px;
+  margin:0 auto 16px;
+}
+.cat {
+  padding:12px 5px;
+  background:var(--card);
+  border:1px solid var(--border);
+  color:var(--text);
+  border-radius:12px;
+  font-size:14px;
+}
+.cat.active {
+  background:#493724;
+  border-color:var(--accent);
+  color:var(--accent);
+}
+button {
+  cursor:pointer;
+  font-family:inherit;
+}
+.main-btn {
+  width:100%;
+  max-width:360px;
+  padding:15px;
+  border:0;
+  border-radius:13px;
+  background:var(--accent);
+  color:#17110c;
+  font-size:16px;
+  font-weight:800;
+}
+.secondary {
+  margin-top:10px;
+  padding:12px 20px;
+  border:1px solid var(--border);
+  background:var(--card);
+  color:var(--text);
+  border-radius:12px;
+}
+.result {
+  max-width:360px;
+  margin:20px auto 0;
+  min-height:145px;
+}
+.who {
+  font-size:14px;
+  color:var(--accent);
+  margin-bottom:10px;
+}
+.card {
+  padding:20px 15px;
+  border-radius:15px;
+  background:var(--card);
+  border:1px solid var(--border);
+  font-size:17px;
+  line-height:1.5;
+}
+.tag {
+  color:var(--accent);
+  font-size:11px;
+  letter-spacing:2px;
+  margin-bottom:9px;
+}
+.hidden {display:none}
+.note {
+  color:var(--muted);
+  font-size:11px;
+  margin:20px auto 0;
+  max-width:320px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>🍾 Гра в бутилочку</h1>
+<div class="sub">Випробуй удачу разом зі співрозмовником</div>
+
+<div class="stats">
+  <span>Раунд: <b id="round">0</b></span>
+  <span id="categoryName">Усі категорії</span>
+</div>
+
+<div class="table">
+  <div class="side left">Ліворуч<br>Ти</div>
+  <div class="side right">Праворуч<br>Співрозмовник</div>
+
+  <svg id="bottle" viewBox="0 0 56 210">
+    <rect x="22" y="2" width="12" height="16" rx="3" fill="#d4a574"/>
+    <path d="M22 18 H34 V70 C34 82 52 92 52 120 V196 C52 204 46 208 40 208 H16 C10 208 4 204 4 196 V120 C4 92 22 82 22 70 Z"
+      fill="#3b6b4f" stroke="#6b9e78" stroke-width="2"/>
+    <rect x="12" y="130" width="32" height="46" rx="4" fill="#f5f0ea" opacity=".85"/>
+  </svg>
+</div>
+
+<div class="categories">
+  <button class="cat active" data-cat="all">🎲 Усе</button>
+  <button class="cat" data-cat="truth">💬 Правда</button>
+  <button class="cat" data-cat="action">🔥 Дія</button>
+  <button class="cat" data-cat="kiss">💋 Поцілунок</button>
+  <button class="cat" data-cat="adult">🔞 18+</button>
+</div>
+
+<button class="main-btn" id="spin">КРУТИТИ</button>
+
+<div class="result" id="result">
+  <div class="card">
+    <div class="tag">ГОТОВІ ДО ГРИ?</div>
+    Натисни кнопку та дізнайся, кому випаде наступне завдання.
+  </div>
+</div>
+
+<button class="secondary hidden" id="next">Наступний раунд</button>
+
+<div class="note">
+  Грайте добровільно. Кожен може відмовитися від будь-якого завдання.
+  Не надсилайте особисті дані та інтимні матеріали.
+</div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+tg?.ready();
+tg?.expand();
+
+const tasks = {
+truth: [
+"Яке твоє найсмішніше побачення?",
+"Яка твоя найбільша слабкість?",
+"Коли ти востаннє закохувався?",
+"Який твій найбільший секрет, яким можеш поділитися?",
+"Що тебе найбільше приваблює в людині?",
+"Який твій найбільш незручний момент?",
+"Кому ти хотів би зараз написати?",
+"Яка твоя найдивніша звичка?",
+"Що ти ніколи не пробачиш?",
+"Який комплімент ти пам'ятаєш досі?"
+],
+action: [
+"Зобрази свого співрозмовника протягом 20 секунд.",
+"Заспівай приспів будь-якої пісні.",
+"Скажи три щирі компліменти.",
+"Протягом хвилини говори пошепки.",
+"Зобрази смішну емоцію.",
+"Розкажи анекдот.",
+"Покажи свій найкращий танець.",
+"Придумай співрозмовнику прізвисько.",
+"Скажи щось приємне співрозмовнику.",
+"Протягом наступного раунду відповідай тільки правду."
+],
+kiss: [
+"Повітряний поцілунок співрозмовнику.",
+"Опиши свій ідеальний поцілунок.",
+"Скажи, що тобі найбільше подобається в співрозмовнику.",
+"Назви три риси, які тебе приваблюють.",
+"Придумай романтичне побачення.",
+"Надішли повітряний поцілунок у камеру."
+],
+adult: [
+"Який твій найбільш сміливий романтичний досвід?",
+"Що для тебе найпривабливіше в партнері?",
+"Яка твоя найбільш несподівана фантазія, якою комфортно поділитися?",
+"Що для тебе є найважливішим в інтимних стосунках?",
+"Який романтичний сценарій ти хотів би спробувати?"
+]
+};
+
+let selected = "all";
+let round = 0;
+let rotation = 0;
+let busy = false;
+
+const bottle = document.getElementById("bottle");
+const spin = document.getElementById("spin");
+const next = document.getElementById("next");
+const result = document.getElementById("result");
+
+document.querySelectorAll(".cat").forEach(btn => {
+  btn.addEventListener("click", () => {
+    if (busy) return;
+    document.querySelectorAll(".cat").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    selected = btn.dataset.cat;
+    document.getElementById("categoryName").textContent =
+      btn.textContent;
+    tg?.HapticFeedback?.selectionChanged();
+  });
+});
+
+function randomItem(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function getTask() {
+  const keys = selected === "all"
+    ? Object.keys(tasks)
+    : [selected];
+
+  const category = randomItem(keys);
+  return {
+    category,
+    text: randomItem(tasks[category])
+  };
+}
+
+const names = {
+truth:"ПРАВДА",
+action:"ДІЯ",
+kiss:"ПОЦІЛУНОК",
+adult:"18+"
+};
+
+spin.addEventListener("click", () => {
+  if (busy) return;
+
+  busy = true;
+  spin.disabled = true;
+  next.classList.add("hidden");
+
+  tg?.HapticFeedback?.impactOccurred("medium");
+
+  const winner = Math.random() < 0.5 ? "Ти" : "Співрозмовник";
+  const task = getTask();
+
+  const direction = Math.random() < 0.5 ? 1 : -1;
+  rotation += direction * (1440 + Math.random() * 1440);
+
+  bottle.style.transform = `rotate(${rotation}deg)`;
+
+  result.innerHTML = `
+    <div class="card">🍾 Пляшка обертається...</div>
+  `;
+
+  setTimeout(() => {
+    round++;
+
+    document.getElementById("round").textContent = round;
+
+    result.innerHTML = `
+      <div class="who">🎯 ЦЬОГО РАЗУ: ${winner}</div>
+      <div class="card">
+        <div class="tag">${names[task.category]}</div>
+        ${task.text}
+      </div>
+    `;
+
+    busy = false;
+    spin.disabled = false;
+    next.classList.remove("hidden");
+
+    tg?.HapticFeedback?.notificationOccurred("success");
+  }, 4100);
+});
+
+next.addEventListener("click", () => {
+  result.innerHTML = `
+    <div class="card">
+      <div class="tag">НАСТУПНИЙ РАУНД</div>
+      Натискай «Крутити»!
+    </div>
+  `;
+  next.classList.add("hidden");
+});
+
+</script>
+</body>
+</html>
