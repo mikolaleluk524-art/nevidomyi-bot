@@ -7,6 +7,7 @@
  */
 
 import { createServer } from "node:http";
+import { DatabaseSync } from "node:sqlite";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -110,7 +111,24 @@ function listen() {
   });
 }
 
+// Міграція: час оплати для статистики за 24 год (старі записи лишаються без часу).
+function migratePayments() {
+  const d = new DatabaseSync(DB_PATH);
+  try {
+    const cols = d.prepare("pragma table_info(payments)").all();
+    if (!cols.some((c) => c.name === "created_at")) d.exec("alter table payments add column created_at integer");
+    d.exec("create trigger if not exists payments_stamp after insert on payments when new.created_at is null begin update payments set created_at = cast(strftime('%s','now') as integer) where charge_id = new.charge_id; end;");
+  } finally {
+    d.close();
+  }
+}
+
 async function main() {
+  try {
+    migratePayments();
+  } catch (err) {
+    console.error("[bot] migrate", err.message);
+  }
   listen();
   const stop = () => {
     try { checkpoint(); } catch (err) {
