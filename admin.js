@@ -11,6 +11,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { DB_PATH, broadcastAll, broadcastStatus, newsAudience } from "./src/bot.js";
 import { gameEvents, setGameEvent } from "./game-server.js";
 import { aiEnabled, getSuggestions } from "./assistant.js";
+import { campaignLink, createCampaign, deleteCampaign, listCampaigns, outreachLetter, promoKit } from "./promo.js";
 
 // Порівняння ключа за постійний час (хеші однакової довжини).
 function sameKey(given, expected) {
@@ -147,6 +148,26 @@ async function assistantRoute(req, res, path, url) {
     console.info(`[admin] подія з монітора: ${body.type}`);
     return json(res, 200, { ok: true, ...result, events: gameEvents() });
   }
+  // 📣 Реклама: кампанії з мітками, набір постів, лист адміну.
+  if (path === "/admin/campaigns" && req.method === "GET") return json(res, 200, { ai: aiEnabled(), campaigns: listCampaigns() });
+  if (path === "/admin/campaigns" && req.method === "POST") {
+    const body = await readBody(req);
+    if (body.delete) return json(res, 200, { ok: deleteCampaign(body.delete), campaigns: listCampaigns() });
+    const c = createCampaign(body.name);
+    if (!c) return json(res, 400, { error: "name" });
+    return json(res, 200, { created: c, campaigns: listCampaigns() });
+  }
+  if (path === "/admin/promo" && req.method === "POST") {
+    const body = await readBody(req);
+    const tag = String(body.tag || "").replace(/[^a-z0-9_-]/gi, "");
+    const link = tag ? campaignLink(tag) : campaignLink("promo");
+    return json(res, 200, { link, ...(await promoKit(link, String(body.note || "").slice(0, 300))) });
+  }
+  if (path === "/admin/outreach" && req.method === "POST") {
+    const body = await readBody(req);
+    if (!String(body.channel || "").trim()) return json(res, 400, { error: "channel" });
+    return json(res, 200, await outreachLetter(body));
+  }
   return json(res, 404, { error: "not_found" });
 }
 
@@ -161,7 +182,7 @@ export function adminRoutes(req, res) {
   const url = new URL(req.url, "http://localhost");
   const path = url.pathname;
 
-  if (path === "/admin/assistant" || path === "/admin/broadcast" || path === "/admin/event") {
+  if (["/admin/assistant", "/admin/broadcast", "/admin/event", "/admin/campaigns", "/admin/promo", "/admin/outreach"].includes(path)) {
     assistantRoute(req, res, path, url).catch((err) => {
       console.error("[admin] assistant", err.message);
       if (!res.headersSent) json(res, 500, { error: "failed" });
