@@ -24,6 +24,7 @@ import { adminRoutes } from "./admin.js";
 import { attachBottleGame } from "./game-server.js";
 
 const DASHBOARD = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "dashboard.html"), "utf8");
+const BOTTLE_GAME = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "bottle.html"), "utf8");
 
 let beat = Date.now();
 let generation = 0;
@@ -91,6 +92,12 @@ function listen() {
     if (req.method === "OPTIONS") {
       res.writeHead(204);
       res.end();
+      return;
+    }
+
+    if (req.url === "/bottle.html" || req.url === "/bottle" || req.url.startsWith("/bottle.html?")) {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+      res.end(BOTTLE_GAME);
       return;
     }
 
