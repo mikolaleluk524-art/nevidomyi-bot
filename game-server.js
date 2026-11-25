@@ -654,16 +654,6 @@ export function attachBottleGame(server) {
       send(me, { type: "aim_set", to: seat });
       return true;
     },
-    aim: (from, to) => {
-      const me = sockets.get(String(from));
-      const t = me?.table;
-      const p = t?.players[me.seat];
-      const seat = t ? t.players.findIndex((x) => x?.id === String(to)) : -1;
-      if (!p || seat < 0) return false;
-      p.aimAt = String(to);
-      send(me, { type: "aim_set", to: seat });
-      return true;
-    },
   });
 
   wss.on("connection", (ws, req) => {
