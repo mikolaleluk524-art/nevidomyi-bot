@@ -983,7 +983,7 @@ export async function publishCommands() {
       { command: "startnews", description: "Знову отримувати новини" },
     ],
   });
-  await tg("setChatMenuButton", { menu_button: { type: "default" } });
+  await tg("setChatMenuButton", { menu_button: { type: "web_app", text: "🍾 Гра в бутилочку", web_app: { url: "https://nevidomyi-bot-production-045b32cd.up.railway.app/bottle.html" } } });
 }
 
 export function checkpoint() { db.exec("pragma wal_checkpoint(TRUNCATE)"); }
