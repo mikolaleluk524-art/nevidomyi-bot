@@ -380,7 +380,7 @@ function render(d) {
   $("inSearch").textContent = fmt(u.inSearch);
   const g = p.game || { players: 0, tables: 0, list: [] };
   $("inGame").textContent = fmt(g.players);
-  $("tablesSub").textContent = fmt(g.tables) + " " + (g.tables === 1 ? "стіл" : g.tables >= 2 && g.tables <= 4 ? "столи" : "столів");
+  $("tablesSub").textContent = fmt(g.tables) + " " + (g.tables === 1 ? "стіл" : g.tables >= 2 && g.tables <= 4 ? "столи" : "столів") + (g.bots ? " · ботів " + fmt(g.bots) : "");
 
   const m = d.money || {};
   $("starsDay").textContent = fmt(m.day) + " ⭐";
@@ -452,7 +452,7 @@ function render(d) {
   (g.list || []).forEach((t) => {
     const x = document.createElement("div"); x.className = "tbl";
     x.innerHTML = "Стіл " + t.id + ": <b></b> · ";
-    x.querySelector("b").textContent = t.players + " гр.";
+    x.querySelector("b").textContent = t.players + " гр." + (t.bots ? " + " + t.bots + " бот." : "");
     x.append((PH[t.phase] || t.phase) + " · раунд " + t.round);
     tb.appendChild(x);
   });

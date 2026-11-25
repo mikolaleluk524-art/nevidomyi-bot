@@ -290,7 +290,7 @@ const nextSeat = (t, from) => {
 };
 const snapshot = (t) => ({
   type: "table",
-  players: t.players.map((p) => p && { name: p.name, g: p.g, age: p.age, hearts: p.hearts, badge: p.badge }),
+  players: t.players.map((p) => p && { name: p.name, g: p.g, age: p.age, hearts: p.hearts, badge: p.badge, ...(p.bot ? { bot: true } : {}) }),
   turn: t.turn,
   phase: t.phase,
   round: t.round,
@@ -298,6 +298,95 @@ const snapshot = (t) => ({
   pair: t.pair ? t.pair.seats : null,
   answered: t.pair ? Object.keys(t.pair.answers).map(Number) : [],
 });
+
+// ---------- 🤖 боти-гравці ----------
+// Коли за столом мало людей, сідають боти з позначкою «бот» біля імені, щоб гра не простоювала.
+// Вони крутять пляшку, відповідають на завдання, реагують і в парі обирають 💋 або 👋.
+// «Наодинці» з ботом неможливе, подарунки, 🎯 і бажання на ботів не діють.
+const BOT_TABLE = 3; // скільки учасників тримати за столом, поки людей менше
+const BOT_NAMES = { f: ["Аліса", "Віра", "Соня", "Марта", "Ліза", "Дарина", "Ніка"], m: ["Макс", "Артем", "Денис", "Тарас", "Олег", "Назар"] };
+const BOT_ANSWERS = {
+  uk: ["Ой, це секрет 🤫", "Чесно? Кава і хороша компанія ☕", "Ха, я ж бот — у мене все за алгоритмом 😅", "Мабуть, усмішка. Завжди усмішка 🙂", "Обіцяю розповісти, якщо пляшка покаже на мене ще раз 😉", "Тут треба подумати… 🤔 Давай далі!", "Сонце, море і ніяких будильників 🌊", "Комплімент: у тебе чудове почуття гумору 😄"],
+  ru: ["Ой, это секрет 🤫", "Честно? Кофе и хорошая компания ☕", "Ха, я же бот — у меня всё по алгоритму 😅", "Наверное, улыбка. Всегда улыбка 🙂", "Обещаю рассказать, если бутылочка укажет на меня ещё раз 😉", "Тут надо подумать… 🤔 Давай дальше!", "Солнце, море и никаких будильников 🌊", "Комплимент: у тебя отличное чувство юмора 😄"],
+  en: ["Oh, that's a secret 🤫", "Honestly? Coffee and good company ☕", "Ha, I'm a bot — everything goes by the algorithm 😅", "A smile, probably. Always a smile 🙂", "I'll tell you if the bottle picks me again 😉", "Let me think… 🤔 Next!", "Sun, sea and no alarm clocks 🌊", "Compliment: you have a great sense of humour 😄"],
+};
+const humans = (t) => seated(t).filter((p) => !p.bot);
+const rnd = (a, b) => a + Math.floor(Math.random() * (b - a));
+let botSeq = 0;
+
+function botLater(t, ms, fn) {
+  const key = "bot" + ++botSeq;
+  t.timers[key] = setTimeout(safe(() => { delete t.timers[key]; fn(); }), ms);
+}
+
+function addBot(t) {
+  const seat = t.players.indexOf(null);
+  if (seat < 0) return;
+  // Переважно протилежна стать до людей за столом.
+  const hs = humans(t);
+  const males = hs.filter((p) => p.g === "m").length, females = hs.filter((p) => p.g === "f").length;
+  const g = males > females ? "f" : females > males ? "m" : Math.random() < 0.5 ? "f" : "m";
+  const taken = new Set(seated(t).map((p) => p.name));
+  const free = BOT_NAMES[g].filter((n) => !taken.has(n));
+  const name = free.length ? pick(free) : BOT_NAMES[g][0];
+  const id = "bot:" + randomBytes(4).toString("hex");
+  const ws = { bot: true, readyState: 3, userId: id, table: t, seat, lang: "uk", send() {}, close() {} };
+  t.players[seat] = { id, ws, name, g, age: rnd(20, 30), hearts: 0, badge: "", bot: true };
+}
+
+// Тримаємо за столом BOT_TABLE учасників, поки людей менше; прибираємо ботів лише між раундами.
+function maintainBots(t) {
+  const h = humans(t).length;
+  const want = h === 0 || h >= BOT_TABLE ? 0 : BOT_TABLE - h;
+  let bots = t.players.map((p, i) => (p?.bot ? i : -1)).filter((i) => i >= 0);
+  if (bots.length > want && (t.phase === "idle" || t.phase === "wait")) {
+    for (const i of bots.slice(want)) t.players[i] = null;
+    bots = bots.slice(0, want);
+  }
+  for (let k = bots.length; k < want; k++) addBot(t);
+}
+
+const firstHumanLang = (t) => humans(t)[0]?.ws?.lang || "uk";
+
+function scheduleBotSpin(t) {
+  const p = t.players[t.turn];
+  const key = t.round + ":" + t.turn;
+  if (t.phase !== "idle" || !p?.bot || t.botSpinKey === key) return;
+  t.botSpinKey = key;
+  const round = t.round;
+  botLater(t, rnd(2500, 4500), () => {
+    if (t.phase === "idle" && t.round === round && t.players[t.turn] === p) onSpin(p.ws, { selected: "all" });
+  });
+}
+
+function botAnswer(t) {
+  const p = t.players[t.target];
+  if (!p?.bot) return;
+  const round = t.round;
+  botLater(t, rnd(3000, 6000), () => {
+    if (t.phase === "answer" && t.round === round) onAnswer(p.ws, { text: pick(BOT_ANSWERS[firstHumanLang(t)] || BOT_ANSWERS.uk) });
+  });
+}
+
+function botsAfterAnswer(t) {
+  const round = t.round;
+  // Реакції ботів на відповідь людини.
+  const author = t.last?.id;
+  if (author && !author.startsWith("bot:")) {
+    for (const p of seated(t)) {
+      if (!p.bot || Math.random() < 0.3) continue;
+      botLater(t, rnd(1200, 3500), () => { if (t.round === round) onReact(p.ws, { emoji: pick(REACTIONS) }); });
+    }
+  }
+  // Бот у парі: 💋 або 👋, ніколи не «наодинці».
+  for (const s of t.pair?.seats ?? []) {
+    const p = t.players[s];
+    if (!p?.bot) continue;
+    botLater(t, rnd(2500, 6000), () => {
+      if (t.phase === "pair" && t.round === round) onPair(p.ws, { choice: Math.random() < 0.65 ? "kiss" : "push" });
+    });
+  }
+}
 
 function clearTimers(t) {
   for (const key of Object.keys(t.timers)) clearTimeout(t.timers[key]);
@@ -318,12 +407,13 @@ function armTurn(t) {
 
 // Приводить стіл до ладу після будь-якої зміни і розсилає стан.
 function refresh(t) {
-  const n = seated(t).length;
-  if (!n) {
+  if (!humans(t).length) {
     clearTimers(t);
     tables.delete(t.id);
     return;
   }
+  maintainBots(t);
+  const n = seated(t).length;
   if (n < 2) {
     clearTimers(t);
     t.phase = "wait";
@@ -336,6 +426,7 @@ function refresh(t) {
     if (t.phase === "idle" && !t.timers.turn) armTurn(t);
   }
   broadcast(t, snapshot(t));
+  scheduleBotSpin(t);
 }
 
 function sit(ws) {
@@ -432,6 +523,7 @@ function onSpin(ws, msg) {
     broadcast(t, { type: "spin_result", spinner: t.spinner, target: t.target, category, task: tpl, taskName: me.name });
     broadcast(t, snapshot(t));
     t.timers.answer = setTimeout(safe(() => finishAnswer(t, "")), ANSWER_MS);
+    botAnswer(t);
   }), SPIN_MS + 200);
 }
 
@@ -454,6 +546,7 @@ function finishAnswer(t, text) {
   t.pair = { seats: [t.spinner, t.target], answers: {} };
   broadcast(t, snapshot(t));
   t.timers.pair = setTimeout(safe(() => finishPair(t)), PAIR_MS);
+  botsAfterAnswer(t);
 }
 
 // Реакція на останню відповідь: одна від кожного гравця, кожна дає ❤ автору.
@@ -600,7 +693,7 @@ async function onWishInvoice(ws, msg) {
   if (now - (ws.lastInvoice ?? 0) < 2000) return;
   ws.lastInvoice = now;
   if (t.wish) return send(ws, { type: "error", message: "За столом уже є бажання. Зачекай, поки його виконають." });
-  if (seated(t).length < 2) return send(ws, { type: "error", message: "Потрібен хоча б ще один гравець за столом." });
+  if (humans(t).length < 2) return send(ws, { type: "error", message: "Потрібен хоча б ще один гравець за столом." });
   const text = clean(msg.text, 150);
   if (text.length < 3) return send(ws, { type: "error", message: "Напиши бажання, хоча б кілька слів." });
   ws.pendingWish = { id: randomBytes(6).toString("hex"), text };
@@ -700,6 +793,7 @@ function onFreeGift(ws, msg) {
   const t = ws.table;
   const to = t?.players[Number(msg.toSeat)];
   if (!to || to.id === ws.userId) return send(ws, { type: "error", message: "Обери іншого гравця за столом." });
+  if (to.bot) return send(ws, { type: "error", message: "Це бот — подарунки, 🎯 і «наодинці» діють лише на людей." });
   if (!spend(ws.userId, "roses")) { sendWallet(ws); return send(ws, { type: "notice", text: "Безкоштовних троянд немає." }); }
   const g = GIFTS.rose;
   deliverTableGift(ws.userId, to.id, { id: "rose", emoji: g.emoji, name: g.name });
@@ -715,6 +809,7 @@ function onFreeAim(ws, msg) {
   const to = t?.players[Number(msg.toSeat)];
   const me = t?.players[ws.seat];
   if (!me || !to || to.id === ws.userId) return send(ws, { type: "error", message: "Обери іншого гравця за столом." });
+  if (to.bot) return send(ws, { type: "error", message: "Це бот — подарунки, 🎯 і «наодинці» діють лише на людей." });
   if (!spend(ws.userId, "aims")) { sendWallet(ws); return send(ws, { type: "notice", text: "Безкоштовних 🎯 немає." }); }
   me.aimAt = to.id;
   send(ws, { type: "aim_set", to: Number(msg.toSeat) });
@@ -728,6 +823,7 @@ async function onAimInvoice(ws, msg) {
   if (now - (ws.lastInvoice ?? 0) < 2000) return;
   ws.lastInvoice = now;
   if (!to || to.id === ws.userId) return send(ws, { type: "error", message: "Обери іншого гравця за столом." });
+  if (to.bot) return send(ws, { type: "error", message: "Це бот — подарунки, 🎯 і «наодинці» діють лише на людей." });
   try {
     send(ws, { type: "invoice", link: await createAimInvoice(ws.userId, to.id) });
   } catch (err) {
@@ -743,6 +839,7 @@ async function onGiftInvoice(ws, msg) {
   if (now - (ws.lastInvoice ?? 0) < 2000) return;
   ws.lastInvoice = now;
   if (!to || to.id === ws.userId) return send(ws, { type: "error", message: "Обери іншого гравця за столом." });
+  if (to.bot) return send(ws, { type: "error", message: "Це бот — подарунки, 🎯 і «наодинці» діють лише на людей." });
   try {
     send(ws, { type: "invoice", link: await createGiftInvoice(ws.userId, to.id, String(msg.gift), "t") });
   } catch (err) {
@@ -753,8 +850,8 @@ async function onGiftInvoice(ws, msg) {
 
 // Для монітора власника: що зараз відбувається за столами.
 export function gameStats() {
-  const list = [...tables.values()].map((t) => ({ id: t.id, players: seated(t).length, phase: t.phase, round: t.round }));
-  return { tables: list.length, players: list.reduce((n, t) => n + t.players, 0), list };
+  const list = [...tables.values()].map((t) => ({ id: t.id, players: humans(t).length, bots: seated(t).length - humans(t).length, phase: t.phase, round: t.round }));
+  return { tables: list.length, players: list.reduce((n, t) => n + t.players, 0), bots: list.reduce((n, t) => n + t.bots, 0), list };
 }
 
 export function attachBottleGame(server) {
