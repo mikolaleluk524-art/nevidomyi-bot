@@ -16,6 +16,10 @@ if (process.env.BOT_TOKEN && process.env.BOT_TOKEN !== BOT_TOKEN) {
 }
 if (!BOT_TOKEN) throw new Error("Не задано змінну середовища BOT_TOKEN");
 export const BOT_USERNAME = process.env.BOT_USERNAME || "nevidomyi_chat_bot";
+// Адреса гри: домен цього ж сервісу. Railway сам задає RAILWAY_PUBLIC_DOMAIN,
+// тож кнопка не поведе на чужий сервер навіть після зміни домену.
+const PUBLIC_DOMAIN = (process.env.RAILWAY_PUBLIC_DOMAIN || "nevidomyi-bot-production-16dfedfb.up.railway.app").trim();
+export const GAME_URL = `https://${PUBLIC_DOMAIN}/bottle.html`;
 export const CLAIM_CODE = process.env.CLAIM_CODE || ""; // порожній = /claim вимкнено
 export const ADMIN_ID = Number(process.env.ADMIN_ID || 0);
 const FRIEND_PREMIUM = 3 * 60 * 60;
@@ -212,7 +216,7 @@ function spam(id) {
 function menuKb() {
   return {
     keyboard: [
-      [{ text: "🍾 Гра в бутилочку", web_app: { url: "https://nevidomyi-bot-production-023c6fe9.up.railway.app/bottle.html" } }],
+      [{ text: "🍾 Гра в бутилочку", web_app: { url: GAME_URL } }],
       [{ text: BTN.search }],
       [{ text: BTN.next }, { text: BTN.stop }],
       [{ text: BTN.form }],
@@ -785,7 +789,7 @@ async function stats(chatId) {
 }
 
 async function onCommand(chatId, id, name, args, from) {
-  if (name === "game") return send(chatId, "🍾 Запустити спільну гру:", { inline_keyboard: [[{ text: "ВІДКРИТИ ГРУ", web_app: { url: "https://nevidomyi-bot-production-023c6fe9.up.railway.app/bottle.html" } }]] });
+  if (name === "game") return send(chatId, "🍾 Запустити спільну гру:", { inline_keyboard: [[{ text: "ВІДКРИТИ ГРУ", web_app: { url: GAME_URL } }]] });
   run("update users set pending = null where id = ? and pending is not null", id);
   if (name !== "gender" && name !== "age") run("update users set goal = null where id = ? and goal = 'dating'", id);
   if (name === "myid") return send(chatId, `Твій ID: ${id}`);
@@ -991,7 +995,7 @@ export async function publishCommands() {
       { command: "startnews", description: "Знову отримувати новини" },
     ],
   });
-  await tg("setChatMenuButton", { menu_button: { type: "web_app", text: "🍾 Гра в бутилочку", web_app: { url: "https://nevidomyi-bot-production-023c6fe9.up.railway.app/bottle.html" } } });
+  await tg("setChatMenuButton", { menu_button: { type: "web_app", text: "🍾 Гра в бутилочку", web_app: { url: GAME_URL } } });
 }
 
 export function checkpoint() { db.exec("pragma wal_checkpoint(TRUNCATE)"); }
