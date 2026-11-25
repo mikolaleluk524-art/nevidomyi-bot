@@ -22,6 +22,7 @@ import {
 } from "./src/bot.js";
 import { adminRoutes } from "./admin.js";
 import { attachBottleGame } from "./game-server.js";
+import { handleGiftUpdate, publishGiftCommand } from "./gifts.js";
 
 const DASHBOARD = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "dashboard.html"), "utf8");
 const BOTTLE_GAME = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "bottle.html"), "utf8");
@@ -52,7 +53,8 @@ async function loop(gen) {
       beat = Date.now();
       for (const update of updates) {
         try {
-          await handleUpdate(update);
+          // Подарунки (оплата зірками, /gift) обробляє gifts.js, решту — bot.js.
+          if (!(await handleGiftUpdate(update))) await handleUpdate(update);
           offset = update.update_id + 1;
           saveOffset();
         } catch (err) {
@@ -160,6 +162,11 @@ async function main() {
     console.error("[bot] commands", err.message);
   }
   try {
+    await publishGiftCommand();
+  } catch (err) {
+    console.error("[bot] gift command", err.message);
+  }
+  try {
     console.info(`[bot] резервна копія ${await backupDatabase()}`);
   } catch (err) {
     console.error("[bot] backup", err.message);
@@ -181,4 +188,4 @@ async function main() {
 main().catch((err) => {
   console.error(err);
   process.exit(1);
-}); 
+});
