@@ -57,6 +57,8 @@ td{padding:8px 10px;border-top:1px solid #2a262244}
     <div class="kpi"><div class="l">Premium</div><div class="v" id="kp">—</div></div>
     <div class="kpi"><div class="l">Бани</div><div class="v" id="kb">—</div></div>
     <div class="kpi"><div class="l">Всього</div><div class="v" id="kt">—</div></div>
+    <div class="kpi"><div class="l">Оплати за 24 год</div><div class="v" id="kpay">—</div></div>
+    <div class="kpi"><div class="l">Скарги за 24 год</div><div class="v" id="krep">—</div></div>
   </div>
   <div class="grid">
     <div class="card"><div class="ch">Діалоги</div><table><thead><tr><th>1</th><th>2</th></tr></thead><tbody id="tb-d"></tbody></table></div>
@@ -71,10 +73,17 @@ td{padding:8px 10px;border-top:1px solid #2a262244}
 const $=id=>document.getElementById(id);
 let KEY=localStorage.getItem("nvk")||"";
 if(KEY)$("key").value=KEY;
-function g(g){if(!g)return"";const m=/чол|male|^m/i.test(g);return `<span class="badge \( {m?"bm":"bf"}"> \){m?"ч":"ж"}</span>`}
-function p(u){return u&&u>Date.now()/1000?' <span class="badge bp">P</span>':""}
-async function api(p){
-  const r=await fetch(p,{headers:{"X-Admin-Key":KEY}});
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function gb(v){
+  if(!v)return"";
+  if(/чол|male|^m/i.test(v)&&!/fe/i.test(v))return '<span class="badge bm">ч</span>';
+  if(/жін|female|^f/i.test(v))return '<span class="badge bf">ж</span>';
+  return '<span class="badge">·</span>';
+}
+function pb(u){return u&&u>Date.now()/1000?' <span class="badge bp">P</span>':""}
+const tail=id=>esc(String(id||"").slice(-6));
+async function api(path){
+  const r=await fetch(path,{headers:{"X-Admin-Key":KEY}});
   const t=await r.text();
   if(!r.ok)throw new Error(r.status+" "+t.slice(0,100));
   return JSON.parse(t);
@@ -84,17 +93,19 @@ async function go(){
   localStorage.setItem("nvk",KEY);
   $("st").textContent="...";
   try{
-    const [s,d,q,p,r]=await Promise.all([api("/admin/stats"),api("/admin/dialogs"),api("/admin/queue"),api("/admin/payments"),api("/admin/reports")]);
-    \( ("ho").textContent= \)("ko").textContent=s.online;
-    \( ("hc").textContent= \)("kc").textContent=s.inChat;
-    \( ("hs").textContent= \)("ks").textContent=s.inSearch;
+    const [s,dialogs,queue,pay,reports]=await Promise.all([api("/admin/stats"),api("/admin/dialogs"),api("/admin/queue"),api("/admin/payments"),api("/admin/reports")]);
+    $("ho").textContent=$("ko").textContent=s.online;
+    $("hc").textContent=$("kc").textContent=s.inChat;
+    $("hs").textContent=$("ks").textContent=s.inSearch;
     $("kp").textContent=s.premium;
     $("kb").textContent=s.banned;
     $("kt").textContent=s.total;
-    \( ("tb-d").innerHTML=d.map(x=>`<tr><td>… \){x.user1_id.slice(-6)} \( {g(x.user1_gender)} \){p(x.user1_premium)}</td><td>…${x.user2_id.slice(-6)} \( {g(x.user2_gender)} \){p(x.user2_premium)}</td></tr>`).join("")||"<tr><td colspan=2>—</td></tr>";
-    \( ("tb-q").innerHTML=q.map(x=>`<tr><td>… \){x.id.slice(-6)}\( {p(x.premium_until)}</td><td> \){g(x.gender)}</td><td>\( {x.profile_age||"—"}</td><td> \){x.city||"—"}</td></tr>`).join("")||"<tr><td colspan=4>—</td></tr>";
-    \( ("tb-p").innerHTML=p.slice(0,12).map(x=>`<tr><td>… \){(x.user_id||"").slice(-6)} \( {g(x.gender)}</td><td> \){x.stars}</td><td>${x.payload||""}</td></tr>`).join("")||"<tr><td colspan=3>—</td></tr>";
-    \( ("tb-r").innerHTML=r.slice(0,12).map(x=>`<tr><td>… \){x.reporter_id.slice(-6)}</td><td>…\( {x.target_id.slice(-6)}</td><td> \){new Date(x.created_at*1000).toLocaleTimeString("uk")}</td></tr>`).join("")||"<tr><td colspan=3>—</td></tr>";
+    $("kpay").textContent=(s.paymentsToday||0)+"⭐";
+    $("krep").textContent=s.reportsToday;
+    $("tb-d").innerHTML=dialogs.map(x=>`<tr><td>…${tail(x.user1_id)} ${gb(x.user1_gender)}${pb(x.user1_premium)}</td><td>…${tail(x.user2_id)} ${gb(x.user2_gender)}${pb(x.user2_premium)}</td></tr>`).join("")||"<tr><td colspan=2>—</td></tr>";
+    $("tb-q").innerHTML=queue.map(x=>`<tr><td>…${tail(x.id)}${pb(x.premium_until)}</td><td>${gb(x.gender)}</td><td>${esc(x.profile_age||"—")}</td><td>${esc(x.city||"—")}</td></tr>`).join("")||"<tr><td colspan=4>—</td></tr>";
+    $("tb-p").innerHTML=pay.slice(0,12).map(x=>`<tr><td>…${tail(x.user_id)} ${gb(x.gender)}</td><td>${esc(x.stars)}</td><td>${esc(x.payload||"")}</td></tr>`).join("")||"<tr><td colspan=3>—</td></tr>";
+    $("tb-r").innerHTML=reports.slice(0,12).map(x=>`<tr><td>…${tail(x.reporter_id)}</td><td>…${tail(x.target_id)}</td><td>${esc(new Date(x.created_at*1000).toLocaleTimeString("uk"))}</td></tr>`).join("")||"<tr><td colspan=3>—</td></tr>";
     $("st").textContent="ок";
     $("st").style.color="var(--ok)";
   }catch(e){
