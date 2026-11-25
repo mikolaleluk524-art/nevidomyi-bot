@@ -341,6 +341,9 @@ const I18N = { ru: {}, en: {} };
   ["Гру відкрито в іншому вікні.", "Игра открыта в другом окне.", "The game is open in another window."],
   ["Перевір інтернет і підключись знову.", "Проверь интернет и подключись снова.", "Check your connection and reconnect."],
   ["Підключитись знову", "Подключиться снова", "Reconnect"],
+  ["бот", "бот", "bot"],
+  ["Це бот: «Наодинці» з ним недоступне.", "Это бот: «Наедине» с ним недоступно.", "That's a bot: “Alone” isn't available with it."],
+  ["Це бот — подарунки, 🎯 і «наодинці» діють лише на людей.", "Это бот — подарки, 🎯 и «наедине» работают только с людьми.", "That's a bot — gifts, 🎯 and “alone” only work with people."],
   ["Подарунок", "Подарок", "Gift"],
   ["Бажання", "Желание", "Wish"],
   ["Чат", "Чат", "Chat"],
@@ -417,11 +420,16 @@ for (let i = 0; i < N; i++) {
 }
 // Ти завжди внизу столу.
 const angleOf = (i) => ((i - S.seat + N) % N) / N * 360 + 180;
-const nameOf = (i) => (S.players[i] && S.players[i].name) || T("Хтось");
+// Боти завжди позначені «· бот» — щоб ніхто не плутав їх із людьми.
+const label = (p) => (p ? p.name + (p.bot ? " · " + T("бот") : "") : T("Хтось"));
+const nameOf = (i) => label(S.players[i]);
 const others = () => S.players.map((p, i) => (p && i !== S.seat ? i : -1)).filter((i) => i >= 0);
+// Подарунки, 🎯 і бажання — лише для людей.
+const people = () => others().filter((i) => !S.players[i].bot);
+const botNote = () => toast(T("Це бот — подарунки, 🎯 і «наодинці» діють лише на людей."));
 
 function renderTable() {
-  const top = Math.max(0, ...S.players.map((p) => (p ? p.hearts || 0 : 0)));
+  const top = Math.max(0, ...S.players.map((p) => (p && !p.bot ? p.hearts || 0 : 0)));
   seatEls.forEach((el, i) => {
     const p = S.players[i];
     const a = angleOf(i) * Math.PI / 180;
@@ -431,9 +439,9 @@ function renderTable() {
     const inRound = (S.pair && S.pair.includes(i)) || (S.task && (S.task.target === i || S.task.spinner === i));
     el.className = "seat" + (p ? "" : " empty") + (p && p.g ? " " + p.g : "") + (i === S.seat ? " me" : "") + (active ? " turn" : "") + (inRound ? " paired" : "");
     el.querySelector(".av").textContent = p ? FACE[p.g] || "🙂" : "";
-    el.querySelector(".nm").textContent = p ? p.name + (p.age ? ", " + p.age : "") : "";
+    el.querySelector(".nm").textContent = p ? (p.bot ? label(p) : p.name + (p.age ? ", " + p.age : "")) : "";
     el.querySelector(".hb").textContent = p && p.hearts ? "❤" + p.hearts : "";
-    el.querySelector(".crown").textContent = p && top > 0 && p.hearts === top ? "👑" : "";
+    el.querySelector(".crown").textContent = p && !p.bot && top > 0 && p.hearts === top ? "👑" : "";
     el.querySelector(".gb").textContent = p && p.badge ? p.badge : "";
   });
   $("count").textContent = "👥 " + S.players.filter(Boolean).length + "/" + N;
@@ -517,11 +525,13 @@ function renderStage() {
       [["kiss", "💋", "Поцілувати"], ["push", "👋", "Відштовхнути"], ["alone", "🔒", "Наодинці"]].forEach(([id, em, label]) => {
         const b = h("button", id + (S.myChoice === id ? " on" : ""));
         b.append(h("b", "", em), h("span", "", T(label)));
-        b.disabled = Boolean(S.myChoice);
+        // З ботом «наодинці» неможливе — кнопку вимикаємо.
+        b.disabled = Boolean(S.myChoice) || (id === "alone" && S.players[other] && S.players[other].bot);
         b.addEventListener("click", () => { if (S.myChoice) return; S.myChoice = id; send({ type: "pair", choice: id }); buzz("impactOccurred", "medium"); renderStage(); });
         row.appendChild(b);
       });
-      st.append(row, h("div", "sub", S.myChoice ? T("Чекаємо, що обере {0}...", nameOf(other)) : T("«Наодинці» — приватний чат у боті, якщо обоє його оберуть.")));
+      const withBot = S.players[other] && S.players[other].bot;
+      st.append(row, h("div", "sub", S.myChoice ? T("Чекаємо, що обере {0}...", nameOf(other)) : withBot ? T("Це бот: «Наодинці» з ним недоступне.") : T("«Наодинці» — приватний чат у боті, якщо обоє його оберуть.")));
       if (S.last) st.append(S.last());
     } else {
       st.append(h("div", "title", T("Пара {0} обирає…", T("{0} і {1}", nameOf(S.pair[0]), nameOf(S.pair[1])))));
@@ -622,6 +632,7 @@ $("helpBtn").addEventListener("click", showHowTo);
 /* ---------- 🎁 подарунки ---------- */
 function openGift(i) {
   if (!S.players[i] || i === S.seat) return;
+  if (S.players[i].bot) return botNote();
   const grid = h("div", "grid");
   if (S.wallet.roses > 0) {
     const f = h("button", "gift free");
@@ -639,7 +650,7 @@ function openGift(i) {
 }
 function pickPlayer(title, text, onPick) {
   const grid = h("div", "grid");
-  others().forEach((i) => {
+  people().forEach((i) => {
     const b = h("button", "who", (FACE[S.players[i].g] || "🙂") + " " + S.players[i].name);
     b.addEventListener("click", () => onPick(i));
     grid.appendChild(b);
@@ -647,7 +658,7 @@ function pickPlayer(title, text, onPick) {
   openSheet(title, text, [grid]);
 }
 function pickGiftTarget() {
-  const o = others();
+  const o = people();
   if (!o.length) return openSheet(T("🎁 Подарунок"), T("Зачекай, поки хтось сяде за стіл. Подарувати можна будь-кому з гравців."), []);
   if (o.length === 1) return openGift(o[0]);
   pickPlayer(T("🎁 Кому подарувати?"), T("Обери гравця за столом."), openGift);
@@ -656,7 +667,7 @@ $("tabGift").addEventListener("click", pickGiftTarget);
 
 /* ---------- 🎯 на кого покаже пляшка ---------- */
 function pickAimTarget() {
-  if (others().length < 2) return openSheet(T("🎯 На кого покаже пляшка?"), T("Це має сенс, коли за столом хоча б двоє інших гравців. Зараз пляшка й так покаже на єдиного суперника."), []);
+  if (people().length < 2) return openSheet(T("🎯 На кого покаже пляшка?"), T("Це має сенс, коли за столом хоча б двоє інших гравців. Зараз пляшка й так покаже на єдиного суперника."), []);
   const free = S.wallet.aims > 0;
   pickPlayer(T("🎯 На кого покаже пляшка?"), free ? T("У тебе є безкоштовні 🎯: {0}. Обери гравця.", S.wallet.aims) : T("Наступного твого ходу пляшка покаже на обраного гравця. Оплата зірками Telegram."), (i) => {
     send({ type: free ? "free_aim" : "aim_invoice", toSeat: i });
@@ -671,7 +682,7 @@ function openWish() {
   wishOpen = true;
   const w = S.wish;
   if (!w) {
-    if (others().length < 1) return openSheet(T("✨ Загадай бажання"), T("Потрібен хоча б ще один гравець за столом."), []);
+    if (people().length < 1) return openSheet(T("✨ Загадай бажання"), T("Потрібен хоча б ще один гравець за столом."), []);
     const ta = h("textarea"); ta.maxLength = 150; ta.rows = 3; ta.placeholder = T("Моє бажання…");
     const go = h("button", "big", T("✨ Загадати · 100⭐"));
     go.addEventListener("click", () => {
@@ -728,7 +739,7 @@ function renderChat() {
     if (f.chat) {
       const d = h("div", f.seat === S.seat ? "me" : "");
       const p = S.players[f.seat];
-      const b = h("b", p && p.g ? p.g : "", (p ? (FACE[p.g] || "🙂") + " " + p.name : T("Хтось")) + ": ");
+      const b = h("b", p && p.g ? p.g : "", (p ? (FACE[p.g] || "🙂") + " " : "") + label(p) + ": ");
       d.append(b, document.createTextNode(f.text));
       list.appendChild(d);
     } else list.appendChild(h("div", "sys", f.text));
@@ -869,7 +880,7 @@ function handle(m) {
       const mine = m.a === S.seat ? m.ca : m.cb;
       const other = m.a === S.seat ? m.b : m.a;
       const wanted = mine === "alone" || (m.outcome === "push" && mine && mine !== "push");
-      if (wanted && S.players[other]) {
+      if (wanted && S.players[other] && !S.players[other].bot) {
         const nm = nameOf(other);
         setTimeout(() => showOver(T(m.outcome === "push" ? "💔 {0} тебе відштовхнув(ла)" : "🔒 {0} поки не готовий(а) наодинці", nm),
           T("Розтопи серце подарунком: {0} отримає його разом із запрошенням побути з тобою наодинці.", nm), [
