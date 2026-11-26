@@ -916,7 +916,7 @@ function serveFile(res, f) {
 // ---------- стартові фото робіт (папка seed/) — додаються один раз при першому запуску ----------
 (function seedGallery() {
   const dir = join(ROOT, "seed");
-  if (getSecret("seeded_gallery") || !existsSync(dir)) return;
+  if (!existsSync(dir)) return;
   const captions = {
     "w01-marmur": "Мармуровий дизайн",
     "w02-marmur-dovgi": "Мармур на довгих нігтях",
@@ -930,22 +930,46 @@ function serveFile(res, f) {
     "w10-nude-zoloto": "Нюд із золотою поталлю",
     "w11-opal": "Опаловий блиск",
     "w12-vyshnia": "Вишневий квадрат",
+    "w13-pedykiur-zhovtyi": "Педикюр · ніжний жовтий",
+    "w14-pera": "Дизайн «пір'я» з поталлю",
     "v01-pudra": "Пудровий мигдаль — відео",
     "v02-chervoni": "Червоний мигдаль — відео",
     "v03-fuksiia": "Фуксія — відео",
     "v04-marmur": "Мармур — відео",
     "c01-dont-stop-school": "Навчання в Don't Stop Nail School · листопад 2024",
+    "r01-nadiageorgian": "«Жіночі радості ❤️ Це було круто!»",
+    "r02-nadiageorgian-lift": "«Після манікюру і на нього авжеж 😅»",
+    "r03-nadiageorgian-dijshla": "«Я дійшла на манікюр 🥰»",
+    "r04-mblond-chystka": "«Ну просто ідеальна чистка»",
+    "r05-mblond-rozhevi": "«Вони ідеальні. Дякую»",
+    "r06-olga-krasa": "«Краса номер раз 🤍»",
+    "r07-malysh-idealni": "«Як завжди ідеальні ❤️»",
+    "r08-malysh-morozyvo": "Колаж від постійної клієнтки",
+    "r09-malysh-0540": "О 05:40 — бо потрібен новий манікюр 😄",
+    "r10-dija-zoloto": "Яскравий дизайн із поталлю",
+    "r11-dija-french": "Ніжний френч 🥰",
+    "r12-nadezhda": "«Дякую, моя дорога»",
   };
-  const files = readdirSync(dir).filter((f) => /\.(jpg|mp4)$/.test(f)).sort();
-  let sort = 0;
-  for (const f of files) {
-    copyFileSync(join(dir, f), join(UPLOAD_DIR, f));
-    if (f.endsWith("-poster.jpg")) continue; // обкладинки для відео
-    const base = f.replace(/\.\w+$/, "");
-    const kind = f.startsWith("c") ? "cert" : "work";
-    // Відео — першими, щоб головна виглядала «живою»
-    run("INSERT INTO gallery(kind, file, caption, sort, created_at) VALUES(?,?,?,?,?)", kind, f, captions[base] || "", f.startsWith("v") ? sort++ - 100 : sort++, Date.now());
+  const KIND = { w: "work", v: "work", c: "cert", r: "review" };
+  // Кожен стартовий файл додається лише ОДИН раз — видалене майстром фото не повернеться.
+  const seeded = new Set(JSON.parse(getSecret("seeded_files") || "[]"));
+  if (getSecret("seeded_gallery") && !seeded.size) {
+    // перехід зі старої схеми: усе, що вже є в галереї, вважаємо доданим
+    for (const g of all("SELECT file FROM gallery")) seeded.add(g.file);
+    for (const f of readdirSync(dir)) if (/^(w(0\d|1[0-2])|v0[1-4]|c01)/.test(f)) seeded.add(f);
   }
+  const files = readdirSync(dir).filter((f) => /\.(jpg|mp4)$/.test(f)).sort();
+  let sort = (one("SELECT MAX(sort) n FROM gallery").n || 0) + 1;
+  for (const f of files) {
+    if (!existsSync(join(UPLOAD_DIR, f))) copyFileSync(join(dir, f), join(UPLOAD_DIR, f));
+    if (f.endsWith("-poster.jpg") || seeded.has(f)) continue;
+    const base = f.replace(/\.\w+$/, "");
+    const kind = KIND[f[0]] || "work";
+    // Відео — першими, щоб головна виглядала «живою»
+    run("INSERT INTO gallery(kind, file, caption, sort, created_at) VALUES(?,?,?,?,?)", kind, f, captions[base] || "", f.startsWith("v") ? sort++ - 1000 : sort++, Date.now());
+    seeded.add(f);
+  }
+  setSecret("seeded_files", JSON.stringify([...seeded]));
   setSecret("seeded_gallery", "1");
 })();
 

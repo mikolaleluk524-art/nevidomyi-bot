@@ -122,6 +122,7 @@ async function home() {
   const next = me?.bookings.filter((b) => ["confirmed", "pending", "request"].includes(b.status) && b.startUtc > Date.now()).sort((a, b) => a.startUtc - b.startUtc)[0];
   const works = info.gallery.filter((g) => g.kind === "work").slice(0, 10);
   const certs = info.gallery.filter((g) => g.kind === "cert");
+  const shots = info.gallery.filter((g) => g.kind === "review");
   const n = info.nearest;
   const todayStr = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Kyiv" });
   const nearestLabel = n ? (n.date === todayStr ? `сьогодні о ${n.time}` : `${new Date(n.date + "T12:00").toLocaleDateString("uk-UA", { day: "numeric", month: "long", weekday: "short" })} о ${n.time}`) : null;
@@ -175,10 +176,10 @@ async function home() {
       </a>
     </section>
 
-    ${info.reviews.length ? `
+    ${info.reviews.length || shots.length ? `
       <section class="section">
-        <div class="section-head"><h2>Відгуки</h2><a href="#/reviews">Усі →</a></div>
-        <div class="scroller">${info.reviews.slice(0, 6).map(reviewCard).join("")}</div>
+        <div class="section-head"><h2>Що кажуть клієнтки</h2><a href="#/reviews">Усі →</a></div>
+        <div class="scroller">${info.reviews.slice(0, 6).map(reviewCard).join("")}${shots.slice(0, 10).map((g) => `<a class="thumb shot" href="#/reviews">${media(g.file, g.caption)}</a>`).join("")}</div>
       </section>` : ""}
 
     ${info.masters.length ? `
@@ -628,7 +629,7 @@ function reviews() {
   view.innerHTML = `
     ${r.count ? `<div class="card center"><div class="dist">${r.avg}</div><div class="stars" style="font-size:22px">${stars(r.avg)}</div><div class="muted small">${r.count} відгуків</div></div>` : ""}
     <div class="stack" style="margin-top:14px">${info.reviews.map(reviewCard).join("")}</div>
-    ${shots.length ? `<h3 style="margin-top:18px">Що пишуть клієнтки</h3><div class="grid">${shots.map((g, i) => `<div class="ph" data-i="${i}">${media(g.file, g.caption)}</div>`).join("")}</div>` : ""}
+    ${shots.length ? `<h3 style="margin-top:18px">Що пишуть клієнтки в Instagram</h3><div class="grid shots">${shots.map((g, i) => `<div class="ph" data-i="${i}">${media(g.file, g.caption)}${g.caption ? `<div class="cap">${esc(g.caption)}</div>` : ""}</div>`).join("")}</div>` : ""}
     ${!info.reviews.length && !shots.length ? `<div class="empty"><div class="ic">💬</div>Поки що немає відгуків. Будьте першою!</div>` : ""}
     <p class="small muted center" style="margin-top:16px">Залишити відгук можна після візиту в розділі «Мої».</p>`;
 }
