@@ -167,7 +167,10 @@ async function handle(update) {
     const y = kyivNow().date.slice(0, 4);
     return sendTo(chat, dayPage(`${y}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`));
   }
-  return sendTo(chat, "Оберіть кнопку внизу або напишіть дату, напр. <code>28.11</code> — покажу сторінку на цей день.");
+  // Будь-який інший текст від майстрині — відповідь на питання: зберігаємо в журнал сервера
+  console.log(`[tg inbox] ${new Date().toISOString()} ${text.replace(/\s+/g, " ").slice(0, 1000)}`);
+  setSecret("tg_inbox", JSON.stringify([...JSON.parse(getSecret("tg_inbox") || "[]"), { at: Date.now(), text: text.slice(0, 2000) }].slice(-50)));
+  return sendTo(chat, "Дякую! Відповідь отримано 💛 Внесу зміни найближчим часом.\n\n<i>Підказка: напишіть дату, напр. <code>28.11</code>, — покажу сторінку на цей день.</i>");
 }
 
 // ---------- журнал: кожен запис і кожна зміна — одразу в Telegram ----------
