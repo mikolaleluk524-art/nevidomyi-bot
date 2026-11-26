@@ -19,7 +19,7 @@ import { all, db, getSecret, getSettings, integrity, one, run, setSecret, setSet
 import { backupPath, listBackups, runBackups, startBackups } from "./lib/backup.js";
 import { readTemplate, renderIndex, robots, sitemap } from "./lib/seo.js";
 import { botInfo, linkCode, ownerChats, removeChat, startTelegram, telegramOn } from "./lib/telegram.js";
-import { addDays, hm, humanDate, isDate, kyivNow, toMin } from "./lib/time.js";
+import { addDays, hm, humanDate, isDate, kyivNow, kyivToUtc, toMin } from "./lib/time.js";
 import { notifyOwner, pushClient, saveSubscription, VAPID_PUBLIC } from "./lib/notify.js";
 import { activateGift, createGift, GIFT_PENDING_MINUTES, giftByCode, giftLog, publicGift, redeemGift } from "./lib/gifts.js";
 import { createPayment, liqpayCallback, paymentStatus, paymentsLive, provider } from "./lib/payments.js";
@@ -977,6 +977,50 @@ function serveFile(res, f) {
   }
   setSecret("seeded_files", JSON.stringify([...seeded]));
   setSecret("seeded_gallery", "1");
+})();
+
+// ---------- записи з паперового зошита (seed/zoshyt.json) — кожен рядок додається один раз ----------
+(function importZoshyt() {
+  const file = join(ROOT, "seed", "zoshyt.json");
+  if (!existsSync(file)) return;
+  let data;
+  try {
+    data = JSON.parse(readFileSync(file, "utf8"));
+  } catch (e) {
+    return console.error("[zoshyt] не вдалося прочитати:", e.message);
+  }
+  const done = new Set(JSON.parse(getSecret("zoshyt_done") || "[]"));
+  const master = one("SELECT id FROM masters WHERE active = 1 ORDER BY sort, id LIMIT 1");
+  if (!master) return;
+  const svc = (name) => one("SELECT * FROM services WHERE name = ?", name) || one("SELECT * FROM services WHERE addon = 0 ORDER BY sort, id LIMIT 1");
+  const MAP = { Корекція: "Укріплення гелем", Педикюр: "Пальчики + стопа", "Манікюр + педикюр": "Покриття гель-лаком" };
+  const base = data.phone || "+380666230824";
+  let added = 0;
+  for (const z of data.bookings || []) {
+    if (done.has(z.key)) continue;
+    // Телефонів у зошиті немає: номер салону + позначка, щоб кожна клієнтка була окремою
+    let c = one("SELECT * FROM clients WHERE name = ? AND phone LIKE ?", z.name, base + " #%");
+    if (!c) {
+      const n = one("SELECT COUNT(*) n FROM clients WHERE phone LIKE ?", base + " #%").n + 1;
+      c = upsertClient({ name: z.name, phone: `${base} #${n}` });
+    }
+    const s = svc(MAP[z.service] || "Покриття гель-лаком");
+    const start = toMin(z.time);
+    run(
+      `INSERT INTO bookings(client_id, master_id, service_id, service_name, date, start, duration, start_utc, price, status, comment, source, created_at)
+       VALUES(?,?,?,?,?,?,?,?,0,'confirmed',?,'zoshyt',?)`,
+      c.id, master.id, s.id, z.service || "Запис із зошита (послугу уточнити)", z.date, start, z.duration || 120, kyivToUtc(z.date, start), z.comment || "", Date.now()
+    );
+    done.add(z.key);
+    added++;
+  }
+  for (const k of data.blocks || []) {
+    if (done.has(k.key)) continue;
+    run("INSERT INTO blocks(master_id, date, start, end, note) VALUES(NULL,?,?,?,?)", k.date, toMin(k.start), Math.min(1440, toMin(k.end)), k.note || "");
+    done.add(k.key);
+  }
+  setSecret("zoshyt_done", JSON.stringify([...done]));
+  if (added) console.log(`[zoshyt] додано записів із зошита: ${added}`);
 })();
 
 // ---------- фонові задачі: нагадування, згорання броней ----------

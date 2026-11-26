@@ -103,8 +103,8 @@ function dayPage(date) {
       t: b.start,
       text:
         `<code>${hm(b.start)}</code> ${STATUS_MARK[b.status] || "•"} <b>${esc(b.name)}</b>\n` +
-        `<code>     </code> ${esc(b.service_name)} · ${b.price - b.discount - b.bonus_used} грн\n` +
-        `<code>     </code> ☎ ${esc(b.phone)}` +
+        `<code>     </code> ${esc(b.service_name)}${b.price ? ` · ${b.price - b.discount - b.bonus_used} грн` : ""}\n` +
+        `<code>     </code> ☎ ${esc(String(b.phone).split(" #")[0])}` +
         (b.comment ? `\n<code>     </code> 💬 ${esc(b.comment)}` : "") +
         (b.note ? `\n<code>     </code> 📝 ${esc(b.note)}` : ""),
     })),
@@ -176,12 +176,12 @@ const STATUS_UA = { request: "заявка", pending: "очікує оплати
 function journalText(log, b) {
   const d = `${b.date.slice(8, 10)}.${b.date.slice(5, 7)}`;
   const body =
-    `<code>${d} ${hm(b.start)}</code> <b>${esc(b.name)}</b> · ${esc(b.phone)}\n` +
-    `${esc(b.service_name)} · ${b.price - b.discount - b.bonus_used} грн` +
+    `<code>${d} ${hm(b.start)}</code> <b>${esc(b.name)}</b> · ${esc(String(b.phone).split(" #")[0])}\n` +
+    `${esc(b.service_name)}${b.price ? ` · ${b.price - b.discount - b.bonus_used} грн` : ""}` +
     (b.comment ? `\n💬 ${esc(b.comment)}` : "");
   if (!log.old_status) {
-    const title = b.source === "admin" ? `📝 Записано вами · #${b.id}` : `💅 <b>Новий запис · #${b.id}</b>${b.status === "request" ? " (заявка)" : ""}`;
-    return { text: `${title}\n${body}`, loud: b.source !== "admin" };
+    const title = b.source === "admin" || b.source === "zoshyt" ? `📝 ${b.source === "zoshyt" ? "Із зошита" : "Записано вами"} · #${b.id}` : `💅 <b>Новий запис · #${b.id}</b>${b.status === "request" ? " (заявка)" : ""}`;
+    return { text: `${title}\n${body}`, loud: b.source === "app" };
   }
   const loud = log.new_status === "cancelled";
   const icon = { cancelled: "❌", done: "✅", no_show: "🚫", confirmed: "✔️", expired: "⌛" }[log.new_status] || "✏️";

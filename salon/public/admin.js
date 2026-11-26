@@ -7,6 +7,8 @@ const money = (n) => `${Number(n).toLocaleString("uk-UA")} грн`;
 const img = (f) => `/uploads/${encodeURIComponent(f)}`;
 const WD = ["Нд", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
 const WEEK = [1, 2, 3, 4, 5, 6, 0];
+// Номер для дзвінка: без позначки « #N» (записи з паперового зошита)
+const tel = (p) => String(p || "").split(" #")[0];
 const today = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Kyiv" });
 const addDays = (d, n) => {
   const t = new Date(d + "T12:00Z");
@@ -136,7 +138,7 @@ async function bookings(box) {
     ${requests.length ? `<section class="section"><h2>📩 Нові заявки (${requests.length})</h2>
       <p class="small muted">Нові клієнтки. Час уже заброньовано — вирішіть, чи потрібна передоплата.</p>
       ${requests.map((b) => `<div class="card" style="border:1.5px solid var(--accent)">
-        <div class="row between"><b>${esc(b.clientName)}</b><a href="tel:${esc(b.clientPhone)}">${esc(b.clientPhone)}</a></div>
+        <div class="row between"><b>${esc(b.clientName)}</b><a href="tel:${esc(tel(b.clientPhone))}">${esc(tel(b.clientPhone))}</a></div>
         <div>${esc(b.service)}</div>
         <div class="small muted">${esc(b.when)} · ${money(b.price - b.discount - b.bonusUsed)}${b.noShows ? ` · ⚠️ пропусків: ${b.noShows}` : ""}</div>
         ${b.comment ? `<div class="small">💬 ${esc(b.comment)}</div>` : ""}
@@ -164,12 +166,13 @@ async function bookings(box) {
           <div class="grow">
             <b>${esc(b.clientName)}</b> ${b.visits ? `<span class="badge mute">${b.visits} віз.</span>` : '<span class="badge">нова</span>'}
             <div class="small">${esc(b.service)}${masters.length > 1 ? " · " + esc(b.master) : ""}</div>
-            <div class="small muted">${money(b.price - b.discount - b.bonusUsed)}${b.paid ? ` · передоплата ${money(b.paid)} ✓` : ""}${b.bonusUsed ? ` · бонуси −${b.bonusUsed}` : ""}${b.discount ? ` · знижка −${b.discount}` : ""} · ${STATUS[b.status]}</div>
+            <div class="small muted">${b.price ? money(b.price - b.discount - b.bonusUsed) : "ціну уточнити"}${b.paid ? ` · передоплата ${money(b.paid)} ✓` : ""}${b.bonusUsed ? ` · бонуси −${b.bonusUsed}` : ""}${b.discount ? ` · знижка −${b.discount}` : ""} · ${STATUS[b.status]}</div>
             ${b.comment ? `<div class="small" style="margin-top:4px">💬 ${esc(b.comment)}</div>` : ""}
             ${b.clientNote ? `<div class="small muted">📝 ${esc(b.clientNote)}</div>` : ""}
             <div class="row wrap" style="margin-top:8px">
-              <a class="btn sm line" href="tel:${esc(b.clientPhone)}">📞</a>
-              <a class="btn sm line" href="viber://chat?number=${esc(b.clientPhone.replace("+", "%2B"))}">Viber</a>
+              <a class="btn sm line" href="tel:${esc(tel(b.clientPhone))}">📞</a>
+              <a class="btn sm line" href="viber://chat?number=${esc(tel(b.clientPhone).replace("+", "%2B"))}">Viber</a>
+              ${b.source === "zoshyt" ? '<span class="badge mute">з зошита</span>' : ""}
               ${b.status === "request" ? `
                 <button class="btn sm" data-dec="confirm" data-id="${b.id}">✓ Без передоплати</button>
                 <button class="btn sm ghost" data-dec="prepay" data-id="${b.id}">💳 З передоплатою</button>
@@ -463,7 +466,7 @@ async function clients(box, q = "") {
   box.innerHTML = `<input id="cq" placeholder="🔍 Імʼя або телефон" value="${esc(q)}">
     <div class="stack" style="margin-top:12px">${list.map((c) => `<div class="card">
       <div class="row between"><b>${esc(c.name)}</b><span class="badge">💎 ${c.bonus}</span></div>
-      <div class="small"><a href="tel:${esc(c.phone)}">${esc(c.phone)}</a> · візитів: ${c.visits}${c.last_visit ? ` · останній ${c.last_visit}` : ""}</div>
+      <div class="small"><a href="tel:${esc(tel(c.phone))}">${esc(tel(c.phone))}</a>${c.phone.includes(" #") ? ' <span class="badge mute">з зошита — номер уточнити</span>' : ""} · візитів: ${c.visits}${c.last_visit ? ` · останній ${c.last_visit}` : ""}</div>
       <div class="small muted">${c.referred_by_name ? `привела: ${esc(c.referred_by_name)} · ` : ""}${c.invited ? `запросила: ${c.invited} · ` : ""}${c.birthday ? `🎂 ${c.birthday.slice(5)} · ` : ""}${c.src ? `QR: ${esc(c.src)}` : ""}</div>
       <label class="f"><span>Нотатка (бачите лише ви)</span><input data-note="${c.id}" value="${esc(c.note)}" placeholder="Алергія, улюблений колір…"></label>
       ${onlinePay ? `<label class="f"><span>Передоплата</span><select data-rule="${c.id}">
