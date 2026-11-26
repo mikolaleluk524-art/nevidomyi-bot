@@ -53,7 +53,7 @@ h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute
 .chart .tip.on{opacity:1}
 .charts{display:grid;gap:8px}
 @media(min-width:560px){.charts{grid-template-columns:1fr 1fr}}
-.kinds .r{display:grid;grid-template-columns:110px 1fr 56px;align-items:center;gap:8px;padding:5px 0}
+.kinds .r{display:grid;grid-template-columns:110px 1fr 64px;align-items:center;gap:8px;padding:5px 0}
 .kinds .lbl{font-size:13px;color:var(--text)}
 .kinds .bar{height:12px;border-radius:0 4px 4px 0;background:var(--accent);min-width:2px}
 .kinds .num{text-align:right;font-variant-numeric:tabular-nums;color:var(--text);font-size:13px}
@@ -228,6 +228,7 @@ h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute
     <div class="card list" id="recent"></div>
 
     <h2>Люди</h2>
+    <div class="card kinds" id="funnel" style="margin-bottom:8px"></div>
     <div class="grid g4">
       <div class="tile"><div class="k">Усього</div><div class="v" id="total">–</div><div class="s" id="adults"></div></div>
       <div class="tile"><div class="k">Нових за добу</div><div class="v" id="new24">–</div><div class="s">зареєструвались</div></div>
@@ -431,6 +432,7 @@ function render(d) {
     rec.appendChild(it);
   });
 
+  renderFunnel(d.funnel);
   $("total").textContent = fmt(u.total);
   $("adults").textContent = fmt(u.adults) + " підтвердили 18+";
   $("new24").textContent = fmt(u.new24);
@@ -655,6 +657,40 @@ $("outGo").addEventListener("click", async () => {
     out.appendChild(langCard((r.data.source === "claude" ? "Написав Claude" : "З шаблону") + " · " + $("outChannel").value, { [lang]: r.data.text }));
   } catch (e) {} finally { btn.disabled = false; btn.textContent = "✍️ Написати лист"; }
 });
+
+/* ---------- 🧭 воронка старту ---------- */
+function renderFunnel(f) {
+  const box = $("funnel");
+  box.replaceChildren();
+  if (!f || !f.started) { box.innerHTML = '<div class="empty">Ще немає даних.</div>'; return; }
+  const head = document.createElement("div"); head.className = "title"; head.textContent = "🧭 Воронка старту";
+  const sub = document.createElement("div"); sub.className = "sub"; sub.textContent = "Скільки людей дійшли до кожного кроку. Де смужка різко коротшає — там люди відпадають.";
+  box.append(head, sub);
+  const steps = [
+    ["▶️ Натиснули /start", f.started],
+    ["👤 Обрали стать", f.gender],
+    ["🎂 Вказали вік", f.age],
+    ["✅ Пройшли 18+", f.adult],
+    ["🍾 Зайшли в гру", f.game],
+    ["💬 Мали діалог", f.chat],
+    ["⭐ Заплатили", f.paid],
+  ];
+  steps.forEach(([name, v]) => {
+    const r = document.createElement("div"); r.className = "r";
+    const lbl = document.createElement("div"); lbl.className = "lbl"; lbl.textContent = name;
+    const tr = document.createElement("div"); tr.className = "track";
+    const bar = document.createElement("div"); bar.className = "bar"; bar.style.width = ((v || 0) / f.started) * 100 + "%";
+    tr.appendChild(bar);
+    const num = document.createElement("div"); num.className = "num"; num.textContent = fmt(v) + " · " + Math.round(((v || 0) / f.started) * 100) + "%";
+    r.append(lbl, tr, num);
+    box.appendChild(r);
+  });
+  if (f.minors) {
+    const n = document.createElement("div"); n.className = "sub"; n.style.marginTop = "6px";
+    n.textContent = "З тих, хто вказав вік, менше 18: " + fmt(f.minors) + " — бот їх не пускає.";
+    box.appendChild(n);
+  }
+}
 
 /* ---------- дані ---------- */
 async function load() {

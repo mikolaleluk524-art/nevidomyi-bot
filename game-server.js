@@ -893,6 +893,8 @@ export function attachBottleGame(server) {
       userId = verifyInitData(new URL(req.url, "http://localhost").searchParams.get("initData") || "");
       profile = withDb((db) => db.prepare("select adult, banned, display_name, gender, profile_age from users where id = ?").get(userId));
       ws.lang = langOf(userId);
+      // Для воронки в моніторі: коли людина вперше зайшла в гру.
+      try { withDb((db) => db.prepare("update users set game_at = coalesce(game_at, ?) where id = ?").run(Math.floor(Date.now() / 1000), userId)); } catch { /* стара база без колонки */ }
     } catch (err) {
       send(ws, { type: "error", message: err.message || "Не вдалося авторизувати Telegram." });
       ws.close(4003, "Unauthorized");
