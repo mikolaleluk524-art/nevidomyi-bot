@@ -1030,6 +1030,18 @@ function serveFile(res, f) {
     }
     done.add(f.key);
   }
+  // Уточнення процедури для вже перенесених записів: ціна й тривалість — з прайсу
+  for (const u of data.updates || []) {
+    if (done.has(u.key)) continue;
+    const sv = one("SELECT * FROM services WHERE name = ?", u.service);
+    if (sv) {
+      run(
+        "UPDATE bookings SET service_id = ?, service_name = ?, price = ?, duration = ? WHERE date = ? AND start = ? AND source = 'zoshyt' AND status IN ('confirmed','pending','request')",
+        sv.id, sv.name, sv.price, u.duration || sv.duration, u.date, toMin(u.time)
+      );
+    }
+    done.add(u.key);
+  }
   for (const k of data.blocks || []) {
     if (done.has(k.key)) continue;
     run("INSERT INTO blocks(master_id, date, start, end, note) VALUES(NULL,?,?,?,?)", k.date, toMin(k.start), Math.min(1440, toMin(k.end)), k.note || "");
