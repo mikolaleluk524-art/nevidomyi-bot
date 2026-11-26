@@ -429,10 +429,31 @@ function refresh(t) {
   scheduleBotSpin(t);
 }
 
+// Друг прийшов за посиланням «сідай за мій стіл»: шукаємо стіл того, хто кликав.
+function friendTable(ws) {
+  const host = ws.profile.join_with;
+  const fresh = Number(ws.profile.join_at) > Date.now() / 1000 - 3600;
+  if (!host) return null;
+  ws.profile.join_with = null;
+  try { withDb((db) => db.prepare("update users set join_with = null where id = ?").run(ws.userId)); } catch { /* стара база */ }
+  const h = fresh ? sockets.get(String(host)) : null;
+  const t = h?.table;
+  if (!t) return null;
+  if (t.players.indexOf(null) < 0) {
+    // Місце звільняє бот (якщо він не в поточному раунді).
+    const busy = new Set([t.spinner, t.target, ...(t.pair?.seats ?? [])]);
+    const bot = t.players.findIndex((p, i) => p?.bot && (t.phase === "idle" || t.phase === "wait" || !busy.has(i)));
+    if (bot < 0) return null;
+    t.players[bot] = null;
+  }
+  return { t, hostName: t.players[h.seat]?.name ?? "" };
+}
+
 function sit(ws) {
-  let t = null;
+  const friend = friendTable(ws);
+  let t = friend?.t ?? null;
   let best = -1;
-  for (const c of tables.values()) {
+  if (!t) for (const c of tables.values()) {
     const k = seated(c).length;
     if (k < SEATS && k > best) { t = c; best = k; }
   }
@@ -454,6 +475,7 @@ function sit(ws) {
     badge: "",
   };
   send(ws, { type: "joined", seat, gifts: giftList(), aimStars: AIM_STARS });
+  if (friend) broadcast(t, { type: "notice", text: `🎉 ${t.players[seat].name} сідає за стіл за запрошенням ${friend.hostName}!` });
   refresh(t);
   const w = dailyState(ws.userId);
   send(ws, { type: "wallet", roses: w.roses, aims: w.aims });
@@ -891,7 +913,11 @@ export function attachBottleGame(server) {
     try { ws.lang = guessLang(JSON.parse(new URLSearchParams(new URL(req.url, "http://localhost").searchParams.get("initData") || "").get("user") || "{}").language_code); } catch { ws.lang = "uk"; }
     try {
       userId = verifyInitData(new URL(req.url, "http://localhost").searchParams.get("initData") || "");
-      profile = withDb((db) => db.prepare("select adult, banned, display_name, gender, profile_age from users where id = ?").get(userId));
+      profile = withDb((db) => {
+        const cols = db.prepare("pragma table_info(users)").all().map((c) => c.name);
+        const extra = cols.includes("join_with") ? ", join_with, join_at" : "";
+        return db.prepare(`select adult, banned, display_name, gender, profile_age${extra} from users where id = ?`).get(userId);
+      });
       ws.lang = langOf(userId);
       // Для воронки в моніторі: коли людина вперше зайшла в гру.
       try { withDb((db) => db.prepare("update users set game_at = coalesce(game_at, ?) where id = ?").run(Math.floor(Date.now() / 1000), userId)); } catch { /* стара база без колонки */ }

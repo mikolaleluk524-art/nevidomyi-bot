@@ -200,6 +200,8 @@ function openDatabase() {
   if (!next.prepare("pragma table_info(users)").all().some((c) => c.name === "source")) next.exec("alter table users add column source text");
   // Міграція: коли людина вперше зайшла в гру (для воронки в моніторі).
   if (!next.prepare("pragma table_info(users)").all().some((c) => c.name === "game_at")) next.exec("alter table users add column game_at integer");
+  // Міграція: «сісти за стіл до друга» — чий стіл і коли запросили (посилання ?start=t_<код>).
+  if (!next.prepare("pragma table_info(users)").all().some((c) => c.name === "join_with")) next.exec("alter table users add column join_with text; alter table users add column join_at integer");
   return next;
 }
 function installCopy(src) {
@@ -418,7 +420,8 @@ async function onboardAge(id, text) {
   await rewardInvite(id);
   await showLobby(id, "Готово! 🎉\n\n🍾 Гра в бутилочку — спільна гра із завданнями й подарунками.\n🔍 Знайти співрозмовника — анонімний чат один на один.");
   // Одразу в гру — там уже хтось є (або боти), щоб людина не губилась у меню.
-  await send(id, "🍾 Почни з гри — стіл уже чекає:", { inline_keyboard: [[{ text: "🍾 Грати зараз", web_app: { url: GAME_URL } }]] });
+  const friend = one("select join_with from users where id = ? and join_at > ?", id, nowSec() - 3600)?.join_with;
+  await send(id, friend ? "🍾 Друг уже чекає тебе за столом:" : "🍾 Почни з гри — стіл уже чекає:", { inline_keyboard: [[{ text: friend ? "🍾 Сісти за стіл" : "🍾 Грати зараз", web_app: { url: GAME_URL } }]] });
 }
 async function showLobby(chatId, lead) {
   await send(chatId, lead ?? "Ти в лобі.", menuFor(chatId));
@@ -657,7 +660,7 @@ async function rewardInvite(id) {
 async function showInvite(id) {
   const p = one("select * from users where id = ?", id);
   const invites = { n: friendsOf(id) };
-  const link = `https://t.me/${BOT_USERNAME}?start=${p?.invite_code ?? ""}`;
+  const link = `https://t.me/${BOT_USERNAME}?start=t_${p?.invite_code ?? ""}`;
   const share = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(tr(id, "Анонімний чат і гра в бутилочку з подарунками. Заходь 👉"))}`;
   const ladder = REF_TIERS.map((t) => `${invites.n >= t.n ? "✅" : "▫️"} ${t.n} друзів — ${t.text}`).join("\n");
   const next = REF_TIERS.find((t) => invites.n < t.n);
@@ -1054,13 +1057,16 @@ async function onCommand(chatId, id, name, args, from) {
       const tag = startCode.slice(3).replace(/[^a-z0-9_-]/gi, "").slice(0, 40).toLowerCase();
       if (tag) run("update users set source = ? where id = ? and source is null and status = 'new'", tag, id);
     }
-    // Бонус за запрошення — лише для щойно створених акаунтів.
-    if (startCode && me.status === "new") {
-      const src = one("select id from users where invite_code = ? and id <> ? limit 1", startCode, id);
-      if (src) {
-        // Нагорода — коли друг пройде перевірку віку (rewardInvite).
-        run("update users set invited_by = ? where id = ? and invited_by is null and invite_rewarded = 0", src.id, id);
-      }
+    // Запрошення друга: ?start=<код> або ?start=t_<код> («сідай за мій стіл»).
+    const table = startCode.startsWith("t_");
+    const inviteCode = table ? startCode.slice(2) : startCode;
+    const src = inviteCode && !startCode.startsWith("ad_") ? one("select id from users where invite_code = ? and id <> ? limit 1", inviteCode, id) : null;
+    // Бонус за запрошення — лише для щойно створених акаунтів; нагорода — після перевірки віку (rewardInvite).
+    if (src && me.status === "new") run("update users set invited_by = ? where id = ? and invited_by is null and invite_rewarded = 0", src.id, id);
+    // Посадити за стіл до друга, коли людина відкриє гру (діє годину).
+    if (src && table) run("update users set join_with = ?, join_at = ? where id = ?", src.id, nowSec(), id);
+    if (src && table && me.adult && !me.banned && me.status !== "chat") {
+      return send(chatId, "🍾 Друг кличе тебе за свій стіл!", { inline_keyboard: [[{ text: "🍾 Сісти за стіл", web_app: { url: GAME_URL } }]] });
     }
     if (me.banned) return send(chatId, "Доступ до бота обмежено.");
     // Новачок спершу обирає мову.
