@@ -1014,6 +1014,15 @@ function serveFile(res, f) {
     done.add(z.key);
     added++;
   }
+  // Виправлення імен, прочитаних із зошита неправильно (по одному разу)
+  for (const f of data.fixes || []) {
+    if (done.has(f.key)) continue;
+    for (const c of all("SELECT id FROM clients WHERE name = ? AND phone LIKE ?", f.from, base + " #%")) {
+      run("UPDATE clients SET name = ? WHERE id = ?", f.to, c.id);
+      if (f.comment) run("UPDATE bookings SET comment = ? WHERE client_id = ? AND source = 'zoshyt'", f.comment, c.id);
+    }
+    done.add(f.key);
+  }
   for (const k of data.blocks || []) {
     if (done.has(k.key)) continue;
     run("INSERT INTO blocks(master_id, date, start, end, note) VALUES(NULL,?,?,?,?)", k.date, toMin(k.start), Math.min(1440, toMin(k.end)), k.note || "");
