@@ -138,7 +138,10 @@ async function handle(update) {
 
   if (text.startsWith("/start")) {
     const code = text.split(" ")[1];
-    if (code && code === getSecret("tg_link_code") && !ownerChats().length) {
+    // Код із кабінету або постійний код зі змінної TG_LINK_CODE (пряме посилання для власниці).
+    // Працює, лише поки ніхто не підключений — потім зошит закріплено за одним Telegram.
+    const validCode = code && (code === getSecret("tg_link_code") || code === process.env.TG_LINK_CODE?.trim());
+    if (validCode && !ownerChats().length) {
       addChat(chat, [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(" ") || "Власниця");
       setSecret("tg_link_code", ""); // код одноразовий
       // Журнал починаємо з цього моменту (старі записи є в копії бази)
