@@ -1036,6 +1036,17 @@ function serveFile(res, f) {
     done.add(k.key);
   }
   setSecret("zoshyt_done", JSON.stringify([...done]));
+  // Одноразове повідомлення майстрині (push у кабінет + Telegram-журнал)
+  const an = data.announce;
+  if (an && !getSecret("announce_" + an.key)) {
+    setSecret("announce_" + an.key, "1");
+    const subs = one("SELECT COUNT(*) n FROM push_subs WHERE is_admin = 1").n;
+    setTimeout(() => {
+      notifyOwner({ title: an.title, body: an.body, url: "/admin" })
+        .then(() => console.log(`[zoshyt] повідомлення надіслано: push-підписок майстра ${subs}, Telegram ${process.env.TG_BOT_TOKEN ? "увімкнено" : "вимкнено"}, чатів ${(JSON.parse(getSecret("tg_chats") || "[]")).length}`))
+        .catch((e) => console.error("[zoshyt] повідомлення:", e.message));
+    }, 8000);
+  }
   if (added) console.log(`[zoshyt] додано записів із зошита: ${added}`);
 })();
 
