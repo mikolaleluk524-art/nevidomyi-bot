@@ -1020,6 +1020,7 @@ function serveFile(res, f) {
     for (const c of all("SELECT id FROM clients WHERE name = ? AND phone LIKE ?", f.from, base + " #%")) {
       run("UPDATE clients SET name = ? WHERE id = ?", f.to, c.id);
       if (f.comment) run("UPDATE bookings SET comment = ? WHERE client_id = ? AND source = 'zoshyt'", f.comment, c.id);
+      if (f.duration) run("UPDATE bookings SET duration = ? WHERE client_id = ? AND source = 'zoshyt'", f.duration, c.id);
     }
     done.add(f.key);
   }
