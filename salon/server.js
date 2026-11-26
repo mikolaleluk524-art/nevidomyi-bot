@@ -963,6 +963,12 @@ function serveFile(res, f) {
   for (const f of files) {
     if (!existsSync(join(UPLOAD_DIR, f))) copyFileSync(join(dir, f), join(UPLOAD_DIR, f));
     if (f.endsWith("-poster.jpg") || seeded.has(f)) continue;
+    if (f.startsWith("m")) {
+      // Фото майстра — лише якщо Марина Олександрівна ще не поставила своє в кабінеті
+      run("UPDATE masters SET photo = ? WHERE id = (SELECT id FROM masters ORDER BY sort, id LIMIT 1) AND COALESCE(photo, '') = ''", f);
+      seeded.add(f);
+      continue;
+    }
     const base = f.replace(/\.\w+$/, "");
     const kind = KIND[f[0]] || "work";
     // Відео — першими, щоб головна виглядала «живою»

@@ -187,7 +187,7 @@ async function home() {
         <h2>${info.masters.length > 1 ? "Майстри" : "Ваш майстер"}</h2>
         ${info.masters.map((m) => `
           <div class="card">
-            <div class="row"><div class="avatar" style="margin:0;flex:none;width:76px;height:76px">${m.photo ? `<img src="${img(m.photo)}" alt="">` : esc(m.name[0])}</div>
+            <div class="row"><div class="avatar" style="margin:0;flex:none;width:96px;height:96px;border:2px solid var(--accent)">${m.photo ? `<img src="${img(m.photo)}" alt="">` : esc(m.name[0])}</div>
               <div><h3 style="margin:0">${esc(m.name)}</h3><div class="small" style="color:var(--accent);font-weight:700">${esc(m.role)}</div></div></div>
             <div style="margin-top:12px">${paras(m.about)}</div>
           </div>`).join("")}
