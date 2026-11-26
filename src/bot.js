@@ -198,6 +198,8 @@ function openDatabase() {
   if (!next.prepare("pragma table_info(users)").all().some((c) => c.name === "lang")) next.exec("alter table users add column lang text");
   // Міграція: з якої рекламної кампанії прийшла людина (посилання ?start=ad_<мітка>).
   if (!next.prepare("pragma table_info(users)").all().some((c) => c.name === "source")) next.exec("alter table users add column source text");
+  // Міграція: коли людина вперше зайшла в гру (для воронки в моніторі).
+  if (!next.prepare("pragma table_info(users)").all().some((c) => c.name === "game_at")) next.exec("alter table users add column game_at integer");
   return next;
 }
 function installCopy(src) {
@@ -268,7 +270,14 @@ function placeKb() {
 function choiceKb(row) {
   return { keyboard: [row.map(text => ({ text })), ...menuKb().keyboard], resize_keyboard: true, is_persistent: true };
 }
-const kbGender = { inline_keyboard: [[{ text: "👨 Хлопець", callback_data: "gender:Чоловік" }, { text: "👩 Дівчина", callback_data: "gender:Жінка" }], [{ text: "Інше", callback_data: "gender:Інше" }]] };
+const kbGender = { inline_keyboard: [[{ text: "👨 Хлопець", callback_data: "gender:Чоловік" }, { text: "👩 Дівчина", callback_data: "gender:Жінка" }], [{ text: "Інше", callback_data: "gender:Інше" }, { text: "🌐 Мова / Язык / Language", callback_data: "menu:lang" }]] };
+// Вік — одним дотиком: 18…39, «40+» (тоді написати числом) або «менше 18».
+const kbAgeGrid = (() => {
+  const rows = [];
+  for (let a = 18; a <= 39; a += 6) rows.push(Array.from({ length: Math.min(6, 40 - a) }, (_, i) => ({ text: String(a + i), callback_data: `agen:${a + i}` })));
+  rows.push([{ text: "40+", callback_data: "agen:40plus" }, { text: "Мені менше 18", callback_data: "agen:minor" }]);
+  return { inline_keyboard: rows };
+})();
 
 export async function tg(method, body) {
   const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
@@ -396,7 +405,7 @@ async function showAge(chatId) {
     return send(chatId, "Невідомий — анонімний чат.\n\nСпіврозмовник не бачить твоє ім’я, юзернейм і номер. Не надсилай контакти, адресу чи фото документів.\n\nХто ти?", kbGender);
   }
   run("update users set pending = 'onb_age' where id = ?", id);
-  await send(chatId, "Скільки тобі років? Напиши число.", { remove_keyboard: true });
+  await send(chatId, "Скільки тобі років? Натисни своє число.", kbAgeGrid);
 }
 async function onboardAge(id, text) {
   const n = Number(String(text).trim());
@@ -408,6 +417,8 @@ async function onboardAge(id, text) {
   run("update users set adult = 1, profile_age = ?, pending = null, status = case when status = 'new' then 'lobby' else status end where id = ?", n, id);
   await rewardInvite(id);
   await showLobby(id, "Готово! 🎉\n\n🍾 Гра в бутилочку — спільна гра із завданнями й подарунками.\n🔍 Знайти співрозмовника — анонімний чат один на один.");
+  // Одразу в гру — там уже хтось є (або боти), щоб людина не губилась у меню.
+  await send(id, "🍾 Почни з гри — стіл уже чекає:", { inline_keyboard: [[{ text: "🍾 Грати зараз", web_app: { url: GAME_URL } }]] });
 }
 async function showLobby(chatId, lead) {
   await send(chatId, lead ?? "Ти в лобі.", menuFor(chatId));
@@ -1053,7 +1064,8 @@ async function onCommand(chatId, id, name, args, from) {
     }
     if (me.banned) return send(chatId, "Доступ до бота обмежено.");
     // Новачок спершу обирає мову.
-    if (!me.lang) return showLanguage(chatId);
+    // Мова — автоматично з налаштувань Telegram; змінити можна кнопкою «🌐» на першому екрані.
+    if (!me.lang) run("update users set lang = ? where id = ? and lang is null", guessLang(me.language_code), id);
     if (!me.adult) return showAge(chatId);
     if (me.status === "chat") return send(chatId, "Ти зараз у діалозі. «Завершити діалог» або /stop зупиняє його.");
     if (me.status === "search") return send(chatId, "Пошук ще триває.");
@@ -1152,6 +1164,15 @@ export async function handleUpdate(update) {
     try {
       if (data === "age:yes") await onAge(id, true, queryId);
       else if (data === "age:no") await onAge(id, false, queryId);
+      else if (data.startsWith("agen:")) {
+        await tg("answerCallbackQuery", { callback_query_id: queryId });
+        const me = ensure(id, from);
+        const v = data.slice(5);
+        if (me.adult || me.banned) { /* уже пройдено */ }
+        else if (v === "40plus") { run("update users set pending = 'onb_age' where id = ?", id); await send(id, "Напиши свій вік числом, наприклад 45.", { remove_keyboard: true }); }
+        else if (v === "minor") await onboardAge(id, "17");
+        else await onboardAge(id, v);
+      }
       else if (data.startsWith("gender:")) {
         const gender = data.slice("gender:".length);
         if (["Чоловік", "Жінка", "Інше"].includes(gender)) { ensure(id, from); await saveGender(id, gender); await tg("answerCallbackQuery", { callback_query_id: queryId, text: tr(id, "Збережено") }); }

@@ -89,8 +89,22 @@ function monitorData(db) {
   const reports = one("select count(*) as c from reports where created_at > ?", day).c;
   const lastReports = db.prepare("select created_at, target_id from reports order by created_at desc limit 5").all();
 
+  // Воронка старту: на якому кроці відпадають люди.
+  const col = (name) => db.prepare("pragma table_info(users)").all().some((c) => c.name === name);
+  const funnel = one(`select count(*) as started,
+      sum(lang is not null) as lang,
+      sum(gender is not null) as gender,
+      sum(profile_age is not null) as age,
+      sum(adult = 1) as adult,
+      sum(profile_age is not null and profile_age < 18) as minors,
+      ${col("game_at") ? "sum(game_at is not null)" : "0"} as game,
+      sum(last_partner_id is not null) as chat,
+      (select count(distinct user_id) from payments) as paid
+    from users`);
+
   return {
     now,
+    funnel,
     users,
     money,
     recent,
