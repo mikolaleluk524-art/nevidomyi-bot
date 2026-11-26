@@ -289,7 +289,8 @@ export function setSecret(key, value) {
 
 // ---- Стартові дані, щоб застосунок одразу виглядав живим ----
 if (!one("SELECT id FROM masters LIMIT 1")) {
-  const week = { 1: ["09:00", "19:00"], 2: ["09:00", "19:00"], 3: ["09:00", "19:00"], 4: ["09:00", "19:00"], 5: ["09:00", "19:00"], 6: ["09:00", "19:00"] };
+  // Пн і Чт — фітнес 9:00–10:00, тож прийом з 11:00
+  const week = { 1: ["11:00", "19:00"], 2: ["09:00", "19:00"], 3: ["09:00", "19:00"], 4: ["11:00", "19:00"], 5: ["09:00", "19:00"], 6: ["09:00", "19:00"] };
   const about = [
     "Ось уже 12 років Марина Олександрівна творить красу. Колись вона чаклувала над волоссям, та з часом у ній прокинувся справжній дар — перетворювати й зцілювати нігті.",
     "За її плечима — десятки сертифікатів, сотні рекомендацій, тисячі неймовірних робіт і, здається, мільйони щасливих пальчиків.",
@@ -312,4 +313,14 @@ if (!one("SELECT id FROM masters LIMIT 1")) {
     ["Педикюр", "Чоловічий педикюр", "Повний догляд для чоловіків", 900, 90, 0, 0],
   ];
   seed.forEach((s, i) => run("INSERT INTO services(category, name, description, price, duration, addon, price_from, sort) VALUES(?, ?, ?, ?, ?, ?, ?, ?)", ...s, i));
+}
+
+// Одноразово для вже запущеного салону: у понеділок і четвер прийом з 11:00 (фітнес 9:00–10:00)
+if (!one("SELECT 1 FROM settings WHERE key = '_sched_fitness_v1'")) {
+  for (const m of all("SELECT id, schedule FROM masters")) {
+    const sch = JSON.parse(m.schedule || "{}");
+    for (const d of ["1", "4"]) if (sch[d] && sch[d][0] < "11:00") sch[d][0] = "11:00";
+    run("UPDATE masters SET schedule = ? WHERE id = ?", JSON.stringify(sch), m.id);
+  }
+  run("INSERT INTO settings(key, value) VALUES('_sched_fitness_v1', '1')");
 }
