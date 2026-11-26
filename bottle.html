@@ -342,6 +342,12 @@ const I18N = { ru: {}, en: {} };
   ["Перевір інтернет і підключись знову.", "Проверь интернет и подключись снова.", "Check your connection and reconnect."],
   ["Підключитись знову", "Подключиться снова", "Reconnect"],
   ["бот", "бот", "bot"],
+  ["📨 Покликати друга за стіл", "📨 Позвать друга за стол", "📨 Invite a friend to your table"],
+  ["Покликати друга за стіл", "Позвать друга за стол", "Invite a friend to your table"],
+  ["Сідай до мене за стіл у бутилочку 🍾", "Садись ко мне за стол в бутылочку 🍾", "Join my table in Spin the Bottle 🍾"],
+  ["Грати з друзями веселіше 🎉", "С друзьями играть веселее 🎉", "It's more fun with friends 🎉"],
+  ["Поклич друга за свій стіл: він сяде поруч, а ти отримаєш 3 години Premium і 🌹.", "Позови друга за свой стол: он сядет рядом, а ты получишь 3 часа Premium и 🌹.", "Invite a friend to your table: they'll sit next to you, and you'll get 3 hours of Premium and a 🌹."],
+  ["📨 Покликати друга", "📨 Позвать друга", "📨 Invite a friend"],
   ["Це бот: «Наодинці» з ним недоступне.", "Это бот: «Наедине» с ним недоступно.", "That's a bot: “Alone” isn't available with it."],
   ["Це бот — подарунки, 🎯 і «наодинці» діють лише на людей.", "Это бот — подарки, 🎯 и «наедине» работают только с людьми.", "That's a bot — gifts, 🎯 and “alone” only work with people."],
   ["Подарунок", "Подарок", "Gift"],
@@ -479,7 +485,7 @@ function renderStage() {
     st.append(h("div", "title", T("Підключення до столу...")));
   } else if (S.phase === "wait" || n < 2) {
     st.append(h("div", "title", T("Чекаємо гравців...")), h("div", "sub", T("Для гри потрібно хоча б двоє. Поклич друзів — за кожного отримаєш Premium.")));
-    const b = h("button", "big", T("📨 Покликати друзів"));
+    const b = h("button", "big", T("📨 Покликати друга за стіл"));
     b.addEventListener("click", share);
     st.append(b);
   } else if (S.phase === "idle" && S.turn === me) {
@@ -619,6 +625,20 @@ function showOver(title, text, buttons, before) {
   $("over").classList.remove("hidden");
 }
 const hideOver = () => $("over").classList.add("hidden");
+
+// Після яскравого моменту — запросити друга (не частіше разу на день).
+function inviteNudge() {
+  const today = new Date().toDateString();
+  if (store.get("nudge") === today) return;
+  setTimeout(() => {
+    if (!$("over").classList.contains("hidden") || !$("sheet").classList.contains("hidden")) return;
+    store.set("nudge", today);
+    showOver(T("Грати з друзями веселіше 🎉"), T("Поклич друга за свій стіл: він сяде поруч, а ти отримаєш 3 години Premium і 🌹."), [
+      [T("📨 Покликати друга"), () => { hideOver(); share(); }],
+      [T("Пізніше"), hideOver],
+    ]);
+  }, 2500);
+}
 
 function showHowTo() {
   const steps = h("div", "steps");
@@ -765,15 +785,16 @@ $("tabChat").addEventListener("click", () => { chatOpen = true; S.unread = 0; up
 
 /* ---------- ☰ ще ---------- */
 function share() {
-  const link = "https://t.me/" + (S.bot || "nevidomyi_chat_bot") + (S.invite ? "?start=" + S.invite : "");
-  const url = "https://t.me/share/url?url=" + encodeURIComponent(link) + "&text=" + encodeURIComponent(T("Грай зі мною в бутилочку 🍾"));
+  // ?start=t_<код>: друг сяде саме за твій стіл, а ти отримаєш бонус за запрошення.
+  const link = "https://t.me/" + (S.bot || "nevidomyi_chat_bot") + (S.invite ? "?start=t_" + S.invite : "");
+  const url = "https://t.me/share/url?url=" + encodeURIComponent(link) + "&text=" + encodeURIComponent(T("Сідай до мене за стіл у бутилочку 🍾"));
   try { tg.openTelegramLink(url); } catch (e) { window.open(url, "_blank"); }
 }
 $("tabMore").addEventListener("click", () => {
   const menu = h("div", "menu");
   const item = (em, label, note, fn) => { const b = h("button"); b.append(h("b", "", em), h("span", "", label), h("i", "", note || "")); b.addEventListener("click", fn); menu.appendChild(b); };
   item("🎯", T("На кого покаже пляшка"), S.wallet.aims > 0 ? T("безкоштовно ×{0}", S.wallet.aims) : "5⭐", pickAimTarget);
-  item("📨", T("Покликати друзів"), T("+Premium"), () => { closeSheet(); share(); });
+  item("📨", T("Покликати друга за стіл"), T("+Premium"), () => { closeSheet(); share(); });
   item("❓", T("Як грати"), "", () => { closeSheet(); showHowTo(); });
   openSheet(T("Ще"), "", [menu]);
 });
@@ -872,7 +893,7 @@ function handle(m) {
       line = m.ca === "push" && m.cb === "push" ? T("👋 {0} відштовхнули одне одного", pair)
         : T("👋 {0} відштовхнув(ла) {1}", nameOf(m.ca === "push" ? m.a : m.b), nameOf(m.ca === "push" ? m.b : m.a));
     }
-    if (m.outcome === "kiss") { fly(m.a, "💋"); fly(m.b, "💋"); }
+    if (m.outcome === "kiss") { fly(m.a, "💋"); fly(m.b, "💋"); if (m.a === S.seat || m.b === S.seat) inviteNudge(); }
     if (m.outcome === "push") fly(m.ca === "push" ? m.b : m.a, "💔");
     addFeed(line, m.a === S.seat || m.b === S.seat);
     // Хотів(ла) більшого, а не вийшло — пропонуємо подарунок із запрошенням.
@@ -930,7 +951,7 @@ function handle(m) {
     if (m.to >= 0) {
       addFeed(T("👑 {0} виконав(ла) бажання {1} і отримує Корону бажань!", nameOf(m.to), nameOf(m.from)), m.to === S.seat);
       fly(m.to, "👑");
-      if (m.to === S.seat) buzz("notificationOccurred", "success");
+      if (m.to === S.seat) { buzz("notificationOccurred", "success"); inviteNudge(); }
     } else addFeed(T("✨ Бажання {0} ніхто не виконав — зірки повернуто.", nameOf(m.from)), m.from === S.seat);
   } else if (m.type === "event") {
     S.doubleUntil = Date.now() + Math.max(0, m.doubleUntil - m.now);

@@ -60,8 +60,9 @@ function monitorData(db) {
       sum(created_at > ?) as new24,
       sum(adult = 1) as adults,
       sum(lang = 'uk') as uk, sum(lang = 'ru') as ru, sum(lang = 'en') as en,
-      sum(gender = 'Чоловік') as male, sum(gender = 'Жінка') as female
-    from users`, now - 300, now, day);
+      sum(gender = 'Чоловік') as male, sum(gender = 'Жінка') as female,
+      sum(invited_by is not null) as invited, sum(invited_by is not null and created_at > ?) as invited24
+    from users`, now - 300, now, day, day);
 
   const pays = db.prepare("select payload, stars, created_at, user_id from payments").all();
   const money = { day: 0, week: 0, total: 0, byKind: {}, count24: 0 };

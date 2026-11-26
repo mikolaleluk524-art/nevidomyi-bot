@@ -432,7 +432,7 @@ function render(d) {
     rec.appendChild(it);
   });
 
-  renderFunnel(d.funnel);
+  renderFunnel(d.funnel, d.users);
   $("total").textContent = fmt(u.total);
   $("adults").textContent = fmt(u.adults) + " підтвердили 18+";
   $("new24").textContent = fmt(u.new24);
@@ -659,7 +659,7 @@ $("outGo").addEventListener("click", async () => {
 });
 
 /* ---------- 🧭 воронка старту ---------- */
-function renderFunnel(f) {
+function renderFunnel(f, d_users) {
   const box = $("funnel");
   box.replaceChildren();
   if (!f || !f.started) { box.innerHTML = '<div class="empty">Ще немає даних.</div>'; return; }
@@ -685,6 +685,11 @@ function renderFunnel(f) {
     r.append(lbl, tr, num);
     box.appendChild(r);
   });
+  if (d_users && d_users.invited) {
+    const n = document.createElement("div"); n.className = "sub"; n.style.marginTop = "6px";
+    n.textContent = "📨 Прийшли від друзів: " + fmt(d_users.invited) + " (за добу " + fmt(d_users.invited24) + ")";
+    box.appendChild(n);
+  }
   if (f.minors) {
     const n = document.createElement("div"); n.className = "sub"; n.style.marginTop = "6px";
     n.textContent = "З тих, хто вказав вік, менше 18: " + fmt(f.minors) + " — бот їх не пускає.";
