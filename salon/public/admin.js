@@ -603,7 +603,7 @@ async function settings(box) {
       ${f("phone", "Телефон", "tel")}${f("instagram", "Instagram (без @)")}${f("telegram", "Telegram (без @)")}${f("viber", "Viber (номер)")}
       ${f("rules", "Правила для клієнток", "area")}</div>
     <div class="card"><h3>Адреса і маршрут</h3>
-      ${f("address", "Адреса")}${f("cabinet", "Поверх / кабінет")}${f("howToFind", "Як знайти вхід і кабінет", "area")}
+      ${f("address", "Адреса (вулиця, будинок)")}${f("city", "Місто")}${f("cabinet", "Поверх / кабінет")}${f("howToFind", "Як знайти вхід і кабінет", "area")}
       <p class="small muted" style="margin-top:10px">Натисніть на карті точно на вхід у будівлю:</p>
       <div id="map" style="height:260px"></div>
       <div class="two">${f("lat", "Широта", "number", 'step="any"')}${f("lng", "Довгота", "number", 'step="any"')}</div>
@@ -624,6 +624,11 @@ async function settings(box) {
       <div class="two">${f("cashbackPercent", "Кешбек з візиту, %", "number")}${f("maxBonusPercent", "Макс. оплата бонусами, %", "number")}</div>
       ${f("birthdayDiscount", "Знижка в тиждень дня народження, %", "number")}</div>
     <button class="btn block big" id="save" style="margin-top:14px">Зберегти</button>
+
+    <section class="section card"><h3>🔎 Google</h3>
+      <p class="small muted">Сайт уже підготовлений для Google: назва, послуги з цінами, адреса й графік. Якщо підключаєте Google Search Console — вставте сюди код із тегу <code>google-site-verification</code> (лише сам код).</p>
+      ${f("googleVerify", "Код підтвердження Google")}
+      <button class="btn ghost block" style="margin-top:10px" id="save2">Зберегти</button></section>
 
     <section class="section card" id="tgbox"><h3>📒 Telegram-зошит</h3><div class="spinner"></div></section>
 
@@ -652,6 +657,7 @@ async function settings(box) {
     await api("/api/admin/settings", { body });
     toast("Збережено ✓");
   };
+  $("#save2").onclick = () => $("#save").click();
   $("#logout").onclick = () => {
     store.set("adminToken", null);
     location.reload();

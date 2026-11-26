@@ -17,6 +17,7 @@ import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { all, db, getSecret, getSettings, integrity, one, run, setSecret, setSettings, UPLOAD_DIR } from "./lib/db.js";
 import { backupPath, listBackups, runBackups, startBackups } from "./lib/backup.js";
+import { readTemplate, renderIndex, robots, sitemap } from "./lib/seo.js";
 import { botInfo, linkCode, ownerChats, removeChat, startTelegram, telegramOn } from "./lib/telegram.js";
 import { addDays, hm, humanDate, isDate, kyivNow, toMin } from "./lib/time.js";
 import { notifyOwner, pushClient, saveSubscription, VAPID_PUBLIC } from "./lib/notify.js";
@@ -888,13 +889,15 @@ function serveStatic(req, res, url) {
     res.writeHead(200, { ...head, "content-length": size });
     return createReadStream(f).pipe(res);
   }
-  if (p === "/" || p === "") p = "/index.html";
+  if (p === "/robots.txt") return send(res, 200, robots(baseUrl(req)), { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" });
+  if (p === "/sitemap.xml") return send(res, 200, sitemap(baseUrl(req)), { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" });
   if (p === "/admin" || p === "/admin/") p = "/admin.html";
   if (p === "/poster" || p === "/poster/") p = "/poster.html";
   const f = normalize(join(PUBLIC, p));
-  if (!f.startsWith(PUBLIC) || !existsSync(f) || !statSync(f).isFile()) {
-    // SPA: невідомі шляхи віддаємо головною сторінкою
-    return serveFile(res, join(PUBLIC, "index.html"));
+  if (p === "/" || p === "/index.html" || !f.startsWith(PUBLIC) || !existsSync(f) || !statSync(f).isFile()) {
+    // Головна (і невідомі шляхи) — з текстом і даними для Google
+    const html = renderIndex(readTemplate(join(PUBLIC, "index.html")), baseUrl(req));
+    return send(res, 200, html, { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" });
   }
   serveFile(res, f);
 }

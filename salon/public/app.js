@@ -196,7 +196,7 @@ async function home() {
     <section class="section card">
       <h3>Про нас</h3>
       ${paras(s.about)}
-      <p class="muted small">📍 ${esc(s.address)}${s.cabinet ? ", " + esc(s.cabinet) : ""}</p>
+      <p class="muted small">📍 ${esc([s.address, s.city].filter(Boolean).join(", "))}${s.cabinet ? ", " + esc(s.cabinet) : ""}</p>
       <div class="row wrap">
         <a class="btn sm ghost" href="tel:${esc(s.phone)}">📞 Подзвонити</a>
         ${s.instagram ? `<a class="btn sm ghost" target="_blank" rel="noopener" href="https://instagram.com/${esc(s.instagram.replace(/^@/, ""))}">Instagram</a>` : ""}
@@ -815,7 +815,8 @@ async function visit(id) {
   const steps = info.gallery.filter((g) => g.kind === "route");
   // Поки майстер не поставила точку на карті — ведемо за адресою.
   const hasPin = Boolean(dest.lat && dest.lng);
-  const target = hasPin ? `${dest.lat},${dest.lng}` : encodeURIComponent(s.address);
+  const fullAddr = [s.address, s.city].filter(Boolean).join(", ");
+  const target = hasPin ? `${dest.lat},${dest.lng}` : encodeURIComponent(fullAddr);
   const gmaps = (mode) => `https://www.google.com/maps/dir/?api=1&destination=${target}&travelmode=${mode}`;
   const apple = `https://maps.apple.com/?daddr=${target}&dirflg=w`;
   view.innerHTML = `
@@ -846,7 +847,7 @@ async function visit(id) {
   }
 
   if (!hasPin) {
-    $("#map").innerHTML = `<iframe title="Карта" src="https://www.google.com/maps?q=${encodeURIComponent(s.address)}&z=16&output=embed" style="width:100%;height:100%;border:0" loading="lazy"></iframe>`;
+    $("#map").innerHTML = `<iframe title="Карта" src="https://www.google.com/maps?q=${encodeURIComponent(fullAddr)}&z=16&output=embed" style="width:100%;height:100%;border:0" loading="lazy"></iframe>`;
     $("#dist").parentElement.remove();
     return;
   }
@@ -1075,7 +1076,8 @@ async function boot() {
     }
     info = JSON.parse(cached);
   }
-  document.title = `${info.settings.name} — онлайн-запис`;
+  // Заголовок вкладки лишаємо той, що дав сервер (для Google), лише якщо його немає — ставимо свій
+  if (!document.title || document.title === "Онлайн-запис") document.title = `${info.settings.name} — онлайн-запис`;
   applyTheme(info.settings.theme);
   addEventListener("hashchange", route);
   route();
