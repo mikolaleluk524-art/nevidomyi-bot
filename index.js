@@ -17,17 +17,21 @@ import {
   checkpoint,
   DB_PATH,
   handleUpdate,
+  partyTick,
   publishCommands,
+  setLiveSource,
   tg,
 } from "./src/bot.js";
 import { adminRoutes, setMonitorSource } from "./admin.js";
-import { attachBottleGame, gameEvents, gameStats } from "./game-server.js";
+import { attachBottleGame, gameEvents, gameStats, setGameEvent } from "./game-server.js";
 import { handleGiftUpdate, publishGiftCommand } from "./gifts.js";
 
 const DASHBOARD = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "dashboard.html"), "utf8");
 const BOTTLE_GAME = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "bottle.html"), "utf8");
 // Окремий додаток власника для спостереження за ботом (можна додати на головний екран).
 const MONITOR = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "monitor.html"), "utf8");
+// Картинка для сторіз «Напиши мені анонімно» (бот надсилає її за адресою).
+const STORY_CONFESS = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "assets", "story-confess.jpg"));
 const MONITOR_MANIFEST = JSON.stringify({
   name: "Невідомий — монітор",
   short_name: "Монітор",
@@ -133,6 +137,11 @@ function listen() {
       res.end(MONITOR_MANIFEST);
       return;
     }
+    if (req.url === "/story-confess.jpg") {
+      res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "max-age=86400" });
+      res.end(STORY_CONFESS);
+      return;
+    }
     if (req.url === "/monitor-icon.svg") {
       res.writeHead(200, { "content-type": "image/svg+xml", "cache-control": "max-age=86400" });
       res.end(MONITOR_ICON);
@@ -148,6 +157,9 @@ function listen() {
     res.end(fresh ? "ok" : "poll stalled");
   });
   attachBottleGame(server);
+  setLiveSource(() => gameStats());
+  // 🎉 Щоденна вечірка о 21:00 (Київ): запрошення о 20:50 і подвійні серця на годину.
+  setInterval(() => { partyTick(() => setGameEvent("double_hearts", 1)).catch((err) => console.error("[bot] party", err.message)); }, 30_000).unref();
   setMonitorSource(() => ({ beatAgo: Date.now() - beat, startedAt, game: gameStats(), events: gameEvents(), memoryMb: Math.round(process.memoryUsage().rss / 1048576) }));
   server.listen(port, "0.0.0.0", () => {
     console.info(`[bot] health + admin + bottle game :${port}`);

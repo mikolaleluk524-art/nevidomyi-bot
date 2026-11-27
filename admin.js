@@ -103,8 +103,16 @@ function monitorData(db) {
       (select count(distinct user_id) from payments) as paid
     from users`);
 
+  // 💌 Анонімні зізнання: скільки написали і скільки людей уже отримували.
+  let confess = { total: 0, day: 0, owners: 0 };
+  try {
+    const c = db.prepare("select count(*) as total, sum(created_at > ?) as day, count(distinct to_id) as owners from confessions where reply_to is null").get(now - 86400);
+    confess = { total: c.total ?? 0, day: c.day ?? 0, owners: c.owners ?? 0 };
+  } catch {}
+
   return {
     now,
+    confess,
     funnel,
     users,
     money,

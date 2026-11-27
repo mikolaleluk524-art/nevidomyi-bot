@@ -49,6 +49,7 @@ const BTN = {
   photo: "📷 Завантажити фото",
   premium: "💎 Premium",
   invite: "🎁 Запросити друзів",
+  confess: "💌 Анонімні зізнання",
   report: "⚠️ Поскаржитись",
   rules: "📜 Правила",
   help: "❓ Допомога",
@@ -68,6 +69,7 @@ const ACTIONS = {
   [BTN.photo]: "photo",
   [BTN.premium]: "premium",
   [BTN.invite]: "invite",
+  [BTN.confess]: "confess",
   [BTN.report]: "report",
   [BTN.rules]: "rules",
   [BTN.help]: "help",
@@ -202,6 +204,17 @@ function openDatabase() {
   if (!next.prepare("pragma table_info(users)").all().some((c) => c.name === "game_at")) next.exec("alter table users add column game_at integer");
   // Міграція: «сісти за стіл до друга» — чий стіл і коли запросили (посилання ?start=t_<код>).
   if (!next.prepare("pragma table_info(users)").all().some((c) => c.name === "join_with")) next.exec("alter table users add column join_with text; alter table users add column join_at integer");
+  // 💌 Анонімні зізнання: кому людина зараз пише (посилання ?start=c_<код>) і самі повідомлення.
+  if (!next.prepare("pragma table_info(users)").all().some((c) => c.name === "confess_to")) next.exec("alter table users add column confess_to text; alter table users add column confess_at integer");
+  next.exec("create table if not exists confessions (id text primary key, to_id text not null, from_id text not null, text text not null, created_at integer not null, hint integer not null default 0, reported integer not null default 0, reply_to text)");
+  next.exec("create index if not exists confessions_to on confessions (to_id, created_at)");
+  next.exec("create index if not exists confessions_from on confessions (from_id, created_at)");
+  // ❤️ Симпатії після розмови: токен кнопки → пара, і самі вподобання.
+  next.exec("create table if not exists rate_tokens (id text primary key, from_id text not null, to_id text not null, created_at integer not null)");
+  next.exec("create table if not exists likes (from_id text not null, to_id text not null, created_at integer not null, primary key (from_id, to_id))");
+  // 🎉 Вечірка о 21:00: в який день уже кликали, і хто не хоче запрошень.
+  next.exec("create table if not exists party_log (day text primary key, sent integer not null default 0)");
+  next.exec("create table if not exists party_off (id text primary key)");
   return next;
 }
 function installCopy(src) {
@@ -258,7 +271,7 @@ function spam(id) {
 const kb = (rows) => ({ keyboard: rows.map((r) => r.map((text) => ({ text }))), resize_keyboard: true, is_persistent: true });
 // «Гра» — звичайна кнопка, а не web_app: Mini App з кнопки клавіатури не отримує initData.
 // Бот відповідає інлайн-кнопкою, яка працює.
-const lobbyKb = () => kb([[BTN.game], [BTN.search], [BTN.profile, BTN.premium], [BTN.invite, BTN.settings]]);
+const lobbyKb = () => kb([[BTN.game], [BTN.search], [BTN.confess], [BTN.profile, BTN.premium], [BTN.invite, BTN.settings]]);
 const chatKb = () => kb([[BTN.next, BTN.stop], [BTN.gift, BTN.reveal], [BTN.report]]);
 const searchKb = () => kb([[BTN.cancel], [BTN.game]]);
 function menuFor(id) {
@@ -418,13 +431,27 @@ async function onboardAge(id, text) {
   }
   run("update users set adult = 1, profile_age = ?, pending = null, status = case when status = 'new' then 'lobby' else status end where id = ?", n, id);
   await rewardInvite(id);
-  await showLobby(id, "Готово! 🎉\n\n🍾 Гра в бутилочку — спільна гра із завданнями й подарунками.\n🔍 Знайти співрозмовника — анонімний чат один на один.");
+  await showLobby(id, "Готово! 🎉\n\n🍾 Гра в бутилочку — спільна гра із завданнями й подарунками.\n🔍 Знайти співрозмовника — анонімний чат один на один.\n💌 Анонімні зізнання — твоє посилання, за яким тобі пишуть анонімно.");
+  // Прийшов за посиланням зізнань — одразу даємо написати.
+  const confessTo = one("select confess_to from users where id = ? and confess_at > ?", id, nowSec() - 3600)?.confess_to;
+  if (confessTo) return askConfess(id, confessTo);
   // Одразу в гру — там уже хтось є (або боти), щоб людина не губилась у меню.
   const friend = one("select join_with from users where id = ? and join_at > ?", id, nowSec() - 3600)?.join_with;
   await send(id, friend ? "🍾 Друг уже чекає тебе за столом:" : "🍾 Почни з гри — стіл уже чекає:", { inline_keyboard: [[{ text: friend ? "🍾 Сісти за стіл" : "🍾 Грати зараз", web_app: { url: GAME_URL } }]] });
 }
+// Живі цифри для першого екрана: людина бачить, що тут уже щось відбувається.
+let liveSource = () => ({ players: 0 });
+export function setLiveSource(fn) { liveSource = fn; }
+function liveLine() {
+  const online = one("select count(*) as n from users where adult = 1 and last_seen > ?", nowSec() - 15 * 60)?.n ?? 0;
+  const dayStart = nowSec() - 24 * 3600;
+  const confessions = one("select count(*) as n from confessions where created_at > ?", dayStart)?.n ?? 0;
+  let players = 0;
+  try { players = Number(liveSource().players) || 0; } catch {}
+  return `🔥 Зараз у клубі: ${Math.max(online, 1)} · за столами: ${players} · 💌 зізнань за добу: ${confessions}`;
+}
 async function showLobby(chatId, lead) {
-  await send(chatId, lead ?? "Ти в лобі.", menuFor(chatId));
+  await send(chatId, lead ?? liveLine(), menuFor(chatId));
 }
 
 async function sendMatch(to, body, bytes, premium) {
@@ -446,7 +473,7 @@ async function enqueue(id, mode) {
     if (me.banned || !me.adult) return { kind: "closed" };
     if (me.status === "chat") return { kind: "busy" };
     const row = one("select * from users where id = ?", id);
-    const want = mode ?? (row?.search_mode === "dating" ? "dating" : "random");
+    const want = mode ?? (row?.search_mode === "dating" ? "dating" : row?.search_mode === "speed" ? "speed" : "random");
     const premium = premiumActive(row?.premium_until);
     if (want === "dating") {
       if (!row?.gender || !row.profile_age || !row.city || !row.look_gender || !row.age_min || !row.look_city) return { kind: "needprofile" };
@@ -466,12 +493,14 @@ async function enqueue(id, mode) {
       run("update users set status = 'chat', partner_id = ?, last_partner_id = ?, priority = 0, pending = null where id = ?", cand.id, cand.id, id);
       return { kind: "matched", other: cand.id, mode: "dating" };
     }
-    if (row?.status !== "search" || row.search_mode === "dating") run("update users set status = 'search', partner_id = null, priority = 0, search_mode = 'random' where id = ?", id);
-    const cand = one(`select id from users where status = 'search' and id <> ? and adult = 1 and banned = 0 and coalesce(search_mode, 'random') = 'random' order by case when id = ? then 1 else 0 end, random() limit 1`, id, me.last_partner_id);
-    if (!cand) return { kind: "waiting", mode: "random" };
+    // Випадковий чат і ⚡ швидкі побачення — окремі черги з однаковою логікою.
+    const queue = want === "speed" ? "speed" : "random";
+    if (row?.status !== "search" || (row.search_mode ?? "random") !== queue) run("update users set status = 'search', partner_id = null, priority = 0, search_mode = ? where id = ?", queue, id);
+    const cand = one(`select id from users where status = 'search' and id <> ? and adult = 1 and banned = 0 and coalesce(search_mode, 'random') = ? order by case when id = ? then 1 else 0 end, random() limit 1`, id, queue, me.last_partner_id);
+    if (!cand) return { kind: "waiting", mode: queue };
     run("update users set status = 'chat', partner_id = ?, last_partner_id = ?, priority = 0, pending = null where id = ?", id, id, cand.id);
     run("update users set status = 'chat', partner_id = ?, last_partner_id = ?, priority = 0, pending = null where id = ?", cand.id, cand.id, id);
-    return { kind: "matched", other: cand.id, mode: "random" };
+    return { kind: "matched", other: cand.id, mode: queue };
   });
   if (result.kind === "needprofile") { await continueDating(id); return "needprofile"; }
   if (result.kind === "needpay") { await send(id, "Пошук за віком, статтю і містом лише з Premium. Випадковий — безкоштовний."); await showPremium(id); return "needpay"; }
@@ -485,15 +514,20 @@ async function enqueue(id, mode) {
       try { await sendMatch(result.other, `${intro}${line(mine)}`, photoOf(id), premiumActive(theirs?.premium_until)); }
       catch (err) { if (isGone(err)) await disconnect(id, "gone"); }
     } else {
-      const text = "Співрозмовника знайдено. Пиши — я передам повідомлення без твого імені.\n\n«Наступний» шукає когось іншого. «Завершити діалог» зупиняє розмову.";
+      const text = result.mode === "speed"
+        ? "⚡ Швидке побачення! У вас 3 хвилини.\n\nПотім кожен вирішить: ❤️ чи 👋. Взаємна симпатія відкриє чат без обмежень."
+        : "Співрозмовника знайдено. Пиши — я передам повідомлення без твого імені.\n\n«Наступний» шукає когось іншого. «Завершити діалог» зупиняє розмову.";
       await send(id, text);
       try { await send(result.other, text); }
-      catch (err) { if (isGone(err)) await disconnect(id, "gone"); }
+      catch (err) { if (isGone(err)) { await disconnect(id, "gone"); return "matched"; } }
+      await sendIcebreakers(id);
+      try { await sendIcebreakers(result.other); } catch {}
+      if (result.mode === "speed") startSpeedTimer(id, result.other);
     }
     return "matched";
   }
   if (result.kind === "waiting") {
-    await send(id, result.mode === "dating" ? "Шукаю анкету за віком, статтю і містом. Якщо зараз нікого немає — зачекай." : "Шукаю випадкову людину. Це безкоштовно. Якщо черга порожня — зачекай.");
+    await send(id, result.mode === "dating" ? "Шукаю анкету за віком, статтю і містом. Якщо зараз нікого немає — зачекай." : result.mode === "speed" ? "⚡ Шукаю пару для швидкого побачення. Щойно хтось з’явиться — почнемо!" : "Шукаю випадкову людину. Це безкоштовно. Якщо черга порожня — зачекай.");
     return "waiting";
   }
   return result.kind;
@@ -519,6 +553,13 @@ async function disconnect(id, mode) {
   });
   if (outcome.kind === "cancelled") { await showLobby(id, "Пошук скасовано."); return; }
   if (outcome.kind === "left") {
+    if (mode === "timeup") {
+      for (const who of [id, outcome.partner]) {
+        try { await showLobby(who, "⏰ 3 хвилини минули!"); await offerBack(who); }
+        catch (err) { if (!isGone(err)) console.error("[bot] timeup", err.message); }
+      }
+      return;
+    }
     if (mode === "gone") await showLobby(id, "Співрозмовник недоступний.");
     else if (mode === "next") {
       try { await showLobby(outcome.partner, "Співрозмовник пішов шукати когось іншого."); await offerBack(outcome.partner); }
@@ -586,6 +627,11 @@ async function sendInvoice(id, planId) {
 
 async function onPreCheckout(query) {
   const [kind, target] = String(query.invoice_payload).split(":");
+  if (kind === "hint") {
+    const error = query.currency !== "XTR" || query.total_amount !== HINT_STARS ? "Ціна змінилась." : hintCheck(String(query.from.id), target);
+    await tg("answerPreCheckoutQuery", { pre_checkout_query_id: query.id, ok: !error, ...(error ? { error_message: tr(query.from.id, error) } : {}) });
+    return;
+  }
   if (kind === "reveal" || kind === "back") {
     const price = kind === "reveal" ? REVEAL_STARS : BACK_STARS;
     const error = query.currency !== "XTR" || query.total_amount !== price ? "Ціна змінилась." : microCheck(String(query.from.id), kind, target);
@@ -600,6 +646,7 @@ async function onPreCheckout(query) {
 async function onPaid(id, pay) {
   const [kind, target] = String(pay.invoice_payload).split(":");
   if (kind === "reveal" || kind === "back") { ensure(id); return onMicroPaid(id, pay, kind, target); }
+  if (kind === "hint") { ensure(id); return onHintPaid(id, pay, target); }
   const plan = planOf(pay.invoice_payload);
   ensure(id);
   if (!plan || pay.currency !== "XTR" || pay.total_amount !== plan.stars) { await send(id, "Оплату отримано, але тариф не збігся. Напиши в Premium ще раз."); return; }
@@ -666,6 +713,152 @@ async function showInvite(id) {
   const next = REF_TIERS.find((t) => invites.n < t.n);
   await send(id, `🎁 Супер-реферал\nНадішли другу це посилання:\n${link}\n\nЗа кожного друга — 3 години Premium + 🌹 у грі.\nДруг теж отримує 🌹🌹.\n\n${ladder}\n\nУже запросили: ${invites.n}${next ? `\nДо наступного бонусу: ще ${next.n - invites.n}` : ""}`, { inline_keyboard: [[{ text: "📨 Поділитися посиланням", url: share }]] });
 }
+// ---------- 💌 анонімні зізнання ----------
+// Кожен має посилання ?start=c_<код>. Хто перейде — пише анонімне повідомлення власнику.
+// Власник може відповісти анонімно, поскаржитись або за зірки дізнатися стать/вік/місто автора.
+const HINT_STARS = 10;
+const CONFESS_MAX = 600;
+const CONFESS_PER_DAY = 30;
+const confessLink = (inviteCode) => `https://t.me/${BOT_USERNAME}?start=c_${inviteCode}`;
+const nameFor = (row) => (String(row?.first_name || "").trim().slice(0, 32) || "Ця людина");
+const cancelKb = { inline_keyboard: [[{ text: "✖️ Скасувати", callback_data: "conf:cancel" }]] };
+
+async function showConfess(id) {
+  const me = one("select adult, banned, invite_code from users where id = ?", id);
+  if (me?.banned) return send(id, "Доступ до бота обмежено.");
+  if (!me?.adult) return showAge(id);
+  const link = confessLink(me.invite_code);
+  const total = one("select count(*) as n from confessions where to_id = ?", id)?.n ?? 0;
+  const share = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(tr(id, "Напиши мені анонімно 👀 Я не дізнаюсь, хто ти"))}`;
+  await send(id, `💌 Анонімні зізнання\n\nВиклади своє посилання в сторіз, біо чи канал — і люди зможуть анонімно написати тобі, що насправді про тебе думають 👀\n\n${link}\n\nОтримано зізнань: ${total}`, { inline_keyboard: [
+    [{ text: "📨 Поділитися посиланням", url: share }],
+    [{ text: "📸 Картинка для сторіз", callback_data: "conf:story" }],
+  ] });
+}
+
+async function sendStoryCard(id) {
+  const me = one("select invite_code from users where id = ?", id);
+  const link = confessLink(me?.invite_code ?? "");
+  try {
+    await tgRetry("sendPhoto", { chat_id: id, photo: `https://${PUBLIC_DOMAIN}/story-confess.jpg`, caption: tr(id, "Збережи картинку → відкрий сторіз → додай наліпку «Посилання» і встав своє посилання:") + `\n${link}` });
+  } catch (err) {
+    console.error("[bot] story card", err.message);
+    await send(id, `Відкрий сторіз → наліпка «Посилання» → встав:\n${link}`);
+  }
+}
+
+async function askConfess(id, ownerId) {
+  const owner = one("select id, first_name, banned from users where id = ?", ownerId);
+  if (!owner || owner.banned) return send(id, "Цієї людини вже немає в боті.");
+  if (owner.id === id) return showConfess(id);
+  if (one("select status from users where id = ?", id)?.status === "chat") return send(id, "Спочатку заверши поточний діалог.");
+  run("update users set pending = 'confess', confess_to = ?, confess_at = ? where id = ?", owner.id, nowSec(), id);
+  await send(id, `💌 Анонімне повідомлення для ${nameFor(owner)}:\n\nНапиши, що думаєш: зізнання, комплімент чи питання. Ніхто не дізнається, що це ти 🤫`, cancelKb);
+}
+
+async function deliverConfession(id, text) {
+  const me = one("select confess_to from users where id = ?", id);
+  run("update users set pending = null where id = ?", id);
+  const to = me?.confess_to;
+  const owner = to ? one("select id, banned, invite_code from users where id = ?", to) : null;
+  if (!owner || owner.banned) return showLobby(id, "Цієї людини вже немає в боті.");
+  if (one("select 1 as x from reports where reporter_id = ? and target_id = ?", to, id)) return showLobby(id, "Ця людина не приймає від тебе повідомлень.");
+  const body = String(text).trim().slice(0, CONFESS_MAX);
+  if (!body) return askConfess(id, to);
+  const sentToday = one("select count(*) as n from confessions where from_id = ? and created_at > ?", id, nowSec() - 86400)?.n ?? 0;
+  if (sentToday >= CONFESS_PER_DAY) return showLobby(id, "На сьогодні досить зізнань. Повертайся завтра 🙂");
+  const cid = code(10);
+  run("insert into confessions (id, to_id, from_id, text, created_at) values (?, ?, ?, ?, ?)", cid, to, id, body, nowSec());
+  try {
+    await send(to, `💌 Нове анонімне повідомлення:\n\n${body}`, { inline_keyboard: [
+      [{ text: "↩️ Відповісти анонімно", callback_data: `conf:reply:${cid}` }],
+      [{ text: `🔍 Хто це? · ${HINT_STARS}⭐`, callback_data: `conf:hint:${cid}` }, { text: "🚫 Поскаржитись", callback_data: `conf:report:${cid}` }],
+    ] });
+  } catch (err) {
+    run("delete from confessions where id = ?", cid);
+    if (isGone(err)) return showLobby(id, "Не вдалося доставити: ця людина вимкнула бота.");
+    throw err;
+  }
+  const mine = one("select invite_code from users where id = ?", id);
+  const link = confessLink(mine?.invite_code ?? "");
+  const share = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(tr(id, "Напиши мені анонімно 👀 Я не дізнаюсь, хто ти"))}`;
+  await send(id, `✅ Надіслано анонімно!\n\nХочеш, щоб і тобі писали? Ось твоє посилання — виклади його в сторіз чи біо:\n${link}`, { inline_keyboard: [
+    [{ text: "✍️ Написати ще", callback_data: "conf:more" }],
+    [{ text: "📨 Поділитися своїм посиланням", url: share }],
+  ] });
+}
+
+async function deliverReply(id, cid, text) {
+  run("update users set pending = null where id = ?", id);
+  const c = one("select * from confessions where id = ? and to_id = ?", cid, id);
+  if (!c) return showLobby(id);
+  const body = String(text).trim().slice(0, CONFESS_MAX);
+  if (!body) return showLobby(id);
+  const rid = code(10);
+  // Відповідь теж зберігаємо як повідомлення: автор може відповісти на неї, і так далі.
+  run("insert into confessions (id, to_id, from_id, text, created_at, reply_to) values (?, ?, ?, ?, ?, ?)", rid, c.from_id, id, body, nowSec(), cid);
+  const quote = c.text.length > 120 ? c.text.slice(0, 117) + "…" : c.text;
+  try {
+    await send(c.from_id, `💬 Відповідь на твоє анонімне повідомлення\n«${quote}»\n\n${body}`, { inline_keyboard: [
+      [{ text: "↩️ Відповісти", callback_data: `conf:reply:${rid}` }],
+      [{ text: "🚫 Поскаржитись", callback_data: `conf:report:${rid}` }],
+    ] });
+  } catch (err) {
+    if (isGone(err)) return showLobby(id, "Не вдалося доставити: ця людина вимкнула бота.");
+    throw err;
+  }
+  await showLobby(id, "✅ Відповідь надіслано анонімно.");
+}
+
+async function onConfessCallback(id, data, queryId, from) {
+  await tg("answerCallbackQuery", { callback_query_id: queryId });
+  const me = ensure(id, from);
+  if (me.banned) return send(id, "Доступ до бота обмежено.");
+  if (!me.adult) return showAge(id);
+  const [, action, cidRaw] = data.split(":");
+  const cid = String(cidRaw || "").replace(/[^a-f0-9]/g, "").slice(0, 12);
+  if (action === "cancel") { run("update users set pending = null where id = ?", id); return showLobby(id); }
+  if (action === "story") return sendStoryCard(id);
+  if (action === "more") return me.confess_to ? askConfess(id, me.confess_to) : showConfess(id);
+  const c = cid ? one("select * from confessions where id = ?", cid) : null;
+  if (!c || c.to_id !== id) return send(id, "Це повідомлення вже недоступне.");
+  if (action === "reply") {
+    if (me.status === "chat") return send(id, "Спочатку заверши поточний діалог.");
+    if (one("select 1 as x from reports where reporter_id = ? and target_id = ?", c.from_id, id)) return send(id, "Ця людина не приймає від тебе повідомлень.");
+    run("update users set pending = ? where id = ?", `creply:${cid}`, id);
+    return send(id, "Напиши відповідь — вона піде анонімно.", cancelKb);
+  }
+  if (action === "report") {
+    run("update confessions set reported = 1 where id = ?", cid);
+    run("insert into reports (reporter_id, target_id, created_at) values (?, ?, ?)", id, c.from_id, nowSec());
+    return send(id, "Скаргу прийнято. Ця людина більше не зможе тобі писати.");
+  }
+  if (action === "hint") {
+    if (c.hint) return sendHint(id, c);
+    return starInvoice(id, "🔍 Хто написав", "Стать, вік і місто автора повідомлення. Ім’я і контакти не показуємо.", `hint:${cid}`, HINT_STARS);
+  }
+}
+
+function hintCheck(payer, cid) {
+  const c = one("select to_id, from_id, hint from confessions where id = ?", cid);
+  if (!c || c.to_id !== payer) return "Це повідомлення вже недоступне.";
+  if (c.hint) return "Підказку вже відкрито.";
+  return null;
+}
+async function sendHint(id, c) {
+  const a = one("select gender, profile_age, city from users where id = ?", c.from_id);
+  const age = a?.profile_age ? `${Math.floor(a.profile_age / 5) * 5}–${Math.floor(a.profile_age / 5) * 5 + 4}` : "не вказано";
+  await send(id, `🔍 Хто написав\nСтать: ${a?.gender ?? "не вказано"}\nВік: ${age}\nМісто: ${a?.city ?? "не вказано"}`);
+}
+async function onHintPaid(id, pay, cid) {
+  const fresh = run("insert into payments (charge_id, user_id, payload, stars) values (?, ?, ?, ?) on conflict (charge_id) do nothing", pay.telegram_payment_charge_id, id, pay.invoice_payload, pay.total_amount).changes;
+  if (!fresh) return;
+  const error = pay.currency !== "XTR" || pay.total_amount !== HINT_STARS ? "Ціна змінилась." : hintCheck(id, cid);
+  if (error) return refundStars(id, pay.telegram_payment_charge_id, `${error} Зірки повернено.`);
+  run("update confessions set hint = 1 where id = ?", cid);
+  await sendHint(id, one("select * from confessions where id = ?", cid));
+}
+
 async function showRules(id) {
   await send(id, "📜 Правила\n• Лише 18+.\n• Не надсилай контакти, адресу, документи і посилання на свої профілі.\n• Не ображай співрозмовника.\n• «Завершити діалог» або /stop зупиняє розмову.\n• «Наступний» шукає іншу людину.\n• Скарга — кнопка під час діалогу.");
 }
@@ -674,8 +867,10 @@ async function showHelp(id) {
 }
 async function showSettings(id) {
   const off = Boolean(one("select id from optout where id = ?", id));
+  const partyOff = Boolean(one("select id from party_off where id = ?", id));
   await send(id, "⚙️ Налаштування", { inline_keyboard: [
     [{ text: "🌐 Мова", callback_data: "menu:lang" }],
+    [{ text: partyOff ? "🎉 Кликати на вечірки" : "🔕 Не кликати на вечірки", callback_data: "menu:party" }],
     [{ text: "📜 Правила", callback_data: "menu:rules" }, { text: "❓ Допомога", callback_data: "menu:help" }],
     [{ text: off ? "🔔 Увімкнути новини" : "🔕 Вимкнути новини", callback_data: "menu:news" }],
   ] });
@@ -692,10 +887,122 @@ async function askReveal(id) {
   await starInvoice(id, "👀 Хто співрозмовник", "Стать, вік, місто і ціль співрозмовника. Ім’я і контакти не показуємо.", `reveal:${me.partner_id}`, REVEAL_STARS);
 }
 // ↩️ Після діалогу: запит колишньому співрозмовнику продовжити розмову.
+// Після розмови: ❤️ чи 👋. Взаємна симпатія — безкоштовно відкриває чат знову.
+// Однобічна — можна попросити повернути співрозмовника за зірки.
 async function offerBack(id) {
   const me = one("select last_partner_id, status from users where id = ?", id);
   if (!me?.last_partner_id || me.status === "chat") return;
-  await send(id, "↩️ Шкода, що розмова закінчилась? Надішлю колишньому співрозмовнику запит. Якщо прийме — діалог відкриється знову.", { inline_keyboard: [[{ text: `↩️ Повернути співрозмовника · ${BACK_STARS}⭐`, callback_data: "back" }]] });
+  const tok = code(10);
+  run("delete from rate_tokens where created_at < ?", nowSec() - 7 * 86400);
+  run("insert into rate_tokens (id, from_id, to_id, created_at) values (?, ?, ?, ?)", tok, id, me.last_partner_id, nowSec());
+  await send(id, "Як тобі співрозмовник? Якщо симпатія взаємна — я відкрию чат знову 😉", { inline_keyboard: [
+    [{ text: "❤️ Сподобався", callback_data: `like:y:${tok}` }, { text: "👋 Не дуже", callback_data: `like:n:${tok}` }],
+    [{ text: `↩️ Повернути співрозмовника · ${BACK_STARS}⭐`, callback_data: "back" }],
+  ] });
+}
+async function onLike(id, yes, tok, queryId) {
+  const row = one("select * from rate_tokens where id = ? and from_id = ?", tok, id);
+  run("delete from rate_tokens where id = ?", tok);
+  if (!row) return tg("answerCallbackQuery", { callback_query_id: queryId });
+  if (!yes) return tg("answerCallbackQuery", { callback_query_id: queryId, text: tr(id, "Зрозумів 👋") });
+  run("insert into likes (from_id, to_id, created_at) values (?, ?, ?) on conflict do update set created_at = excluded.created_at", id, row.to_id, nowSec());
+  const mutual = one("select 1 as x from likes where from_id = ? and to_id = ? and created_at > ?", row.to_id, id, nowSec() - 3 * 86400);
+  if (!mutual) {
+    await tg("answerCallbackQuery", { callback_query_id: queryId, text: tr(id, "Збережено ❤️") });
+    return send(id, "❤️ Збережено. Якщо симпатія взаємна — я скажу 😉");
+  }
+  await tg("answerCallbackQuery", { callback_query_id: queryId, text: "💞" });
+  run("delete from likes where (from_id = ? and to_id = ?) or (from_id = ? and to_id = ?)", id, row.to_id, row.to_id, id);
+  const req = code(8);
+  run("delete from requests where from_id = ? and to_id = ?", id, row.to_id);
+  run("insert into requests (id, from_id, to_id) values (?, ?, ?)", req, id, row.to_id);
+  await send(id, "💞 Взаємна симпатія! Ви сподобались одне одному.\nЯ запропонував співрозмовнику продовжити — чекай.");
+  try {
+    await send(row.to_id, "💞 Взаємна симпатія! Ви сподобались одне одному.\nПродовжити розмову?", { inline_keyboard: [[{ text: "💬 Так, до чату", callback_data: `meet:yes:${req}` }, { text: "Ні", callback_data: `meet:no:${req}` }]] });
+  } catch (err) { if (!isGone(err)) console.error("[bot] mutual", err.message); }
+}
+
+// 💡 Підказки для першого повідомлення: натиснув — питання пішло співрозмовнику.
+const ICEBREAKERS = [
+  "Яка твоя найдивніша звичка? 😅",
+  "Куди б ти полетів(ла) прямо зараз, якби квиток був безкоштовний? ✈️",
+  "Що тебе сьогодні порадувало?",
+  "Яку пісню ти слухаєш на повторі останнім часом? 🎧",
+  "Ти більше сова чи жайворонок? 🦉",
+  "Яке найкраще побачення ти можеш уявити?",
+  "Що ти ніколи не їв(ла) б навіть за гроші? 🤢",
+  "Який фільм можеш переглядати безкінечно? 🎬",
+  "Чим займаєшся, коли не сидиш у телефоні?",
+  "Якби мав(ла) суперсилу на один день — яку б обрав(ла)? 🦸",
+  "Що для тебе ідеальний вечір п’ятниці?",
+  "Ти вже колись закохувався(лась) з першого погляду? 💘",
+  "Кава чи чай? І чому саме так ☕",
+  "Що найсміливіше ти робив(ла) у житті?",
+  "Яка твоя улюблена погода і чому? ☀️",
+];
+async function sendIcebreakers(id) {
+  const picks = [...ICEBREAKERS.keys()].sort(() => Math.random() - 0.5).slice(0, 3);
+  await send(id, "💡 Не знаєш, з чого почати? Натисни — і питання піде співрозмовнику:", { inline_keyboard: picks.map((n) => [{ text: ICEBREAKERS[n], callback_data: `ice:${n}` }]) });
+}
+async function onIcebreaker(id, n, queryId) {
+  const me = one("select status, partner_id from users where id = ?", id);
+  const question = ICEBREAKERS[n];
+  if (!question || me?.status !== "chat" || !me.partner_id) return tg("answerCallbackQuery", { callback_query_id: queryId, text: tr(id, "Діалог уже завершено.") });
+  await tg("answerCallbackQuery", { callback_query_id: queryId, text: tr(id, "Надіслано ✅") });
+  try { await send(me.partner_id, `💬 Співрозмовник питає:\n${question}`); }
+  catch (err) { if (isGone(err)) return disconnect(id, "gone"); throw err; }
+  await send(id, `Ти запитав(ла): ${question}`);
+}
+
+// ⚡ Швидке побачення: через 3 хвилини чат закривається і кожен ставить ❤️ чи 👋.
+const SPEED_MS = Number(process.env.SPEED_MS) || 3 * 60 * 1000; // SPEED_MS — лише для тестів
+function startSpeedTimer(a, b) {
+  const t = setTimeout(async () => {
+    const me = one("select status, partner_id from users where id = ?", a);
+    if (me?.status !== "chat" || me.partner_id !== b) return;
+    try { await disconnect(a, "timeup"); } catch (err) { console.error("[bot] speed", err.message); }
+  }, SPEED_MS);
+  t.unref?.();
+  const warn = setTimeout(async () => {
+    const me = one("select status, partner_id from users where id = ?", a);
+    if (me?.status !== "chat" || me.partner_id !== b) return;
+    for (const who of [a, b]) { try { await send(who, "⏳ Залишилось 30 секунд!"); } catch {} }
+  }, Math.max(1000, SPEED_MS - 30_000));
+  warn.unref?.();
+}
+
+// 🎉 Вечірка о 21:00 (Київ): о 20:50 кличемо тих, хто заходив за тиждень, о 21:00 — подвійні серця на годину.
+const PARTY_INVITE = "20:50";
+const PARTY_START = "21:00";
+function kyivNow() {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date()).map((p) => [p.type, p.value]));
+  return { day: `${parts.year}-${parts.month}-${parts.day}`, hm: `${parts.hour}:${parts.minute}` };
+}
+let partyBusy = false;
+export async function partyTick(startEvent) {
+  const { day, hm } = kyivNow();
+  if (hm === PARTY_START && run("insert into party_log (day) values (?) on conflict do nothing", day + ":start").changes) {
+    try { startEvent?.(); } catch (err) { console.error("[bot] party event", err.message); }
+  }
+  if (hm < PARTY_INVITE || hm >= PARTY_START || partyBusy) return;
+  if (!run("insert into party_log (day) values (?) on conflict do nothing", day).changes) return;
+  partyBusy = true;
+  try {
+    const rows = q("select id from users where adult = 1 and banned = 0 and status <> 'chat' and last_seen > ? and id not in (select id from optout) and id not in (select id from party_off)", nowSec() - 7 * 86400);
+    let sent = 0;
+    for (const row of rows) {
+      try {
+        await send(row.id, "🎉 Вечірка о 21:00!\nЦілу годину в 🍾 бутилочці подвійні серця ❤️×2, а за столами — живі люди. Заходь!", { inline_keyboard: [
+          [{ text: "🍾 На вечірку", web_app: { url: GAME_URL } }],
+          [{ text: "🔕 Не кликати на вечірки", callback_data: "party:off" }],
+        ] });
+        sent++;
+      } catch (err) { if (!isGone(err)) console.error("[bot] party", err.message); }
+      await new Promise((r) => setTimeout(r, 60));
+    }
+    run("update party_log set sent = ? where day = ?", sent, day);
+    console.info(`[bot] вечірка: запрошено ${sent}`);
+  } finally { partyBusy = false; }
 }
 async function askBack(id) {
   const me = one("select last_partner_id, status from users where id = ?", id);
@@ -1052,6 +1359,25 @@ async function onCommand(chatId, id, name, args, from) {
     const me = ensure(id, from);
     const startCode = args.trim();
     if (startCode.startsWith("meet_")) return askMeet(id, startCode.slice(5).replace(/[^a-z0-9]/gi, "").slice(0, 12));
+    // 💌 Посилання для анонімних зізнань: ?start=c_<код власника>.
+    if (startCode.startsWith("c_")) {
+      const owner = one("select id, first_name from users where invite_code = ? limit 1", startCode.slice(2).replace(/[^a-z0-9]/gi, "").slice(0, 12));
+      if (owner && owner.id === id) return showConfess(id);
+      if (owner) {
+        // Хто прийшов за посиланням зізнань — теж друг власника (бонус після перевірки віку).
+        if (me.status === "new") run("update users set invited_by = ? where id = ? and invited_by is null and invite_rewarded = 0", owner.id, id);
+        run("update users set confess_to = ?, confess_at = ? where id = ?", owner.id, nowSec(), id);
+        if (me.banned) return send(chatId, "Доступ до бота обмежено.");
+        if (!me.lang) run("update users set lang = ? where id = ? and lang is null", guessLang(me.language_code), id);
+        if (!me.adult) {
+          await send(chatId, `💌 ${nameFor(owner)} чекає на твоє анонімне повідомлення!
+
+Два швидкі питання — і пиши. Ніхто не дізнається, що це ти 🤫`, { remove_keyboard: true });
+          return showAge(chatId);
+        }
+        return askConfess(id, owner.id);
+      }
+    }
     // Рекламна мітка: запам'ятовуємо лише для нових людей, щоб не перебивати джерело.
     if (startCode.startsWith("ad_")) {
       const tag = startCode.slice(3).replace(/[^a-z0-9_-]/gi, "").slice(0, 40).toLowerCase();
@@ -1084,7 +1410,7 @@ async function onCommand(chatId, id, name, args, from) {
     if (!me.adult) return showAge(chatId);
     if (name === "search") {
       if (me.status === "chat") return send(chatId, "Спочатку заверши поточний діалог.");
-      return send(chatId, "Обери.", { inline_keyboard: [[{ text: "Випадково", callback_data: "find:random" }], [{ text: "За анкетою", callback_data: "find:dating" }]] });
+      return send(chatId, "Обери.", { inline_keyboard: [[{ text: "🎲 Випадково", callback_data: "find:random" }], [{ text: "⚡ Швидке побачення · 3 хв", callback_data: "find:speed" }], [{ text: "💞 За анкетою", callback_data: "find:dating" }]] });
     }
     if (name === "next") { if (me.status === "chat") return disconnect(id, "next"); return enqueue(id); }
     return disconnect(id, me.status === "search" ? "cancel" : "stop");
@@ -1100,6 +1426,7 @@ async function onCommand(chatId, id, name, args, from) {
   if (name === "form" || name === "gender" || name === "age" || name === "interests") { ensure(id, from); return startForm(id); }
   if (name === "premium") { ensure(id, from); return showPremium(id); }
   if (name === "invite") { ensure(id, from); return showInvite(id); }
+  if (name === "confess") { ensure(id, from); return showConfess(id); }
   if (name === "report") { ensure(id, from); return reportPartner(id); }
   if (name === "rules") return showRules(id);
   if (name === "help") return showHelp(id);
@@ -1117,6 +1444,8 @@ async function onText(message, id, text) {
   if (me.banned) return send(id, "Доступ до бота обмежено.");
   if (!me.adult) return me.pending === "onb_age" ? onboardAge(id, text) : showAge(id);
   const pending = one("select pending from users where id = ?", id)?.pending;
+  if (pending === "confess" && me.status !== "chat") return deliverConfession(id, text);
+  if (pending?.startsWith("creply:") && me.status !== "chat") return deliverReply(id, pending.slice(7), text);
   // У діалозі текст завжди йде співрозмовнику, а не в анкету.
   if (pending && me.status !== "chat") return savePending(id, pending, ["form_gender", "form_aim", "form_photo", "gender"].includes(pending) ? toUk(text, CHOICE_WORDS) : text);
   if (me.status === "chat") return relay(message, id);
@@ -1185,6 +1514,11 @@ export async function handleUpdate(update) {
         else await tg("answerCallbackQuery", { callback_query_id: queryId });
       }
       else if (data.startsWith("lang:")) { ensure(id, from); await setLanguage(id, data.slice(5), queryId); }
+      else if (data.startsWith("conf:")) await onConfessCallback(id, data, queryId, from);
+      else if (data.startsWith("like:")) { const [, v, tok] = data.split(":"); ensure(id, from); await onLike(id, v === "y", String(tok || "").replace(/[^a-f0-9]/g, "").slice(0, 12), queryId); }
+      else if (data.startsWith("ice:")) { ensure(id, from); await onIcebreaker(id, Number(data.slice(4)), queryId); }
+      else if (data === "party:off") { run("insert into party_off (id) values (?) on conflict do nothing", id); await tg("answerCallbackQuery", { callback_query_id: queryId }); await send(id, "🔕 Більше не кличу на вечірки. Увімкнути знову: ⚙️ Налаштування."); }
+      else if (data === "find:speed") { await tg("answerCallbackQuery", { callback_query_id: queryId }); await enqueue(id, "speed"); }
       else if (data === "back") { await tg("answerCallbackQuery", { callback_query_id: queryId }); ensure(id, from); await askBack(id); }
       else if (data.startsWith("menu:")) {
         await tg("answerCallbackQuery", { callback_query_id: queryId });
@@ -1193,6 +1527,11 @@ export async function handleUpdate(update) {
         else if (item === "rules") await showRules(id);
         else if (item === "help") await showHelp(id);
         else if (item === "form" || item === "photo") await onCommand(id, id, item, "", from);
+        else if (item === "party") {
+          const was = Boolean(one("select id from party_off where id = ?", id));
+          if (was) run("delete from party_off where id = ?", id); else run("insert into party_off (id) values (?) on conflict do nothing", id);
+          await send(id, was ? "🎉 Кликатиму на вечірки о 21:00." : "🔕 Більше не кличу на вечірки.");
+        }
         else if (item === "news") {
           const off = Boolean(one("select id from optout where id = ?", id));
           if (off) run("delete from optout where id = ?", id); else run("insert into optout (id) values (?) on conflict (id) do nothing", id);
@@ -1238,6 +1577,7 @@ export async function handleUpdate(update) {
     const me = ensure(id, from);
     if (me.banned) return await send(id, "Доступ до бота обмежено.");
     if (!me.adult) return await showAge(id);
+    if (me.pending === "confess" || me.pending?.startsWith("creply:")) return await send(id, "Поки що можна надіслати лише текст ✍️", cancelKb);
     if (me.status !== "chat") return await showLobby(id, "Фото, голос і стікери можна надсилати лише в діалозі.");
     await relay(message, id);
   } catch (err) { console.error("[bot] message", err.stack || err.message); }
@@ -1246,7 +1586,7 @@ export async function handleUpdate(update) {
 const COMMANDS = [
   ["start", "Почати"], ["game", "Гра в бутилочку"], ["search", "Знайти співрозмовника"], ["next", "Наступний співрозмовник"],
   ["stop", "Завершити діалог"], ["profile", "Мій профіль"], ["form", "Заповнити анкету"], ["photo", "Завантажити фото"],
-  ["premium", "Premium"], ["invite", "Запросити друзів"], ["report", "Поскаржитись"], ["rules", "Правила"], ["help", "Допомога"],
+  ["premium", "Premium"], ["confess", "Анонімні зізнання"], ["invite", "Запросити друзів"], ["report", "Поскаржитись"], ["rules", "Правила"], ["help", "Допомога"],
   ["settings", "Налаштування"], ["language", "Змінити мову"], ["myid", "Мій Telegram ID"], ["stopnews", "Відписатись від новин"], ["startnews", "Знову отримувати новини"],
 ];
 export const commandList = (lang) => COMMANDS.map(([command, description]) => ({ command, description: L(lang, description) }));
@@ -1254,16 +1594,16 @@ export const commandList = (lang) => COMMANDS.map(([command, description]) => ({
 // Опис, який люди бачать до /start і в пошуку Telegram.
 const ABOUT = {
   uk: {
-    short: "Анонімний чат 18+ і гра в бутилочку з подарунками. Знайомся без імен і номерів.",
-    long: "Невідомий — анонімний чат для знайомств 18+.\n\n🔍 Випадковий співрозмовник — безкоштовно\n🍾 Гра в бутилочку: завдання, поцілунки, подарунки\n💞 Пошук за віком, статтю і містом\n\nСпіврозмовник не бачить твоє ім’я, юзернейм і номер.",
+    short: "Нічний клуб у Telegram 🌙 Анонімні зізнання, гра в бутилочку і чат 18+ без імен і номерів.",
+    long: "Невідомий — нічний клуб у Telegram, 18+ 🌙\n\n💌 Анонімні зізнання: виклади своє посилання — і дізнайся, що про тебе думають насправді\n🍾 Гра в бутилочку: завдання, поцілунки, подарунки\n🔍 Анонімний чат один на один — безкоштовно\n💞 Пошук за віком, статтю і містом\n\nНіхто не бачить твоє ім’я, юзернейм і номер.",
   },
   ru: {
-    short: "Анонимный чат 18+ и игра в бутылочку с подарками. Знакомься без имён и номеров.",
-    long: "Невідомий — анонимный чат для знакомств 18+.\n\n🔍 Случайный собеседник — бесплатно\n🍾 Игра в бутылочку: задания, поцелуи, подарки\n💞 Поиск по возрасту, полу и городу\n\nСобеседник не видит твоё имя, юзернейм и номер.",
+    short: "Ночной клуб в Telegram 🌙 Анонимные признания, игра в бутылочку и чат 18+ без имён и номеров.",
+    long: "Невідомий — ночной клуб в Telegram, 18+ 🌙\n\n💌 Анонимные признания: выложи свою ссылку — и узнай, что о тебе думают на самом деле\n🍾 Игра в бутылочку: задания, поцелуи, подарки\n🔍 Анонимный чат один на один — бесплатно\n💞 Поиск по возрасту, полу и городу\n\nНикто не видит твоё имя, юзернейм и номер.",
   },
   en: {
-    short: "Anonymous 18+ chat and Spin the Bottle with gifts. Meet people without names or numbers.",
-    long: "Nevidomyi — anonymous dating chat, 18+.\n\n🔍 Random chat partner — free\n🍾 Spin the Bottle: dares, kisses, gifts\n💞 Search by age, gender and city\n\nYour partner never sees your name, username or phone number.",
+    short: "A night club in Telegram 🌙 Anonymous confessions, Spin the Bottle and 18+ chat — no names or numbers.",
+    long: "Nevidomyi — a night club in Telegram, 18+ 🌙\n\n💌 Anonymous confessions: share your link and find out what people really think of you\n🍾 Spin the Bottle: dares, kisses, gifts\n🔍 Anonymous one-on-one chat — free\n💞 Search by age, gender and city\n\nNobody sees your name, username or phone number.",
   },
 };
 
