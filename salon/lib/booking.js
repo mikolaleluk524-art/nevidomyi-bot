@@ -217,7 +217,8 @@ export function createBooking({ serviceId, addonIds = [], masterId, date, start,
   if (!service) throw new BookingError("Послугу не знайдено");
   const s = getSettings();
   const today = kyivNow().date;
-  if (date < today || date > addDays(today, s.bookingDays)) throw new BookingError("Ця дата недоступна для запису");
+  // Обмеження «на N днів наперед» — лише для клієнток; майстер у кабінеті записує на будь-яку майбутню дату
+  if (date < today || (source !== "admin" && date > addDays(today, s.bookingDays))) throw new BookingError("Ця дата недоступна для запису");
   return tx(() => {
     const masters = mastersFor(service.id).filter((m) => !masterId || m.id === Number(masterId));
     const master = masters.find((m) => (source === "admin" ? true : freeStarts(m, date, service.duration, s).includes(start)));
