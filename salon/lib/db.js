@@ -300,6 +300,12 @@ if (!one("SELECT 1 FROM settings WHERE key = '_gverify_v1'")) {
   run("INSERT INTO settings(key, value) VALUES('_gverify_v1', '1')");
 }
 
+// Одноразово: правильний код Google Search Console (ресурс «Префікс URL», тег HTML)
+if (!one("SELECT 1 FROM settings WHERE key = '_gverify_v2'")) {
+  run("INSERT INTO settings(key, value) VALUES('googleVerify', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", JSON.stringify("BDmMIIBUS8FBYF1-i87kakrmuK_wvRtFQVaglABAqEg"));
+  run("INSERT INTO settings(key, value) VALUES('_gverify_v2', '1')");
+}
+
 export function getSettings() {
   const rows = all("SELECT key, value FROM settings WHERE key NOT LIKE '\\_%' ESCAPE '\\'");
   const s = { ...DEFAULT_SETTINGS };
