@@ -1171,6 +1171,38 @@ startBackups();
 startTelegram();
 // Перевірка підключення TurboSMS при старті (видно в журналі Railway)
 if (smsOn()) smsBalance().then((b) => console.log(b !== null ? `[sms] TurboSMS підключено, баланс: ${b} грн` : "[sms] TurboSMS: токен не прийнято або сервіс недоступний"));
+
+// Одноразово: підбираємо доступне ім'я відправника — пробне нагадування на номер салону
+if (smsOn() && !getSecret("sms_probe_v1")) {
+  setSecret("sms_probe_v1", "1");
+  (async () => {
+    const token = process.env.TURBOSMS_TOKEN.trim();
+    const phone = "380666230824";
+    const text = "Тест: це нагадування від сайту «Магія краси». Так клієнтки отримуватимуть повідомлення напередодні візиту 💅";
+    const tries = [
+      ["viber", "Magiya"], ["viber", "MagiyaKrasy"], ["viber", "Магія краси"], ["viber", "TurboSMS"],
+      ["sms", "Magiya"], ["sms", "MagiyaKrasy"], ["sms", "Msg"], ["sms", "TAXI"], ["sms", "MAGAZIN"], ["sms", "Info"], ["sms", "TurboSMS"],
+    ];
+    for (const [ch, sender] of tries) {
+      try {
+        const body = { recipients: [phone], [ch]: ch === "viber" ? { sender, text, ttl: 3600 } : { sender, text } };
+        const r = await fetch("https://api.turbosms.ua/message/send.json", { method: "POST", headers: { "content-type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+        const d = await r.json().catch(() => ({}));
+        const rr = d.response_result?.[0];
+        const ok = [0, 800, 801, 802, 803].includes(Number(d.response_code)) && (!rr || [0, 800, 801, 802, 803].includes(Number(rr.response_code)));
+        console.log(`[sms probe] ${ch} «${sender}»: ${ok ? "OK" : "ні"} — ${d.response_status || ""} ${rr?.response_status || ""}`);
+        if (ok) {
+          setSettings({ smsSender: sender, smsChannel: ch === "viber" ? "viber+sms" : "sms" });
+          console.log(`[sms probe] вибрано: ${ch} «${sender}»`);
+          return;
+        }
+      } catch (e) {
+        console.log("[sms probe] помилка", e.message);
+      }
+    }
+    console.log("[sms probe] жодне ім'я не підійшло — потрібно зареєструвати відправника в кабінеті TurboSMS");
+  })();
+}
 if (integrity !== "ok") notifyOwner({ title: "⚠️ Перевірка бази", body: `Перевірка цілісності: ${integrity}. Є резервні копії — напишіть розробнику.` }).catch(() => {});
 
 // Коректне завершення при оновленні: дописуємо все на диск і закриваємо базу.
