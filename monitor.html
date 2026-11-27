@@ -265,6 +265,7 @@ h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute
 </div>
 
 <script>
+const AI_NAME = { claude: "Написав Claude", gemini: "Написав Gemini" };
 const $ = (id) => document.getElementById(id);
 const KEY = "monitor_key";
 const store = {
@@ -506,7 +507,7 @@ function renderProgress(b) {
   if (b.running) progTimer = setTimeout(async () => { try { renderProgress((await api("/admin/broadcast")).data); } catch (e) {} }, 2000);
 }
 function renderIdeas(d) {
-  $("aiSrc").textContent = (d.source === "claude" ? "Ідеї від Claude" : d.ai ? "Claude зараз недоступний — ідеї з шаблонів" : "Ідеї з шаблонів · щоб їх писав Claude, додай ANTHROPIC_API_KEY") + " · отримувачів новин: " + fmt(d.audience);
+  $("aiSrc").textContent = (d.source === "claude" ? "Ідеї від Claude" : d.source === "gemini" ? "Ідеї від Gemini" : d.ai ? "ШІ зараз недоступний — ідеї з шаблонів" : "Ідеї з шаблонів · щоб їх писав ШІ, додай GEMINI_API_KEY (безкоштовно)") + " · отримувачів новин: " + fmt(d.audience);
   renderEventBanner(d.events);
   renderProgress(d.broadcast);
   const list = $("aiIdeas");
@@ -642,7 +643,7 @@ $("promoGo").addEventListener("click", async () => {
     const r = await api("/admin/promo", { method: "POST", body: JSON.stringify({ tag: $("promoCamp").value, note: $("promoNote").value }) });
     const out = $("promoOut"); out.replaceChildren();
     if (!r.ok) { out.textContent = "Не вдалося написати рекламу"; return; }
-    const src = document.createElement("div"); src.className = "sub"; src.textContent = (r.data.source === "claude" ? "Написав Claude" : "З шаблонів") + " · посилання: " + r.data.link; out.appendChild(src);
+    const src = document.createElement("div"); src.className = "sub"; src.textContent = (AI_NAME[r.data.source] || "З шаблонів") + " · посилання: " + r.data.link; out.appendChild(src);
     r.data.items.forEach((it) => out.appendChild(langCard(it.title, { uk: it.uk, ru: it.ru, en: it.en })));
   } catch (e) {} finally { btn.disabled = false; btn.textContent = "✍️ Написати рекламу"; }
 });
@@ -654,7 +655,7 @@ $("outGo").addEventListener("click", async () => {
     const r = await api("/admin/outreach", { method: "POST", body: JSON.stringify({ channel: $("outChannel").value, topic: $("outTopic").value, offer: $("outOffer").value, lang, me: $("outMe").value }) });
     const out = $("outOut"); out.replaceChildren();
     if (!r.ok) { out.textContent = "Не вдалося написати лист"; return; }
-    out.appendChild(langCard((r.data.source === "claude" ? "Написав Claude" : "З шаблону") + " · " + $("outChannel").value, { [lang]: r.data.text }));
+    out.appendChild(langCard((AI_NAME[r.data.source] || "З шаблону") + " · " + $("outChannel").value, { [lang]: r.data.text }));
   } catch (e) {} finally { btn.disabled = false; btn.textContent = "✍️ Написати лист"; }
 });
 
