@@ -2,6 +2,7 @@
 // Потрібна змінна TURBOSMS_TOKEN (токен з кабінету TurboSMS) і зареєстрований там підпис відправника.
 import { all, db, getSettings, one, run } from "./db.js";
 import { addDays, hm, kyivNow } from "./time.js";
+import { sendViber, viberOn } from "./viber.js";
 
 db.exec(`CREATE TABLE IF NOT EXISTS sms_log (
   id INTEGER PRIMARY KEY,
@@ -87,21 +88,32 @@ export async function smsBalance() {
 /** Щовечора о smsHour — нагадування всім, хто записаний на завтра і має справжній номер. */
 export async function smsTick() {
   const s = getSettings();
-  if (!s.smsEnabled || !smsOn()) return;
+  if (!s.smsEnabled || (!smsOn() && !viberOn())) return;
   const { date, minutes } = kyivNow();
   const hour = Number.isFinite(Number(s.smsHour)) ? Number(s.smsHour) : 19;
   if (minutes < hour * 60) return;
   const tomorrow = addDays(date, 1);
   const rows = all(
-    `SELECT b.*, c.name AS client_name, c.phone AS client_phone FROM bookings b JOIN clients c ON c.id = b.client_id
+    `SELECT b.*, c.name AS client_name, c.phone AS client_phone, c.viber_id FROM bookings b JOIN clients c ON c.id = b.client_id
      WHERE b.date = ? AND b.status = 'confirmed' AND b.sms_sent = 0`,
     tomorrow
   );
   for (const b of rows) {
     run("UPDATE bookings SET sms_sent = 1 WHERE id = ?", b.id); // спершу позначаємо — щоб ніколи не надіслати двічі
+    const text = smsText(b, s);
+    // Спершу безкоштовний Viber-бот (якщо клієнтка підписалася), інакше — SMS
+    if (b.viber_id && viberOn()) {
+      try {
+        await sendViber(b.viber_id, text);
+        run("INSERT INTO sms_log(booking_id, phone, text, ok, info, created_at) VALUES(?,?,?,1,'Viber-бот',?)", b.id, realPhone(b.client_phone) || "viber", text, Date.now());
+        continue;
+      } catch (e) {
+        console.error("[viber]", e.message);
+      }
+    }
     const phone = realPhone(b.client_phone);
-    if (!phone) continue;
-    await sendSms(phone, smsText(b, s), b.id);
+    if (!phone || !smsOn()) continue;
+    await sendSms(phone, text, b.id);
   }
 }
 

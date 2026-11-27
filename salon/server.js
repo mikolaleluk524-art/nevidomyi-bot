@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { all, db, getSecret, getSettings, integrity, one, run, setSecret, setSettings, UPLOAD_DIR } from "./lib/db.js";
 import { backupPath, listBackups, runBackups, startBackups } from "./lib/backup.js";
 import { lastSms, realPhone, sendSms, smsBalance, smsLog, smsOn, smsText, smsTick, smsTomorrowPreview } from "./lib/sms.js";
+import { handleViber, setViberWebhook, verifySignature, viberInfo, viberLink, viberOn } from "./lib/viber.js";
 import { readTemplate, renderIndex, robots, sitemap } from "./lib/seo.js";
 import { botInfo, linkCode, ownerChats, removeChat, startTelegram, telegramOn } from "./lib/telegram.js";
 import { addDays, hm, humanDate, isDate, kyivNow, kyivToUtc, toMin } from "./lib/time.js";
@@ -202,6 +203,7 @@ function me(client) {
     birthday: client.birthday,
     bonus: client.bonus,
     refCode: client.ref_code,
+    viber: viberOn() ? { linked: Boolean(client.viber_id), link: viberLink(client.ref_code) } : null,
     invited: invited.map((c) => ({ name: c.name.split(" ")[0], came: Boolean(c.ref_rewarded) })),
     bonusLog: all("SELECT delta, reason, created_at FROM bonus_log WHERE client_id = ? ORDER BY id DESC LIMIT 20", client.id),
     bookings,
@@ -470,6 +472,16 @@ async function api(req, res, url) {
     return send(res, 200, { ok: true });
   }
 
+  if (m === "POST" && p === "/api/viber/webhook") {
+    const raw = await readBody(req, 256 * 1024);
+    if (!verifySignature(raw, req.headers["x-viber-content-signature"])) throw new HttpError(403, "bad signature");
+    let ev = {};
+    try {
+      ev = JSON.parse(raw.toString("utf8"));
+    } catch {}
+    return send(res, 200, await handleViber(ev).catch((e) => (console.error("[viber]", e.message), { ok: true })));
+  }
+
   if (m === "POST" && (p === "/api/pay/webhook" || p === "/api/mono/webhook")) {
     // Не довіряємо тілу запиту: для LiqPay перевіряємо підпис, і в обох випадках перепитуємо статус у банку.
     const raw = (await readBody(req)).toString("utf8");
@@ -586,6 +598,16 @@ async function adminApi(req, res, p, m, q) {
     const s = getSettings();
     const text = smsText({ client_name: "Марина", date: addDays(kyivNow().date, 1), start: 11 * 60, service_name: "Покриття гель-лаком" }, s);
     return send(res, 200, await sendSms(phone, text));
+  }
+
+  if (m === "GET" && p === "/api/admin/viber") {
+    const info = await viberInfo();
+    return send(res, 200, { on: viberOn(), info, subscribed: one("SELECT COUNT(*) n FROM clients WHERE viber_id IS NOT NULL").n });
+  }
+  const vl = p.match(/^\/api\/admin\/clients\/(\d+)\/viber-link$/);
+  if (vl && m === "GET") {
+    const c = one("SELECT ref_code FROM clients WHERE id = ?", Number(vl[1]));
+    return send(res, 200, { link: c ? viberLink(c.ref_code) : null });
   }
 
   if (m === "GET" && p === "/api/admin/telegram") {
@@ -834,7 +856,7 @@ async function adminApi(req, res, p, m, q) {
       res,
       200,
       all(
-        `SELECT c.id, c.name, c.phone, c.bonus, c.birthday, c.note, c.ref_code, c.src, c.prepay_rule, c.created_at,
+        `SELECT c.id, c.name, c.phone, c.bonus, c.birthday, c.note, c.ref_code, c.src, c.prepay_rule, c.created_at, c.viber_id IS NOT NULL AS viber,
           (SELECT name FROM clients r WHERE r.id = c.referred_by) AS referred_by_name,
           (SELECT COUNT(*) FROM bookings b WHERE b.client_id = c.id AND b.status = 'done') AS visits,
           (SELECT MAX(date) FROM bookings b WHERE b.client_id = c.id AND b.status = 'done') AS last_visit,
@@ -1228,4 +1250,9 @@ const server = createServer(async (req, res) => {
     if (status === 500) console.error("[http]", req.method, url.pathname, e);
     if (!res.headersSent) send(res, status, { error: status === 500 ? "Щось пішло не так. Спробуйте ще раз." : e.message });
   }
-}).listen(PORT, "0.0.0.0", () => console.log(`[salon] http://localhost:${PORT}`));
+}).listen(PORT, "0.0.0.0", () => {
+  console.log(`[salon] http://localhost:${PORT}`);
+  // Viber перевіряє вебхук запитом на наш сервер — тому реєструємо після старту
+  const base = process.env.PUBLIC_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : "");
+  if (viberOn() && base.startsWith("https://")) setTimeout(() => setViberWebhook(base.replace(/\/$/, "")), 5000);
+});

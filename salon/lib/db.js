@@ -195,7 +195,8 @@ for (const [table, col, def] of [
   ["services", "addon", "INTEGER DEFAULT 0"], // 1 = доповнення до основної послуги (френч, ремонт)
   ["services", "price_from", "INTEGER DEFAULT 0"], // 1 = показувати ціну як «від …»
   ["clients", "prepay_rule", "TEXT DEFAULT ''"], // '' = автоматично, never = без передоплати, always = завжди з передоплатою
-  ["bookings", "sms_sent", "INTEGER DEFAULT 0"], // SMS-нагадування напередодні вже надіслано
+  ["bookings", "sms_sent", "INTEGER DEFAULT 0"],
+  ["clients", "viber_id", "TEXT"], // id клієнтки у Viber-боті (якщо підписалася) // SMS-нагадування напередодні вже надіслано
   ["bookings", "pay_until", "INTEGER DEFAULT 0"], // до коли треба сплатити передоплату (після рішення майстра)
 ]) {
   if (!db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);

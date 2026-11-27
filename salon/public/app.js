@@ -576,6 +576,7 @@ async function done(id) {
     <div class="card stack">
       ${pushOn() ? `<div class="row"><span style="font-size:24px">🔔</span><div>${isReq ? "Повідомимо, щойно майстер підтвердить запис, а потім нагадаємо перед візитом." : "Нагадаємо за добу і за 2 години до візиту, а перед виходом відкриємо карту."}</div></div>`
         : `<div><b>Увімкніть сповіщення</b><p class="small muted">${isReq ? "Так ви одразу дізнаєтесь, що запис підтверджено, і отримаєте нагадування перед візитом." : "Надішлемо сповіщення за добу і за 2 години, а натиснувши на нього — побачите карту, як дійти до кабінету."}</p><button class="btn block" id="push">🔔 Увімкнути сповіщення</button></div>`}
+      ${me.viber?.link && !me.viber.linked ? `<a class="btn block" style="background:#7360f2;color:#fff" href="${esc(me.viber.link)}">💜 Нагадування у Viber</a>` : ""}
       <a class="btn line block" href="/api/bookings/${b.id}/ics?token=${encodeURIComponent(token())}">📅 Додати в календар</a>
       <a class="btn line block" href="#/visit/${b.id}">🧭 Як нас знайти</a>
     </div>
@@ -694,6 +695,9 @@ async function me() {
       <div class="small" style="margin-top:10px;opacity:.85">Кешбек ${s.cashbackPercent}% з кожного візиту. Бонусами можна оплатити до ${s.maxBonusPercent}% послуги.</div>
     </div>
 
+    ${m.viber?.link ? (m.viber.linked
+      ? `<div class="card row" style="margin-top:14px"><span style="font-size:26px">💜</span><div class="grow"><b>Нагадування у Viber увімкнені</b><div class="small muted">Напередодні візиту напишемо вам у Viber</div></div></div>`
+      : `<a class="card row" href="${esc(m.viber.link)}" style="margin-top:14px;text-decoration:none;color:inherit"><span style="font-size:26px">💜</span><div class="grow"><b>Нагадування у Viber</b><div class="small muted">Натисніть і в боті «Отримувати нагадування»</div></div><b style="color:var(--accent)">→</b></a>`) : ""}
     ${pushOn() ? "" : `<div class="card row" style="margin-top:14px"><span style="font-size:26px">🔔</span><div class="grow"><b>Нагадування вимкнені</b><div class="small muted">Увімкніть, щоб не пропустити запис</div></div><button class="btn sm" id="push">Увімкнути</button></div>`}
 
     <section class="section">

@@ -489,20 +489,31 @@ async function clients(box, q = "") {
   box.innerHTML = `<input id="cq" placeholder="🔍 Імʼя або телефон" value="${esc(q)}">
     <div class="stack" style="margin-top:12px">${list.map((c) => `<div class="card">
       <div class="row between"><b>${esc(c.name)}</b><span class="badge">💎 ${c.bonus}</span></div>
-      <div class="small"><a href="tel:${esc(tel(c.phone))}">${esc(tel(c.phone))}</a>${c.phone.includes(" #") ? ' <span class="badge mute">з зошита — номер уточнити</span>' : ""} <button class="btn sm line" data-cphone="${c.id}" data-name="${esc(c.name)}">✏️</button> · візитів: ${c.visits}${c.last_visit ? ` · останній ${c.last_visit}` : ""}</div>
+      <div class="small"><a href="tel:${esc(tel(c.phone))}">${esc(tel(c.phone))}</a>${c.phone.includes(" #") ? ' <span class="badge mute">з зошита — номер уточнити</span>' : ""} <button class="btn sm line" data-cphone="${c.id}" data-name="${esc(c.name)}">✏️</button>${c.viber ? ' <span class="badge ok">💜 Viber</span>' : ""} · візитів: ${c.visits}${c.last_visit ? ` · останній ${c.last_visit}` : ""}</div>
       <div class="small muted">${c.referred_by_name ? `привела: ${esc(c.referred_by_name)} · ` : ""}${c.invited ? `запросила: ${c.invited} · ` : ""}${c.birthday ? `🎂 ${c.birthday.slice(5)} · ` : ""}${c.src ? `QR: ${esc(c.src)}` : ""}</div>
       <label class="f"><span>Нотатка (бачите лише ви)</span><input data-note="${c.id}" value="${esc(c.note)}" placeholder="Алергія, улюблений колір…"></label>
       ${onlinePay ? `<label class="f"><span>Передоплата</span><select data-rule="${c.id}">
         <option value="" ${!c.prepay_rule ? "selected" : ""}>Автоматично (постійна — без, нова — за налаштуваннями)</option>
         <option value="never" ${c.prepay_rule === "never" ? "selected" : ""}>Завжди без передоплати</option>
         <option value="always" ${c.prepay_rule === "always" ? "selected" : ""}>Завжди з передоплатою</option></select></label>` : ""}
-      <div class="row" style="margin-top:8px"><button class="btn sm ghost" data-bonus="${c.id}">± Бонуси</button></div>
+      <div class="row" style="margin-top:8px"><button class="btn sm ghost" data-bonus="${c.id}">± Бонуси</button>${c.viber ? "" : `<button class="btn sm ghost" data-vlink="${c.id}" data-name="${esc(c.name)}">💜 Посилання на Viber</button>`}</div>
     </div>`).join("") || '<div class="empty">Нікого не знайдено</div>'}</div>`;
   let t;
   $("#cq").oninput = (e) => {
     clearTimeout(t);
     t = setTimeout(() => clients(box, e.target.value).then(() => $("#cq").focus()), 400);
   };
+  box.querySelectorAll("[data-vlink]").forEach((b) => (b.onclick = async () => {
+    const { link } = await api(`/api/admin/clients/${b.dataset.vlink}/viber-link`);
+    if (!link) return toast("Viber-бот ще не підключений", 3500);
+    const text = `Вітаю! Це Марина з «Магії краси» 💛 Натисніть, щоб отримувати нагадування про запис у Viber: ${link}`;
+    if (navigator.share) {
+      try { await navigator.share({ text }); } catch {}
+    } else {
+      await navigator.clipboard?.writeText(text);
+      toast("Посилання скопійовано — надішліть його клієнтці");
+    }
+  }));
   box.querySelectorAll("[data-cphone]").forEach((b) => (b.onclick = () => phoneForm(b.dataset.cphone, b.dataset.name)));
   box.querySelectorAll("[data-rule]").forEach((sel) => (sel.onchange = async () => {
     await api(`/api/admin/clients/${sel.dataset.rule}`, { body: { prepayRule: sel.value } });
@@ -751,7 +762,9 @@ async function renderSms(s) {
   const box = $("#smsbox");
   const d = await api("/api/admin/sms");
   const f = (k, label, type = "text") => `<label class="f"><span>${label}</span>${type === "area" ? `<textarea data-k2="${k}" style="min-height:120px">${esc(s[k])}</textarea>` : `<input data-k2="${k}" type="${type}" value="${esc(s[k])}">`}</label>`;
+  const vb = await api("/api/admin/viber").catch(() => ({ on: false }));
   box.innerHTML = `<h3>✉️ Нагадування у Viber / SMS</h3>
+    <p class="small">${vb.on ? (vb.info?.error ? `⚠️ Viber-бот: ${esc(vb.info.error)}` : `💜 Viber-бот «${esc(vb.info?.name || "")}» підключено · підписалися: <b>${vb.subscribed}</b>. Їм нагадування приходять у Viber безкоштовно, решті — SMS.`) : "⚪ Viber-бот ще не підключено"}</p>
     <p class="small">${d.on ? `✅ TurboSMS підключено${d.balance !== null ? ` · баланс: <b>${esc(d.balance)}</b> грн` : ""}` : "⚪ Ще не підключено — потрібен акаунт TurboSMS (див. інструкцію від розробника)"}</p>
     <p class="small muted">Щовечора кожна клієнтка, записана на завтра, отримує SMS на свій номер. Клієнткам без номера (з паперового зошита) SMS не приходить — впишіть номер у записі кнопкою «📱».</p>
     <label class="check"><input type="checkbox" id="smsEn" ${s.smsEnabled ? "checked" : ""}> Надсилати нагадування</label>
