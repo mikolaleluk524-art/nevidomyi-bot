@@ -241,7 +241,7 @@ export const DEFAULT_SETTINGS = {
   prepayMode: "manual", // manual = нові клієнтки надсилають заявку, майстер вирішує; new = лише нові платять одразу; all = всі
   prepayHours: 3, // скільки годин має клієнтка на передоплату після рішення майстра
   slotStep: 30, // крок сітки запису, хв
-  bookingDays: 30, // на скільки днів вперед можна записатися
+  bookingDays: 36500, // на скільки днів вперед можна записатися (36500 ≈ без обмежень)
   minNoticeHours: 2, // мінімум годин до запису
   cancelHours: 24, // безкоштовне скасування не пізніше ніж за N годин
   refBonus: 0, // «Приведи подругу» вимкнено (власниця вирішила не давати знижок за запрошення)
@@ -263,6 +263,12 @@ export const DEFAULT_SETTINGS = {
 if (!one("SELECT 1 FROM settings WHERE key = '_ref_off_v1'")) {
   run("DELETE FROM settings WHERE key IN ('refBonus', 'refDiscount')");
   run("INSERT INTO settings(key, value) VALUES('_ref_off_v1', '1')");
+}
+
+// Одноразово: знімаємо обмеження «запис лише на 30 днів наперед» на вже запущеному салоні
+if (!one("SELECT 1 FROM settings WHERE key = '_booking_days_v1'")) {
+  run("DELETE FROM settings WHERE key = 'bookingDays'");
+  run("INSERT INTO settings(key, value) VALUES('_booking_days_v1', '1')");
 }
 
 export function getSettings() {

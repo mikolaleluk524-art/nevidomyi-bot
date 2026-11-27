@@ -409,9 +409,17 @@ async function renderDates(back) {
   const s = svc();
   view.innerHTML = stepsBar() + `<div class="card row between" style="padding:12px 14px"><div><b>${esc(s.name)}</b><div class="small muted">⏱ ${dur(s.duration)}</div></div><b>${s.priceFrom ? "від " : ""}${money(s.price)}</b></div>
     <div id="days"><div class="spinner"></div></div><div id="slots"></div>`;
-  const { days } = await api(`/api/availability?service=${book.serviceId}&master=${book.masterId}${addonQs()}`);
+  const qs = `service=${book.serviceId}&master=${book.masterId}${addonQs()}`;
+  // Якщо обрана дата далеко (напр. «Записатись знову»), календар починається з неї
+  const { days } = await api(`/api/availability?${qs}`);
   if (!book.date || !days.find((d) => d.date === book.date && d.free)) book.date = days.find((d) => d.free)?.date || days[0]?.date;
   let lastMonth = null;
+  const dayHtml = (d) => {
+    const dt = new Date(d.date + "T12:00");
+    return `<div class="day ${d.free ? "" : "full"} ${d.date === book.date ? "sel" : ""}" data-date="${d.date}">
+      <div class="wd">${WD[dt.getDay()]}</div><div class="dn">${dt.getDate()}</div><div class="fr">${d.free ? d.free + " вікон" : "немає"}</div></div>`;
+  };
+  const more = `<div class="day" id="moreDays" style="display:grid;place-items:center;font-weight:800;color:var(--accent)">Ще<br>дні →</div>`;
   $("#days").innerHTML = `<div class="month" id="monthLbl"></div><div class="days">${days.map((d) => {
     const dt = new Date(d.date + "T12:00");
     const m = dt.getMonth();
@@ -419,16 +427,34 @@ async function renderDates(back) {
     lastMonth = m;
     return `<div class="day ${d.free ? "" : "full"} ${d.date === book.date ? "sel" : ""}" data-date="${d.date}" ${mark}>
       <div class="wd">${WD[dt.getDay()]}</div><div class="dn">${dt.getDate()}</div><div class="fr">${d.free ? d.free + " вікон" : "немає"}</div></div>`;
-  }).join("")}</div>`;
+  }).join("")}${days.length >= 30 ? more : ""}</div>`;
   const setMonth = () => ($("#monthLbl").textContent = MONTHS[new Date(book.date + "T12:00").getMonth()]);
   setMonth();
-  $("#days").querySelectorAll(".day").forEach((el) => (el.onclick = () => {
+  const bindDay = (el) => (el.onclick = () => {
     book.date = el.dataset.date;
     book.start = null;
     $("#days").querySelectorAll(".day").forEach((x) => x.classList.toggle("sel", x === el));
     setMonth();
     loadSlots();
-  }));
+  });
+  $("#days").querySelectorAll(".day[data-date]").forEach(bindDay);
+  // «Ще дні →» — підвантажуємо наступні 30 днів, скільки завгодно далеко
+  const bindMore = () => {
+    const btn = $("#moreDays");
+    if (!btn) return;
+    btn.onclick = async () => {
+      const lastDate = [...$("#days").querySelectorAll(".day[data-date]")].pop().dataset.date;
+      const next = new Date(lastDate + "T12:00Z");
+      next.setUTCDate(next.getUTCDate() + 1);
+      btn.textContent = "…";
+      const r = await api(`/api/availability?${qs}&from=${next.toISOString().slice(0, 10)}`);
+      btn.insertAdjacentHTML("beforebegin", r.days.map(dayHtml).join(""));
+      btn.parentElement.querySelectorAll(".day[data-date]").forEach(bindDay);
+      if (r.days.length < 30) btn.remove();
+      else btn.innerHTML = "Ще<br>дні →";
+    };
+  };
+  bindMore();
   $("#days .day.sel")?.scrollIntoView({ inline: "center", block: "nearest" });
   loadSlots();
 }

@@ -299,7 +299,7 @@ async function api(req, res, url) {
   if (m === "GET" && p === "/api/public") return send(res, 200, publicInfo());
 
   if (m === "GET" && p === "/api/availability") {
-    return send(res, 200, { days: availability(Number(q.service), Number(q.master) || null, Number(q.days) || 0, q.addons) });
+    return send(res, 200, { days: availability(Number(q.service), Number(q.master) || null, Number(q.days) || 30, q.addons, isDate(q.from) ? q.from : null) });
   }
 
   if (m === "GET" && p === "/api/slots") {

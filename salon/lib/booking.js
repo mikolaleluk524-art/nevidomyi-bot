@@ -77,13 +77,16 @@ export function daySlots(serviceId, masterId, date, addonIds = []) {
   return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([start, ids]) => ({ start, time: hm(start), masters: ids }));
 }
 
-export function availability(serviceId, masterId, days, addonIds = []) {
+/** Вільні вікна по днях: порція з дати from (за замовчуванням — сьогодні), до 60 днів за раз. */
+export function availability(serviceId, masterId, days, addonIds = [], from = null) {
   const s = getSettings();
   const today = kyivNow().date;
-  const n = Math.min(days || s.bookingDays, s.bookingDays, 90);
+  const start = from && from > today ? from : today;
+  const last = addDays(today, s.bookingDays);
   const out = [];
-  for (let i = 0; i < n; i++) {
-    const date = addDays(today, i);
+  for (let i = 0; i < Math.min(days || 30, 60); i++) {
+    const date = addDays(start, i);
+    if (date > last) break;
     out.push({ date, free: daySlots(serviceId, masterId, date, addonIds).length });
   }
   return out;
