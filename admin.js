@@ -108,6 +108,9 @@ function monitorData(db) {
   try {
     const c = db.prepare("select count(*) as total, sum(created_at > ?) as day, count(distinct to_id) as owners from confessions where reply_to is null").get(now - 86400);
     confess = { total: c.total ?? 0, day: c.day ?? 0, owners: c.owners ?? 0 };
+    const w = db.prepare("select sum(kind = 'wall') as wall, sum(kind = 'qotd' and created_at > ?) as qotd from posts").get(now - 86400);
+    confess.wall = w.wall ?? 0;
+    confess.qotd = w.qotd ?? 0;
   } catch {}
 
   return {

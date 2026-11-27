@@ -14,7 +14,7 @@
 import { createHmac, createPublicKey, randomBytes, timingSafeEqual, verify } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { WebSocketServer, WebSocket } from "ws";
-import { BOT_TOKEN, BOT_USERNAME, DB_PATH, langOf, tg } from "./src/bot.js";
+import { BOT_TOKEN, BOT_USERNAME, DB_PATH, addPoints, langOf, tg } from "./src/bot.js";
 import { L, guessLang } from "./src/i18n.js";
 import { AIM_STARS, GIFTS, WISH_STARS, createAimInvoice, createGiftInvoice, createWishInvoice, giftList, refundStars, setGiftHooks } from "./gifts.js";
 
@@ -580,6 +580,7 @@ function onReact(ws, msg) {
   if (to < 0) return;
   t.last.reacted.add(ws.userId);
   t.players[to].hearts += heartMult();
+  if (!t.players[to].bot) addPoints(t.players[to].id, heartMult()); // 🏆 очки сезону
   broadcast(t, { type: "react", from: ws.seat, to, emoji: msg.emoji });
   broadcast(t, snapshot(t));
 }
@@ -651,7 +652,10 @@ function finishPair(t) {
   t.phase = "idle";
   let outcome = pa && pb ? pairOutcome(ca, cb) : "none";
   if (outcome === "alone" && !openDialog(pa.id, pb.id)) outcome = "busy";
-  if (outcome === "kiss") { pa.hearts += heartMult(); pb.hearts += heartMult(); }
+  if (outcome === "kiss") {
+    pa.hearts += heartMult(); pb.hearts += heartMult();
+    for (const p of [pa, pb]) if (!p.bot) addPoints(p.id, 2 * heartMult()); // 🏆 очки сезону
+  }
   broadcast(t, { type: "pair_done", a, b, ca, cb, outcome });
   if (outcome === "alone") goPrivate(t, pa, pb, "🔒 Ви обрали побути наодинці. Пиши: я передам повідомлення без твого імені. «Завершити діалог» зупиняє розмову.");
   t.turn = nextSeat(t, t.spinner);
@@ -683,7 +687,7 @@ function deliverTableGift(from, to, gift, baseHearts) {
   const fromSeat = sender?.table === t ? sender.seat : -1;
   const hearts = (baseHearts ?? giftHearts(GIFTS[gift.id]?.stars ?? 5)) * heartMult();
   const p = t.players[target.seat];
-  if (p) { p.hearts += hearts; p.badge = gift.emoji; }
+  if (p) { p.hearts += hearts; p.badge = gift.emoji; if (!p.bot) addPoints(p.id, 5); } // 🏆 очки сезону
   broadcast(t, { type: "gift", from: fromSeat, to: target.seat, gift, hearts });
   broadcast(t, snapshot(t));
   if (fromSeat >= 0) {

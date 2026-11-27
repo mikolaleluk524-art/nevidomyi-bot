@@ -691,6 +691,11 @@ function renderFunnel(f, d_users, d_confess) {
     n.textContent = "💌 Анонімних зізнань: " + fmt(d_confess.total) + " (за добу " + fmt(d_confess.day) + ") · отримували: " + fmt(d_confess.owners);
     box.appendChild(n);
   }
+  if (d_confess && (d_confess.wall || d_confess.qotd)) {
+    const n = document.createElement("div"); n.className = "sub"; n.style.marginTop = "6px";
+    n.textContent = "🧱 Постів на стіні: " + fmt(d_confess.wall) + " · 🌙 відповідей на питання дня за добу: " + fmt(d_confess.qotd);
+    box.appendChild(n);
+  }
   if (d_users && d_users.invited) {
     const n = document.createElement("div"); n.className = "sub"; n.style.marginTop = "6px";
     n.textContent = "📨 Прийшли від друзів: " + fmt(d_users.invited) + " (за добу " + fmt(d_users.invited24) + ")";
