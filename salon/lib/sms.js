@@ -46,31 +46,51 @@ export function smsText(b, s = getSettings()) {
 }
 
 /** Відправка однієї SMS. Повертає { ok, info }. */
+async function turbo(phone, text, sender, channel) {
+  const res = await fetch("https://api.turbosms.ua/message/send.json", {
+    method: "POST",
+    headers: { "content-type": "application/json", Authorization: `Bearer ${token()}` },
+    // Канал: viber (лише Viber), viber+sms (Viber, а якщо не доставлено — SMS), sms
+    body: JSON.stringify({
+      recipients: [phone],
+      ...(channel !== "sms" ? { viber: { sender, text, ttl: 3600 } } : {}),
+      ...(channel !== "viber" ? { sms: { sender, text } } : {}),
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  const r = data.response_result?.[0];
+  const okCode = (c) => [0, 800, 801, 802, 803].includes(Number(c));
+  return {
+    ok: res.ok && okCode(data.response_code) && (!r || okCode(r.response_code)),
+    status: String(r?.response_status || data.response_status || `HTTP ${res.status}`),
+    id: r?.message_id,
+  };
+}
+
+// Підпис, який TurboSMS гарантовано дозволяє цьому акаунту (поки не затверджено власний)
+const SAFE_SENDER = "TAXI";
+
+/** Відправка одного нагадування. Якщо підпис/канал не дозволені — повтор як SMS з підписом TAXI. Повертає { ok, info }. */
 export async function sendSms(phone, text, bookingId = null) {
   const s = getSettings();
   let ok = false;
   let info = "";
   try {
     if (!token()) throw new Error("не підключено TurboSMS (немає TURBOSMS_TOKEN)");
-    const res = await fetch("https://api.turbosms.ua/message/send.json", {
-      method: "POST",
-      headers: { "content-type": "application/json", Authorization: `Bearer ${token()}` },
-      // Канал: viber (лише Viber), viber+sms (Viber, а якщо не доставлено — SMS), sms
-      body: JSON.stringify({
-        recipients: [phone],
-        ...(s.smsChannel !== "sms" ? { viber: { sender: s.smsSender || "Magiya", text, ttl: 3600 } } : {}),
-        ...(s.smsChannel !== "viber" ? { sms: { sender: s.smsSender || "Magiya", text } } : {}),
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
-    const r = data.response_result?.[0];
-    ok = res.ok && [0, 800, 801, 802, 803].includes(Number(data.response_code)) && (!r || [0, 800, 801, 802, 803].includes(Number(r.response_code)));
-    info = (r?.response_status || data.response_status || `HTTP ${res.status}`) + (r?.message_id ? ` · ${r.message_id}` : "");
+    let r = await turbo(phone, text, s.smsSender || SAFE_SENDER, s.smsChannel || "sms");
+    if (!r.ok && /SENDER|VIBER/i.test(r.status) && (s.smsSender !== SAFE_SENDER || s.smsChannel !== "sms")) {
+      const first = r.status;
+      r = await turbo(phone, text, SAFE_SENDER, "sms");
+      r.status = `${r.status} (підпис «${s.smsSender}» не дозволено: ${first} — надіслано як SMS від ${SAFE_SENDER})`;
+    }
+    ok = r.ok;
+    info = r.status + (r.id ? ` · ${r.id}` : "");
   } catch (e) {
     info = e.message;
   }
   run("INSERT INTO sms_log(booking_id, phone, text, ok, info, created_at) VALUES(?,?,?,?,?,?)", bookingId, phone, text, ok ? 1 : 0, info, Date.now());
   if (!ok) console.error("[sms]", phone, info);
+  else console.log("[sms] надіслано", phone, info);
   return { ok, info };
 }
 

@@ -772,12 +772,12 @@ async function renderSms(s) {
       <option value="viber+sms" ${s.smsChannel === "viber+sms" ? "selected" : ""}>Viber, а якщо немає Viber — SMS (рекомендовано)</option>
       <option value="viber" ${s.smsChannel === "viber" ? "selected" : ""}>Лише Viber</option>
       <option value="sms" ${s.smsChannel === "sms" ? "selected" : ""}>Лише SMS</option></select></label>
-    <div class="two">${f("smsHour", "О котрій годині (19 = 19:00)", "number")}${f("smsSender", "Підпис відправника")}</div>
+    <div class="two">${f("smsHour", "О котрій годині (19 = 19:00)", "number")}${f("smsSender", "Підпис відправника (поки затверджено лише TAXI)")}</div>
     ${f("smsText", "Текст повідомлення", "area")}
     <p class="small muted">Підставляється автоматично: {імʼя}, {дата}, {час}, {процедура}, {адреса}, {телефон}. Одна SMS кирилицею — 70 символів, довший текст ділиться на кілька SMS (і коштує дорожче). Зараз: <b id="smsLen"></b>.</p>
     <button class="btn ghost block" id="smsSave" style="margin-top:8px">Зберегти</button>
     <div class="row" style="margin-top:10px"><input id="smsPhone" type="tel" placeholder="Ваш номер для перевірки" value="+380"><button class="btn" id="smsTest">Тест</button></div>
-    ${d.tomorrow.length ? `<h3 style="margin-top:14px">Завтра отримають</h3>${d.tomorrow.map((t) => `<div class="small" style="padding:4px 0;border-bottom:1px solid var(--line)">${t.time} <b>${esc(t.name)}</b> — ${t.phone ? (t.sent ? "✓ надіслано" : "прийде о " + s.smsHour + ":00") : "⚠️ немає номера"}</div>`).join("")}` : ""}
+    ${d.tomorrow.length ? `<h3 style="margin-top:14px">Записані на завтра</h3><p class="small muted">Нагадування надсилається напередодні — сьогодні ввечері о ${esc(s.smsHour)}:00.</p>${d.tomorrow.map((t) => `<div class="small" style="padding:4px 0;border-bottom:1px solid var(--line)">завтра о ${t.time} <b>${esc(t.name)}</b> — ${t.phone ? (t.sent ? "✓ нагадування надіслано" : "нагадування піде сьогодні о " + esc(s.smsHour) + ":00") : "⚠️ немає номера — нагадування не прийде"}</div>`).join("")}` : ""}
     ${d.log.length ? `<details style="margin-top:12px"><summary class="small">Останні SMS (${d.log.length})</summary>${d.log.map((l) => `<div class="small" style="padding:4px 0;border-bottom:1px solid var(--line)">${l.ok ? "✓" : "⚠️"} ${new Date(l.created_at).toLocaleString("uk-UA")} · +${esc(l.phone)} · ${esc(l.info)}</div>`).join("")}</details>` : ""}`;
   const len = () => {
     const sample = $('[data-k2="smsText"]').value.replace("{імʼя}", "Олена").replace("{дата}", "28 листопада").replace("{час}", "11:00").replace("{процедура}", "покриття гель-лаком").replace("{адреса}", [s.address, s.cabinet].join(", ")).replace("{телефон}", "0666230824");
