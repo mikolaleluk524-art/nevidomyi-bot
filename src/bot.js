@@ -223,6 +223,8 @@ function openDatabase() {
   next.exec("create table if not exists party_off (id text primary key)");
   // 💘 Коли востаннє казали людині «тебе вподобали» (не частіше разу на 6 годин).
   next.exec("create table if not exists like_notify (user_id text primary key, at integer not null)");
+  // 👭 «Приведи подругу»: бонус за подругу видається один раз — коли вона сама когось приведе.
+  next.exec("create table if not exists friend_bonus (user_id text not null, friend_id text not null, created_at integer not null, primary key (user_id, friend_id))");
   // 🧱 Стіна зізнань і 🌙 відповіді на питання дня — одна таблиця постів із реакціями.
   next.exec("create table if not exists posts (id text primary key, author_id text not null, kind text not null, day text, text text not null, created_at integer not null, reports integer not null default 0, hidden integer not null default 0, notified integer not null default 0)");
   next.exec("create index if not exists posts_kind on posts (kind, day, created_at)");
@@ -730,6 +732,27 @@ async function rewardInvite(id) {
   if (next) lines.push(`Наступний бонус: ${next.n} друзів — ${next.text} (ще ${next.n - n}).`);
   try { await send(src, lines.join("\n")); } catch (err) { if (!isGone(err)) console.error("[bot] invite", err.message); }
   try { await send(id, `🎁 Вітальний подарунок: 🌹×${WELCOME_ROSES} у грі — подаруй їх тому, хто сподобається.`); } catch {}
+  await friendChain(id, src);
+}
+
+// 👭 Приведи подругу: коли подруга, яку ти запросив(ла), сама приведе когось — тобі день Premium і 🌹×3.
+const FRIEND_BONUS_DAYS = 1;
+const FRIEND_BONUS_ROSES = 3;
+async function friendChain(newcomer, src) {
+  // 1) Новенька — дівчина: кажемо тому, хто її привів, що бонус попереду, а їй — як його активувати.
+  const me = one("select gender from users where id = ?", newcomer);
+  if (me?.gender === "Жінка") {
+    try { await send(src, `👭 Твоя подруга вже в клубі! Коли вона приведе когось — ти отримаєш ${FRIEND_BONUS_DAYS} день Premium і 🌹×${FRIEND_BONUS_ROSES}.`); } catch (err) { if (!isGone(err)) console.error("[bot] friend", err.message); }
+    try { await send(newcomer, "👭 Тебе запросила подруга чи друг. Поділись своїм посиланням (🎁 Запросити друзів) — за кожного, хто прийде, ти отримаєш Premium, і людина, що тебе запросила, теж отримає бонус 💝"); } catch {}
+  }
+  // 2) Той, хто привів новенького, — дівчина, яку теж хтось запросив: тепер її запрошувач отримує бонус.
+  const her = one("select gender, invited_by, invite_rewarded from users where id = ?", src);
+  if (her?.gender !== "Жінка" || !her.invited_by || !her.invite_rewarded) return;
+  const top = her.invited_by;
+  if (!run("insert into friend_bonus (user_id, friend_id, created_at) values (?, ?, ?) on conflict do nothing", top, src, nowSec()).changes) return;
+  run("update users set premium_until = max(premium_until, ?) + ? where id = ?", nowSec(), FRIEND_BONUS_DAYS * 86400, top);
+  addWallet(top, FRIEND_BONUS_ROSES, 0);
+  try { await send(top, `👭 Твоя подруга привела нову людину в клуб! Бонус «Приведи подругу»: +${FRIEND_BONUS_DAYS} день Premium і 🌹×${FRIEND_BONUS_ROSES} 💝`); } catch (err) { if (!isGone(err)) console.error("[bot] friend bonus", err.message); }
 }
 
 async function showInvite(id) {
@@ -739,7 +762,8 @@ async function showInvite(id) {
   const share = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(tr(id, "Анонімний чат і гра в бутилочку з подарунками. Заходь 👉"))}`;
   const ladder = REF_TIERS.map((t) => `${invites.n >= t.n ? "✅" : "▫️"} ${t.n} друзів — ${t.text}`).join("\n");
   const next = REF_TIERS.find((t) => invites.n < t.n);
-  await send(id, `🎁 Супер-реферал\nНадішли другу це посилання:\n${link}\n\nЗа кожного друга — 3 години Premium + 🌹 у грі.\nДруг теж отримує 🌹🌹.\n\n${ladder}\n\nУже запросили: ${invites.n}${next ? `\nДо наступного бонусу: ще ${next.n - invites.n}` : ""}`, { inline_keyboard: [[{ text: "📨 Поділитися посиланням", url: share }]] });
+  const girls = one("select count(*) as n from friend_bonus where user_id = ?", id)?.n ?? 0;
+  await send(id, `🎁 Супер-реферал\nНадішли другу це посилання:\n${link}\n\nЗа кожного друга — 3 години Premium + 🌹 у грі.\nДруг теж отримує 🌹🌹.\n\n${ladder}\n\nУже запросили: ${invites.n}${next ? `\nДо наступного бонусу: ще ${next.n - invites.n}` : ""}\n\n👭 Приведи подругу: коли подруга, яку ти запросив(ла), сама приведе когось — ти отримаєш ${FRIEND_BONUS_DAYS} день Premium і 🌹×${FRIEND_BONUS_ROSES}.\nБонусів за подруг: ${girls}`, { inline_keyboard: [[{ text: "📨 Поділитися посиланням", url: share }]] });
 }
 // ---------- 💌 анонімні зізнання ----------
 // Кожен має посилання ?start=c_<код>. Хто перейде — пише анонімне повідомлення власнику.
