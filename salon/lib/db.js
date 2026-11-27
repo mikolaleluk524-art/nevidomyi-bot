@@ -250,7 +250,7 @@ export const DEFAULT_SETTINGS = {
   smsHour: 19, // о котрій надсилати (за Києвом)
   smsSender: "Magiya", // підпис відправника, зареєстрований у TurboSMS
   smsChannel: "viber+sms", // viber | viber+sms (Viber, а якщо не дійшло — SMS) | sms
-  smsText: "Доброго вечора, шановний клієнте! Нагадуємо, що завтра о {час} вас чекають за адресою: Кушніренка 7а, 5 поверх, офіс 507. Магія краси: {сайт}",
+  smsText: "Доброго вечора! Завтра о {час} чекаємо вас: Кушніренка 7а, оф.507", // 65 символів = 1 SMS (найдешевше)
   giftAmounts: "500, 800, 1000, 1500, 2000", // номінали подарункових сертифікатів
   giftMonths: 6, // термін дії сертифіката, місяців
   cashbackPercent: 5, // кешбек бонусами з кожного візиту
@@ -289,9 +289,9 @@ if (!one("SELECT 1 FROM settings WHERE key = '_sms_sender_v1'")) {
 }
 
 // Одноразово: новий текст нагадування — без імен клієнток (як записала майстер, клієнтці бачити не треба)
-if (!one("SELECT 1 FROM settings WHERE key = '_sms_text_v2'")) {
+if (!one("SELECT 1 FROM settings WHERE key = '_sms_text_v3'")) {
   run("INSERT INTO settings(key, value) VALUES('smsText', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", JSON.stringify(DEFAULT_SETTINGS.smsText));
-  run("INSERT INTO settings(key, value) VALUES('_sms_text_v2', '1')");
+  run("INSERT INTO settings(key, value) VALUES('_sms_text_v3', '1')");
 }
 
 export function getSettings() {
