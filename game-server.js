@@ -14,7 +14,7 @@
 import { createHmac, createPublicKey, randomBytes, timingSafeEqual, verify } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { WebSocketServer, WebSocket } from "ws";
-import { BOT_TOKEN, BOT_USERNAME, DB_PATH, addPoints, langOf, tg } from "./src/bot.js";
+import { BOT_TOKEN, BOT_USERNAME, DB_PATH, addPoints, crownOf, langOf, tg } from "./src/bot.js";
 import { L, guessLang } from "./src/i18n.js";
 import { AIM_STARS, GIFTS, WISH_STARS, createAimInvoice, createGiftInvoice, createWishInvoice, giftList, refundStars, setGiftHooks } from "./gifts.js";
 
@@ -462,7 +462,10 @@ function sit(ws) {
     tables.set(t.id, t);
   }
   const seat = t.players.indexOf(null);
-  const { display_name: name, gender, profile_age: age } = ws.profile;
+  const { display_name: rawName, gender, profile_age: age } = ws.profile;
+  // 👑 Переможець сезону — з короною біля імені.
+  let name = rawName;
+  try { if (rawName && crownOf(ws.userId)) name = `👑 ${rawName}`; } catch {}
   ws.table = t;
   ws.seat = seat;
   t.players[seat] = {

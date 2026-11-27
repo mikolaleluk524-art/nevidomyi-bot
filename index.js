@@ -160,7 +160,7 @@ function listen() {
   attachBottleGame(server);
   setLiveSource(() => gameStats());
   // 🎉 Щоденна вечірка о 21:00 (Київ): запрошення о 20:50 і подвійні серця на годину.
-  setInterval(() => { partyTick(() => setGameEvent("double_hearts", 1)).catch((err) => console.error("[bot] party", err.message)); }, 30_000).unref();
+  setInterval(() => { partyTick((type) => setGameEvent(type, 1)).catch((err) => console.error("[bot] party", err.message)); }, 30_000).unref();
   // 🏆 Кінець сезону: нагороди топ-3 (перевірка щохвилини, нагороджує раз).
   setInterval(() => { seasonTick().catch((err) => console.error("[bot] season", err.message)); }, 60_000).unref();
   setMonitorSource(() => ({ beatAgo: Date.now() - beat, startedAt, game: gameStats(), events: gameEvents(), memoryMb: Math.round(process.memoryUsage().rss / 1048576) }));

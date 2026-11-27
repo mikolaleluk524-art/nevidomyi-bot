@@ -221,6 +221,8 @@ function openDatabase() {
   // 🎉 Вечірка о 21:00: в який день уже кликали, і хто не хоче запрошень.
   next.exec("create table if not exists party_log (day text primary key, sent integer not null default 0)");
   next.exec("create table if not exists party_off (id text primary key)");
+  // 💘 Коли востаннє казали людині «тебе вподобали» (не частіше разу на 6 годин).
+  next.exec("create table if not exists like_notify (user_id text primary key, at integer not null)");
   // 🧱 Стіна зізнань і 🌙 відповіді на питання дня — одна таблиця постів із реакціями.
   next.exec("create table if not exists posts (id text primary key, author_id text not null, kind text not null, day text, text text not null, created_at integer not null, reports integer not null default 0, hidden integer not null default 0, notified integer not null default 0)");
   next.exec("create index if not exists posts_kind on posts (kind, day, created_at)");
@@ -465,7 +467,13 @@ function liveLine() {
   return `🔥 Зараз у клубі: ${Math.max(online, 1)} · за столами: ${players} · 💌 зізнань за добу: ${confessions}`;
 }
 async function showLobby(chatId, lead) {
-  await send(chatId, lead ?? liveLine(), menuFor(chatId));
+  let text = lead;
+  if (!text) {
+    text = liveLine();
+    const n = likesCount(String(chatId));
+    if (n) text += `\n💘 Тебе вподобали: ${n} — /likes`;
+  }
+  await send(chatId, text, menuFor(chatId));
 }
 
 async function sendMatch(to, body, bytes, premium) {
@@ -641,6 +649,11 @@ async function sendInvoice(id, planId) {
 
 async function onPreCheckout(query) {
   const [kind, target] = String(query.invoice_payload).split(":");
+  if (kind === "likes") {
+    const error = query.currency !== "XTR" || query.total_amount !== LIKES_STARS ? "Ціна змінилась." : likesCount(String(query.from.id)) ? null : "Поки тебе ніхто не вподобав.";
+    await tg("answerPreCheckoutQuery", { pre_checkout_query_id: query.id, ok: !error, ...(error ? { error_message: tr(query.from.id, error) } : {}) });
+    return;
+  }
   if (kind === "hint") {
     const error = query.currency !== "XTR" || query.total_amount !== HINT_STARS ? "Ціна змінилась." : hintCheck(String(query.from.id), target);
     await tg("answerPreCheckoutQuery", { pre_checkout_query_id: query.id, ok: !error, ...(error ? { error_message: tr(query.from.id, error) } : {}) });
@@ -661,6 +674,7 @@ async function onPaid(id, pay) {
   const [kind, target] = String(pay.invoice_payload).split(":");
   if (kind === "reveal" || kind === "back") { ensure(id); return onMicroPaid(id, pay, kind, target); }
   if (kind === "hint") { ensure(id); return onHintPaid(id, pay, target); }
+  if (kind === "likes") { ensure(id); return onLikesPaid(id, pay); }
   const plan = planOf(pay.invoice_payload);
   ensure(id);
   if (!plan || pay.currency !== "XTR" || pay.total_amount !== plan.stars) { await send(id, "Оплату отримано, але тариф не збігся. Напиши в Premium ще раз."); return; }
@@ -893,7 +907,7 @@ export function addPoints(userId, n) {
     run("insert into season_points (season, user_id, points) select ?, ?, ? where exists (select 1 from users where id = ? and adult = 1 and banned = 0) on conflict (season, user_id) do update set points = points + excluded.points", seasonNow(), String(userId), n, String(userId));
   } catch (err) { console.error("[bot] points", err.message); }
 }
-const crownOf = (userId) => (one("select 1 as x from season_winners where user_id = ? and place = 1", userId) ? "👑 " : "");
+export const crownOf = (userId) => (one("select 1 as x from season_winners where user_id = ? and place = 1", userId) ? "👑 " : "");
 const nickOf = (row) => (String(row?.display_name || row?.first_name || "").trim().slice(0, 16) || `Невідомий #${String(row?.id ?? "").slice(-4)}`);
 
 // Питання дня: те саме для всіх, змінюється опівночі за Києвом.
@@ -1126,7 +1140,8 @@ async function onLike(id, yes, tok, queryId) {
   const mutual = one("select 1 as x from likes where from_id = ? and to_id = ? and created_at > ?", row.to_id, id, nowSec() - 3 * 86400);
   if (!mutual) {
     await tg("answerCallbackQuery", { callback_query_id: queryId, text: tr(id, "Збережено ❤️") });
-    return send(id, "❤️ Збережено. Якщо симпатія взаємна — я скажу 😉");
+    await send(id, "❤️ Збережено. Якщо симпатія взаємна — я скажу 😉");
+    return notifyLiked(row.to_id);
   }
   await tg("answerCallbackQuery", { callback_query_id: queryId, text: "💞" });
   run("delete from likes where (from_id = ? and to_id = ?) or (from_id = ? and to_id = ?)", id, row.to_id, row.to_id, id);
@@ -1138,6 +1153,71 @@ async function onLike(id, yes, tok, queryId) {
   try {
     await send(row.to_id, "💞 Взаємна симпатія! Ви сподобались одне одному.\nПродовжити розмову?", { inline_keyboard: [[{ text: "💬 Так, до чату", callback_data: `meet:yes:${req}` }, { text: "Ні", callback_data: `meet:no:${req}` }]] });
   } catch (err) { if (!isGone(err)) console.error("[bot] mutual", err.message); }
+}
+
+// 💘 «Тебе вподобали»: тизер одразу після ❤️, а хто саме — за зірки (з можливістю написати).
+const LIKES_STARS = 15;
+const likersOf = (id) => q("select l.from_id, u.gender, u.profile_age, u.city from likes l join users u on u.id = l.from_id where l.to_id = ? and l.created_at > ? and u.banned = 0 order by l.created_at desc limit 10", id, nowSec() - 7 * 86400);
+const likesCount = (id) => one("select count(*) as n from likes l join users u on u.id = l.from_id where l.to_id = ? and l.created_at > ? and u.banned = 0", id, nowSec() - 7 * 86400)?.n ?? 0;
+async function notifyLiked(to) {
+  const last = one("select at from like_notify where user_id = ?", to)?.at ?? 0;
+  if (nowSec() - last < 6 * 3600) return;
+  run("insert into like_notify (user_id, at) values (?, ?) on conflict (user_id) do update set at = excluded.at", to, nowSec());
+  const n = likesCount(to);
+  try {
+    await send(to, `💘 Ти комусь сподобався(лась)! Уже вподобали: ${n} 👀\nПостав ❤️ після розмови у відповідь — і чат відкриється знову. Або дізнайся, хто це.`, { inline_keyboard: [[{ text: `💘 Хто мене вподобав · ${LIKES_STARS}⭐`, callback_data: "likes:buy" }]] });
+  } catch (err) { if (!isGone(err)) console.error("[bot] like notify", err.message); }
+}
+async function showLikes(id) {
+  const me = one("select adult, banned from users where id = ?", id);
+  if (me?.banned) return send(id, "Доступ до бота обмежено.");
+  if (!me?.adult) return showAge(id);
+  const n = likesCount(id);
+  if (!n) return send(id, "💘 Поки тебе ніхто не вподобав. Спілкуйся в чаті й грі — після кожної розмови люди ставлять ❤️ 😉");
+  await send(id, `💘 Тебе вподобали: ${n} за тиждень 👀\nДізнайся, хто це (стать, вік, місто), і напиши першим(ою).`, { inline_keyboard: [[{ text: `💘 Хто мене вподобав · ${LIKES_STARS}⭐`, callback_data: "likes:buy" }]] });
+}
+async function revealLikes(id) {
+  const rows = likersOf(id);
+  if (!rows.length) return send(id, "💘 Поки тебе ніхто не вподобав.");
+  const kb = [];
+  const lines = rows.map((r, i) => {
+    const tok = code(10);
+    run("insert into rate_tokens (id, from_id, to_id, created_at) values (?, ?, ?, ?)", tok, id, r.from_id, nowSec());
+    kb.push([{ text: `💬 Написати №${i + 1}`, callback_data: `likes:ask:${tok}` }]);
+    return `${i + 1}. ${r.gender ?? "—"}, ${r.profile_age ?? "—"}, ${r.city ?? "—"}`;
+  });
+  await send(id, `💘 Тебе вподобали:\n\n${lines.join("\n")}\n\nНатисни «Написати» — людина отримає запит на чат.`, { inline_keyboard: kb });
+}
+async function onLikesCallback(id, data, queryId) {
+  await tg("answerCallbackQuery", { callback_query_id: queryId });
+  const me = ensure(id);
+  if (me.banned || !me.adult) return me.banned ? send(id, "Доступ до бота обмежено.") : showAge(id);
+  const [, action, tokRaw] = data.split(":");
+  if (action === "buy") {
+    if (!likesCount(id)) return showLikes(id);
+    return starInvoice(id, "💘 Хто мене вподобав", "Стать, вік і місто людей, які поставили тобі ❤️ за тиждень, і можливість написати їм першим.", "likes:all", LIKES_STARS);
+  }
+  if (action === "ask") {
+    const tok = String(tokRaw || "").replace(/[^a-f0-9]/g, "").slice(0, 12);
+    const row = one("select * from rate_tokens where id = ? and from_id = ?", tok, id);
+    run("delete from rate_tokens where id = ?", tok);
+    if (!row) return send(id, "Запит уже не діє.");
+    if (me.status === "chat") return send(id, "Спочатку заверши поточний діалог.");
+    const req = code(8);
+    run("delete from requests where from_id = ? and to_id = ?", id, row.to_id);
+    run("insert into requests (id, from_id, to_id) values (?, ?, ?)", req, id, row.to_id);
+    try {
+      await send(row.to_id, "💘 Тобі хочуть написати — людина, якій ти поставив(ла) ❤️ після розмови. Відкрити чат?", { inline_keyboard: [[{ text: "💬 Так, до чату", callback_data: `meet:yes:${req}` }, { text: "Ні", callback_data: `meet:no:${req}` }]] });
+    } catch (err) { if (isGone(err)) return send(id, "Ця людина вже вимкнула бота."); throw err; }
+    return send(id, "Запит надіслано 💘 Якщо людина прийме — відкриється чат.");
+  }
+}
+async function onLikesPaid(id, pay) {
+  const fresh = run("insert into payments (charge_id, user_id, payload, stars) values (?, ?, ?, ?) on conflict (charge_id) do nothing", pay.telegram_payment_charge_id, id, pay.invoice_payload, pay.total_amount).changes;
+  if (!fresh) return;
+  if (pay.currency !== "XTR" || pay.total_amount !== LIKES_STARS) return refundStars(id, pay.telegram_payment_charge_id, "Ціна змінилась. Зірки повернено.");
+  if (!likesCount(id)) return refundStars(id, pay.telegram_payment_charge_id, "Поки тебе ніхто не вподобав. Зірки повернено.");
+  await revealLikes(id);
 }
 
 // 💡 Підказки для першого повідомлення: натиснув — питання пішло співрозмовнику.
@@ -1196,12 +1276,28 @@ function kyivNow() {
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date()).map((p) => [p.type, p.value]));
   return { day: `${parts.year}-${parts.month}-${parts.day}`, hm: `${parts.hour}:${parts.minute}` };
 }
+// Тема вечора залежить від дня тижня (0 — неділя).
+const PARTY_THEMES = [
+  { event: "double_hearts", text: "🌙 Тихий вечір питань о 21:00!\nВідповідай на 🌙 питання дня, читай 🧱 стіну зізнань — а в 🍾 бутилочці годину подвійні серця ❤️×2.", buttons: [[{ text: "🌙 Питання дня", callback_data: "wall:qotd" }], [{ text: "🍾 У гру", web_app: { url: GAME_URL } }]] },
+  { event: "double_hearts", text: "💌 Ніч зізнань о 21:00!\nНапиши анонімне зізнання на 🧱 стіну або комусь особисто. А в 🍾 бутилочці годину подвійні серця ❤️×2.", buttons: [[{ text: "🧱 Стіна зізнань", callback_data: "wall:v:w:0" }], [{ text: "🍾 У гру", web_app: { url: GAME_URL } }]] },
+  { event: "double_hearts", text: "⚡ Вечір швидких побачень о 21:00!\n3 хвилини з новою людиною, потім ❤️ чи 👋. Взаємна симпатія — і чат відкриється знову 💞", buttons: [[{ text: "⚡ Швидке побачення", callback_data: "find:speed" }], [{ text: "🍾 У гру", web_app: { url: GAME_URL } }]] },
+  { event: "double_hearts", text: "💖 Середа подвійних сердець о 21:00!\nЦілу годину в 🍾 бутилочці реакції, поцілунки й подарунки дають ×2 ❤️ — і очки сезону 🏆", buttons: [[{ text: "🍾 На вечірку", web_app: { url: GAME_URL } }]] },
+  { event: "free_rose", text: "🌹 Четвер троянд о 21:00!\nКожен отримає безкоштовну троянду в гру — подаруй її тому, хто сподобається, разом із запрошенням наодинці 🔒", buttons: [[{ text: "🍾 На вечірку", web_app: { url: GAME_URL } }]] },
+  { event: "double_hearts", text: "🎉 Велика п’ятнична вечірка о 21:00!\nУсі за столи 🍾: подвійні серця ❤️×2, бажання ✨ і корона 👑 найпопулярнішому.", buttons: [[{ text: "🍾 На вечірку", web_app: { url: GAME_URL } }]] },
+  { event: "double_hearts", text: "✨ Субота бажань о 21:00!\nЗагадай бажання в 🍾 бутилочці — хто виконає найкраще, отримає корону 👑. І годину подвійні серця ❤️×2.", buttons: [[{ text: "🍾 На вечірку", web_app: { url: GAME_URL } }]] },
+];
+function kyivWeekday() {
+  const wd = new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "short" }).format(new Date());
+  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(wd);
+}
 let partyBusy = false;
 export async function partyTick(startEvent) {
   const { day, hm } = kyivNow();
+  const theme = PARTY_THEMES[kyivWeekday()] ?? PARTY_THEMES[3];
   if (hm === PARTY_START && run("insert into party_log (day) values (?) on conflict do nothing", day + ":start").changes) {
-    try { startEvent?.(); } catch (err) { console.error("[bot] party event", err.message); }
+    try { startEvent?.(theme.event); if (theme.event !== "double_hearts") startEvent?.("double_hearts"); } catch (err) { console.error("[bot] party event", err.message); }
   }
+  await weeklyTopTick();
   if (hm < PARTY_INVITE || hm >= PARTY_START || partyBusy) return;
   if (!run("insert into party_log (day) values (?) on conflict do nothing", day).changes) return;
   partyBusy = true;
@@ -1210,10 +1306,7 @@ export async function partyTick(startEvent) {
     let sent = 0;
     for (const row of rows) {
       try {
-        await send(row.id, "🎉 Вечірка о 21:00!\nЦілу годину в 🍾 бутилочці подвійні серця ❤️×2, а за столами — живі люди. Заходь!", { inline_keyboard: [
-          [{ text: "🍾 На вечірку", web_app: { url: GAME_URL } }],
-          [{ text: "🔕 Не кликати на вечірки", callback_data: "party:off" }],
-        ] });
+        await send(row.id, theme.text, { inline_keyboard: [...theme.buttons, [{ text: "🔕 Не кликати на вечірки", callback_data: "party:off" }]] });
         sent++;
       } catch (err) { if (!isGone(err)) console.error("[bot] party", err.message); }
       await new Promise((r) => setTimeout(r, 60));
@@ -1221,6 +1314,28 @@ export async function partyTick(startEvent) {
     run("update party_log set sent = ? where day = ?", sent, day);
     console.info(`[bot] вечірка: запрошено ${sent}`);
   } finally { partyBusy = false; }
+}
+// 🏆 Щонеділі о 19:00 (Київ): топ-3 постів стіни за тиждень — усім, хто заходив за місяць.
+let topBusy = false;
+async function weeklyTopTick() {
+  const { day, hm } = kyivNow();
+  if (kyivWeekday() !== 0 || hm < "19:00" || hm >= "19:30" || topBusy) return;
+  const posts = q("select p.text, (select count(*) from post_reactions r where r.post_id = p.id) as score from posts p where p.kind = 'wall' and p.hidden = 0 and p.created_at > ? order by score desc, p.created_at desc limit 3", nowSec() - 7 * 86400).filter((p) => p.score > 0);
+  if (posts.length < 3) return;
+  if (!run("insert into party_log (day) values (?) on conflict do nothing", day + ":top").changes) return;
+  topBusy = true;
+  try {
+    const medals = ["🥇", "🥈", "🥉"];
+    const body = posts.map((p, i) => `${medals[i]} ${p.text.length > 160 ? p.text.slice(0, 157) + "…" : p.text}\n   ❤️ ${p.score}`).join("\n\n");
+    const rows = q("select id from users where adult = 1 and banned = 0 and last_seen > ? and id not in (select id from optout)", nowSec() - 30 * 86400);
+    let sent = 0;
+    for (const row of rows) {
+      try { await send(row.id, `🏆 Топ стіни тижня\n\n${body}\n\nЧитай більше й пиши своє анонімно 👇`, { inline_keyboard: [[{ text: "🧱 Стіна зізнань", callback_data: "wall:v:w:0" }]] }); sent++; }
+      catch (err) { if (!isGone(err)) console.error("[bot] weekly top", err.message); }
+      await new Promise((r) => setTimeout(r, 60));
+    }
+    console.info(`[bot] топ стіни: надіслано ${sent}`);
+  } finally { topBusy = false; }
 }
 async function askBack(id) {
   const me = one("select last_partner_id, status from users where id = ?", id);
@@ -1649,6 +1764,7 @@ async function onCommand(chatId, id, name, args, from) {
   if (name === "wall") { ensure(id, from); return showWall(id, "w", 0); }
   if (name === "question" || name === "qotd") { ensure(id, from); return showQotd(id); }
   if (name === "top" || name === "season") { ensure(id, from); return showTop(id); }
+  if (name === "likes") { ensure(id, from); return showLikes(id); }
   if (name === "report") { ensure(id, from); return reportPartner(id); }
   if (name === "rules") return showRules(id);
   if (name === "help") return showHelp(id);
@@ -1740,6 +1856,7 @@ export async function handleUpdate(update) {
       else if (data.startsWith("lang:")) { ensure(id, from); await setLanguage(id, data.slice(5), queryId); }
       else if (data.startsWith("conf:")) await onConfessCallback(id, data, queryId, from);
       else if (data.startsWith("wall:")) await onWallCallback(id, data, update.callback_query);
+      else if (data.startsWith("likes:")) { ensure(id, from); await onLikesCallback(id, data, queryId); }
       else if (data.startsWith("like:")) { const [, v, tok] = data.split(":"); ensure(id, from); await onLike(id, v === "y", String(tok || "").replace(/[^a-f0-9]/g, "").slice(0, 12), queryId); }
       else if (data.startsWith("ice:")) { ensure(id, from); await onIcebreaker(id, Number(data.slice(4)), queryId); }
       else if (data === "party:off") { run("insert into party_off (id) values (?) on conflict do nothing", id); await tg("answerCallbackQuery", { callback_query_id: queryId }); await send(id, "🔕 Більше не кличу на вечірки. Увімкнути знову: ⚙️ Налаштування."); }
@@ -1811,7 +1928,7 @@ export async function handleUpdate(update) {
 const COMMANDS = [
   ["start", "Почати"], ["game", "Гра в бутилочку"], ["search", "Знайти співрозмовника"], ["next", "Наступний співрозмовник"],
   ["stop", "Завершити діалог"], ["profile", "Мій профіль"], ["form", "Заповнити анкету"], ["photo", "Завантажити фото"],
-  ["premium", "Premium"], ["confess", "Анонімні зізнання"], ["wall", "Стіна зізнань"], ["question", "Питання дня"], ["top", "Рейтинг сезону"], ["invite", "Запросити друзів"], ["report", "Поскаржитись"], ["rules", "Правила"], ["help", "Допомога"],
+  ["premium", "Premium"], ["confess", "Анонімні зізнання"], ["wall", "Стіна зізнань"], ["question", "Питання дня"], ["top", "Рейтинг сезону"], ["likes", "Хто мене вподобав"], ["invite", "Запросити друзів"], ["report", "Поскаржитись"], ["rules", "Правила"], ["help", "Допомога"],
   ["settings", "Налаштування"], ["language", "Змінити мову"], ["myid", "Мій Telegram ID"], ["stopnews", "Відписатись від новин"], ["startnews", "Знову отримувати новини"],
 ];
 export const commandList = (lang) => COMMANDS.map(([command, description]) => ({ command, description: L(lang, description) }));
