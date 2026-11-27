@@ -209,6 +209,12 @@ function openDatabase() {
   next.exec("create table if not exists confessions (id text primary key, to_id text not null, from_id text not null, text text not null, created_at integer not null, hint integer not null default 0, reported integer not null default 0, reply_to text)");
   next.exec("create index if not exists confessions_to on confessions (to_id, created_at)");
   next.exec("create index if not exists confessions_from on confessions (from_id, created_at)");
+  // ❤️ Симпатії після розмови: токен кнопки → пара, і самі вподобання.
+  next.exec("create table if not exists rate_tokens (id text primary key, from_id text not null, to_id text not null, created_at integer not null)");
+  next.exec("create table if not exists likes (from_id text not null, to_id text not null, created_at integer not null, primary key (from_id, to_id))");
+  // 🎉 Вечірка о 21:00: в який день уже кликали, і хто не хоче запрошень.
+  next.exec("create table if not exists party_log (day text primary key, sent integer not null default 0)");
+  next.exec("create table if not exists party_off (id text primary key)");
   return next;
 }
 function installCopy(src) {
@@ -467,7 +473,7 @@ async function enqueue(id, mode) {
     if (me.banned || !me.adult) return { kind: "closed" };
     if (me.status === "chat") return { kind: "busy" };
     const row = one("select * from users where id = ?", id);
-    const want = mode ?? (row?.search_mode === "dating" ? "dating" : "random");
+    const want = mode ?? (row?.search_mode === "dating" ? "dating" : row?.search_mode === "speed" ? "speed" : "random");
     const premium = premiumActive(row?.premium_until);
     if (want === "dating") {
       if (!row?.gender || !row.profile_age || !row.city || !row.look_gender || !row.age_min || !row.look_city) return { kind: "needprofile" };
@@ -487,12 +493,14 @@ async function enqueue(id, mode) {
       run("update users set status = 'chat', partner_id = ?, last_partner_id = ?, priority = 0, pending = null where id = ?", cand.id, cand.id, id);
       return { kind: "matched", other: cand.id, mode: "dating" };
     }
-    if (row?.status !== "search" || row.search_mode === "dating") run("update users set status = 'search', partner_id = null, priority = 0, search_mode = 'random' where id = ?", id);
-    const cand = one(`select id from users where status = 'search' and id <> ? and adult = 1 and banned = 0 and coalesce(search_mode, 'random') = 'random' order by case when id = ? then 1 else 0 end, random() limit 1`, id, me.last_partner_id);
-    if (!cand) return { kind: "waiting", mode: "random" };
+    // Випадковий чат і ⚡ швидкі побачення — окремі черги з однаковою логікою.
+    const queue = want === "speed" ? "speed" : "random";
+    if (row?.status !== "search" || (row.search_mode ?? "random") !== queue) run("update users set status = 'search', partner_id = null, priority = 0, search_mode = ? where id = ?", queue, id);
+    const cand = one(`select id from users where status = 'search' and id <> ? and adult = 1 and banned = 0 and coalesce(search_mode, 'random') = ? order by case when id = ? then 1 else 0 end, random() limit 1`, id, queue, me.last_partner_id);
+    if (!cand) return { kind: "waiting", mode: queue };
     run("update users set status = 'chat', partner_id = ?, last_partner_id = ?, priority = 0, pending = null where id = ?", id, id, cand.id);
     run("update users set status = 'chat', partner_id = ?, last_partner_id = ?, priority = 0, pending = null where id = ?", cand.id, cand.id, id);
-    return { kind: "matched", other: cand.id, mode: "random" };
+    return { kind: "matched", other: cand.id, mode: queue };
   });
   if (result.kind === "needprofile") { await continueDating(id); return "needprofile"; }
   if (result.kind === "needpay") { await send(id, "Пошук за віком, статтю і містом лише з Premium. Випадковий — безкоштовний."); await showPremium(id); return "needpay"; }
@@ -506,15 +514,20 @@ async function enqueue(id, mode) {
       try { await sendMatch(result.other, `${intro}${line(mine)}`, photoOf(id), premiumActive(theirs?.premium_until)); }
       catch (err) { if (isGone(err)) await disconnect(id, "gone"); }
     } else {
-      const text = "Співрозмовника знайдено. Пиши — я передам повідомлення без твого імені.\n\n«Наступний» шукає когось іншого. «Завершити діалог» зупиняє розмову.";
+      const text = result.mode === "speed"
+        ? "⚡ Швидке побачення! У вас 3 хвилини.\n\nПотім кожен вирішить: ❤️ чи 👋. Взаємна симпатія відкриє чат без обмежень."
+        : "Співрозмовника знайдено. Пиши — я передам повідомлення без твого імені.\n\n«Наступний» шукає когось іншого. «Завершити діалог» зупиняє розмову.";
       await send(id, text);
       try { await send(result.other, text); }
-      catch (err) { if (isGone(err)) await disconnect(id, "gone"); }
+      catch (err) { if (isGone(err)) { await disconnect(id, "gone"); return "matched"; } }
+      await sendIcebreakers(id);
+      try { await sendIcebreakers(result.other); } catch {}
+      if (result.mode === "speed") startSpeedTimer(id, result.other);
     }
     return "matched";
   }
   if (result.kind === "waiting") {
-    await send(id, result.mode === "dating" ? "Шукаю анкету за віком, статтю і містом. Якщо зараз нікого немає — зачекай." : "Шукаю випадкову людину. Це безкоштовно. Якщо черга порожня — зачекай.");
+    await send(id, result.mode === "dating" ? "Шукаю анкету за віком, статтю і містом. Якщо зараз нікого немає — зачекай." : result.mode === "speed" ? "⚡ Шукаю пару для швидкого побачення. Щойно хтось з’явиться — почнемо!" : "Шукаю випадкову людину. Це безкоштовно. Якщо черга порожня — зачекай.");
     return "waiting";
   }
   return result.kind;
@@ -540,6 +553,13 @@ async function disconnect(id, mode) {
   });
   if (outcome.kind === "cancelled") { await showLobby(id, "Пошук скасовано."); return; }
   if (outcome.kind === "left") {
+    if (mode === "timeup") {
+      for (const who of [id, outcome.partner]) {
+        try { await showLobby(who, "⏰ 3 хвилини минули!"); await offerBack(who); }
+        catch (err) { if (!isGone(err)) console.error("[bot] timeup", err.message); }
+      }
+      return;
+    }
     if (mode === "gone") await showLobby(id, "Співрозмовник недоступний.");
     else if (mode === "next") {
       try { await showLobby(outcome.partner, "Співрозмовник пішов шукати когось іншого."); await offerBack(outcome.partner); }
@@ -847,8 +867,10 @@ async function showHelp(id) {
 }
 async function showSettings(id) {
   const off = Boolean(one("select id from optout where id = ?", id));
+  const partyOff = Boolean(one("select id from party_off where id = ?", id));
   await send(id, "⚙️ Налаштування", { inline_keyboard: [
     [{ text: "🌐 Мова", callback_data: "menu:lang" }],
+    [{ text: partyOff ? "🎉 Кликати на вечірки" : "🔕 Не кликати на вечірки", callback_data: "menu:party" }],
     [{ text: "📜 Правила", callback_data: "menu:rules" }, { text: "❓ Допомога", callback_data: "menu:help" }],
     [{ text: off ? "🔔 Увімкнути новини" : "🔕 Вимкнути новини", callback_data: "menu:news" }],
   ] });
@@ -865,10 +887,122 @@ async function askReveal(id) {
   await starInvoice(id, "👀 Хто співрозмовник", "Стать, вік, місто і ціль співрозмовника. Ім’я і контакти не показуємо.", `reveal:${me.partner_id}`, REVEAL_STARS);
 }
 // ↩️ Після діалогу: запит колишньому співрозмовнику продовжити розмову.
+// Після розмови: ❤️ чи 👋. Взаємна симпатія — безкоштовно відкриває чат знову.
+// Однобічна — можна попросити повернути співрозмовника за зірки.
 async function offerBack(id) {
   const me = one("select last_partner_id, status from users where id = ?", id);
   if (!me?.last_partner_id || me.status === "chat") return;
-  await send(id, "↩️ Шкода, що розмова закінчилась? Надішлю колишньому співрозмовнику запит. Якщо прийме — діалог відкриється знову.", { inline_keyboard: [[{ text: `↩️ Повернути співрозмовника · ${BACK_STARS}⭐`, callback_data: "back" }]] });
+  const tok = code(10);
+  run("delete from rate_tokens where created_at < ?", nowSec() - 7 * 86400);
+  run("insert into rate_tokens (id, from_id, to_id, created_at) values (?, ?, ?, ?)", tok, id, me.last_partner_id, nowSec());
+  await send(id, "Як тобі співрозмовник? Якщо симпатія взаємна — я відкрию чат знову 😉", { inline_keyboard: [
+    [{ text: "❤️ Сподобався", callback_data: `like:y:${tok}` }, { text: "👋 Не дуже", callback_data: `like:n:${tok}` }],
+    [{ text: `↩️ Повернути співрозмовника · ${BACK_STARS}⭐`, callback_data: "back" }],
+  ] });
+}
+async function onLike(id, yes, tok, queryId) {
+  const row = one("select * from rate_tokens where id = ? and from_id = ?", tok, id);
+  run("delete from rate_tokens where id = ?", tok);
+  if (!row) return tg("answerCallbackQuery", { callback_query_id: queryId });
+  if (!yes) return tg("answerCallbackQuery", { callback_query_id: queryId, text: tr(id, "Зрозумів 👋") });
+  run("insert into likes (from_id, to_id, created_at) values (?, ?, ?) on conflict do update set created_at = excluded.created_at", id, row.to_id, nowSec());
+  const mutual = one("select 1 as x from likes where from_id = ? and to_id = ? and created_at > ?", row.to_id, id, nowSec() - 3 * 86400);
+  if (!mutual) {
+    await tg("answerCallbackQuery", { callback_query_id: queryId, text: tr(id, "Збережено ❤️") });
+    return send(id, "❤️ Збережено. Якщо симпатія взаємна — я скажу 😉");
+  }
+  await tg("answerCallbackQuery", { callback_query_id: queryId, text: "💞" });
+  run("delete from likes where (from_id = ? and to_id = ?) or (from_id = ? and to_id = ?)", id, row.to_id, row.to_id, id);
+  const req = code(8);
+  run("delete from requests where from_id = ? and to_id = ?", id, row.to_id);
+  run("insert into requests (id, from_id, to_id) values (?, ?, ?)", req, id, row.to_id);
+  await send(id, "💞 Взаємна симпатія! Ви сподобались одне одному.\nЯ запропонував співрозмовнику продовжити — чекай.");
+  try {
+    await send(row.to_id, "💞 Взаємна симпатія! Ви сподобались одне одному.\nПродовжити розмову?", { inline_keyboard: [[{ text: "💬 Так, до чату", callback_data: `meet:yes:${req}` }, { text: "Ні", callback_data: `meet:no:${req}` }]] });
+  } catch (err) { if (!isGone(err)) console.error("[bot] mutual", err.message); }
+}
+
+// 💡 Підказки для першого повідомлення: натиснув — питання пішло співрозмовнику.
+const ICEBREAKERS = [
+  "Яка твоя найдивніша звичка? 😅",
+  "Куди б ти полетів(ла) прямо зараз, якби квиток був безкоштовний? ✈️",
+  "Що тебе сьогодні порадувало?",
+  "Яку пісню ти слухаєш на повторі останнім часом? 🎧",
+  "Ти більше сова чи жайворонок? 🦉",
+  "Яке найкраще побачення ти можеш уявити?",
+  "Що ти ніколи не їв(ла) б навіть за гроші? 🤢",
+  "Який фільм можеш переглядати безкінечно? 🎬",
+  "Чим займаєшся, коли не сидиш у телефоні?",
+  "Якби мав(ла) суперсилу на один день — яку б обрав(ла)? 🦸",
+  "Що для тебе ідеальний вечір п’ятниці?",
+  "Ти вже колись закохувався(лась) з першого погляду? 💘",
+  "Кава чи чай? І чому саме так ☕",
+  "Що найсміливіше ти робив(ла) у житті?",
+  "Яка твоя улюблена погода і чому? ☀️",
+];
+async function sendIcebreakers(id) {
+  const picks = [...ICEBREAKERS.keys()].sort(() => Math.random() - 0.5).slice(0, 3);
+  await send(id, "💡 Не знаєш, з чого почати? Натисни — і питання піде співрозмовнику:", { inline_keyboard: picks.map((n) => [{ text: ICEBREAKERS[n], callback_data: `ice:${n}` }]) });
+}
+async function onIcebreaker(id, n, queryId) {
+  const me = one("select status, partner_id from users where id = ?", id);
+  const question = ICEBREAKERS[n];
+  if (!question || me?.status !== "chat" || !me.partner_id) return tg("answerCallbackQuery", { callback_query_id: queryId, text: tr(id, "Діалог уже завершено.") });
+  await tg("answerCallbackQuery", { callback_query_id: queryId, text: tr(id, "Надіслано ✅") });
+  try { await send(me.partner_id, `💬 Співрозмовник питає:\n${question}`); }
+  catch (err) { if (isGone(err)) return disconnect(id, "gone"); throw err; }
+  await send(id, `Ти запитав(ла): ${question}`);
+}
+
+// ⚡ Швидке побачення: через 3 хвилини чат закривається і кожен ставить ❤️ чи 👋.
+const SPEED_MS = Number(process.env.SPEED_MS) || 3 * 60 * 1000; // SPEED_MS — лише для тестів
+function startSpeedTimer(a, b) {
+  const t = setTimeout(async () => {
+    const me = one("select status, partner_id from users where id = ?", a);
+    if (me?.status !== "chat" || me.partner_id !== b) return;
+    try { await disconnect(a, "timeup"); } catch (err) { console.error("[bot] speed", err.message); }
+  }, SPEED_MS);
+  t.unref?.();
+  const warn = setTimeout(async () => {
+    const me = one("select status, partner_id from users where id = ?", a);
+    if (me?.status !== "chat" || me.partner_id !== b) return;
+    for (const who of [a, b]) { try { await send(who, "⏳ Залишилось 30 секунд!"); } catch {} }
+  }, Math.max(1000, SPEED_MS - 30_000));
+  warn.unref?.();
+}
+
+// 🎉 Вечірка о 21:00 (Київ): о 20:50 кличемо тих, хто заходив за тиждень, о 21:00 — подвійні серця на годину.
+const PARTY_INVITE = "20:50";
+const PARTY_START = "21:00";
+function kyivNow() {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date()).map((p) => [p.type, p.value]));
+  return { day: `${parts.year}-${parts.month}-${parts.day}`, hm: `${parts.hour}:${parts.minute}` };
+}
+let partyBusy = false;
+export async function partyTick(startEvent) {
+  const { day, hm } = kyivNow();
+  if (hm === PARTY_START && run("insert into party_log (day) values (?) on conflict do nothing", day + ":start").changes) {
+    try { startEvent?.(); } catch (err) { console.error("[bot] party event", err.message); }
+  }
+  if (hm < PARTY_INVITE || hm >= PARTY_START || partyBusy) return;
+  if (!run("insert into party_log (day) values (?) on conflict do nothing", day).changes) return;
+  partyBusy = true;
+  try {
+    const rows = q("select id from users where adult = 1 and banned = 0 and status <> 'chat' and last_seen > ? and id not in (select id from optout) and id not in (select id from party_off)", nowSec() - 7 * 86400);
+    let sent = 0;
+    for (const row of rows) {
+      try {
+        await send(row.id, "🎉 Вечірка о 21:00!\nЦілу годину в 🍾 бутилочці подвійні серця ❤️×2, а за столами — живі люди. Заходь!", { inline_keyboard: [
+          [{ text: "🍾 На вечірку", web_app: { url: GAME_URL } }],
+          [{ text: "🔕 Не кликати на вечірки", callback_data: "party:off" }],
+        ] });
+        sent++;
+      } catch (err) { if (!isGone(err)) console.error("[bot] party", err.message); }
+      await new Promise((r) => setTimeout(r, 60));
+    }
+    run("update party_log set sent = ? where day = ?", sent, day);
+    console.info(`[bot] вечірка: запрошено ${sent}`);
+  } finally { partyBusy = false; }
 }
 async function askBack(id) {
   const me = one("select last_partner_id, status from users where id = ?", id);
@@ -1276,7 +1410,7 @@ async function onCommand(chatId, id, name, args, from) {
     if (!me.adult) return showAge(chatId);
     if (name === "search") {
       if (me.status === "chat") return send(chatId, "Спочатку заверши поточний діалог.");
-      return send(chatId, "Обери.", { inline_keyboard: [[{ text: "Випадково", callback_data: "find:random" }], [{ text: "За анкетою", callback_data: "find:dating" }]] });
+      return send(chatId, "Обери.", { inline_keyboard: [[{ text: "🎲 Випадково", callback_data: "find:random" }], [{ text: "⚡ Швидке побачення · 3 хв", callback_data: "find:speed" }], [{ text: "💞 За анкетою", callback_data: "find:dating" }]] });
     }
     if (name === "next") { if (me.status === "chat") return disconnect(id, "next"); return enqueue(id); }
     return disconnect(id, me.status === "search" ? "cancel" : "stop");
@@ -1381,6 +1515,10 @@ export async function handleUpdate(update) {
       }
       else if (data.startsWith("lang:")) { ensure(id, from); await setLanguage(id, data.slice(5), queryId); }
       else if (data.startsWith("conf:")) await onConfessCallback(id, data, queryId, from);
+      else if (data.startsWith("like:")) { const [, v, tok] = data.split(":"); ensure(id, from); await onLike(id, v === "y", String(tok || "").replace(/[^a-f0-9]/g, "").slice(0, 12), queryId); }
+      else if (data.startsWith("ice:")) { ensure(id, from); await onIcebreaker(id, Number(data.slice(4)), queryId); }
+      else if (data === "party:off") { run("insert into party_off (id) values (?) on conflict do nothing", id); await tg("answerCallbackQuery", { callback_query_id: queryId }); await send(id, "🔕 Більше не кличу на вечірки. Увімкнути знову: ⚙️ Налаштування."); }
+      else if (data === "find:speed") { await tg("answerCallbackQuery", { callback_query_id: queryId }); await enqueue(id, "speed"); }
       else if (data === "back") { await tg("answerCallbackQuery", { callback_query_id: queryId }); ensure(id, from); await askBack(id); }
       else if (data.startsWith("menu:")) {
         await tg("answerCallbackQuery", { callback_query_id: queryId });
@@ -1389,6 +1527,11 @@ export async function handleUpdate(update) {
         else if (item === "rules") await showRules(id);
         else if (item === "help") await showHelp(id);
         else if (item === "form" || item === "photo") await onCommand(id, id, item, "", from);
+        else if (item === "party") {
+          const was = Boolean(one("select id from party_off where id = ?", id));
+          if (was) run("delete from party_off where id = ?", id); else run("insert into party_off (id) values (?) on conflict do nothing", id);
+          await send(id, was ? "🎉 Кликатиму на вечірки о 21:00." : "🔕 Більше не кличу на вечірки.");
+        }
         else if (item === "news") {
           const off = Boolean(one("select id from optout where id = ?", id));
           if (off) run("delete from optout where id = ?", id); else run("insert into optout (id) values (?) on conflict (id) do nothing", id);

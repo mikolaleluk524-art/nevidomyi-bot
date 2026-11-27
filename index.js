@@ -17,12 +17,13 @@ import {
   checkpoint,
   DB_PATH,
   handleUpdate,
+  partyTick,
   publishCommands,
   setLiveSource,
   tg,
 } from "./src/bot.js";
 import { adminRoutes, setMonitorSource } from "./admin.js";
-import { attachBottleGame, gameEvents, gameStats } from "./game-server.js";
+import { attachBottleGame, gameEvents, gameStats, setGameEvent } from "./game-server.js";
 import { handleGiftUpdate, publishGiftCommand } from "./gifts.js";
 
 const DASHBOARD = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "dashboard.html"), "utf8");
@@ -157,6 +158,8 @@ function listen() {
   });
   attachBottleGame(server);
   setLiveSource(() => gameStats());
+  // 🎉 Щоденна вечірка о 21:00 (Київ): запрошення о 20:50 і подвійні серця на годину.
+  setInterval(() => { partyTick(() => setGameEvent("double_hearts", 1)).catch((err) => console.error("[bot] party", err.message)); }, 30_000).unref();
   setMonitorSource(() => ({ beatAgo: Date.now() - beat, startedAt, game: gameStats(), events: gameEvents(), memoryMb: Math.round(process.memoryUsage().rss / 1048576) }));
   server.listen(port, "0.0.0.0", () => {
     console.info(`[bot] health + admin + bottle game :${port}`);
