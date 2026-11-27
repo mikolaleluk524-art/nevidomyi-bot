@@ -622,6 +622,12 @@ const ENTRIES = [
   ["Загадай бажання в 🍾 бутилочці — хто виконає найкраще, отримає корону 👑. І годину подвійні серця ❤️×2.", "Загадай желание в 🍾 бутылочке — кто исполнит лучше всех, получит корону 👑. И час двойные сердца ❤️×2.", "Make a wish in 🍾 Spin the Bottle — whoever grants it best gets the 👑 crown. Plus an hour of double hearts ❤️×2."],
   ["🏆 Топ стіни тижня", "🏆 Топ стены недели", "🏆 Top of the wall this week"],
   ["Читай більше й пиши своє анонімно 👇", "Читай больше и пиши своё анонимно 👇", "Read more and post your own anonymously 👇"],
+  // 👭 Приведи подругу
+  ["👭 Твоя подруга вже в клубі! Коли вона приведе когось — ти отримаєш {0} день Premium і 🌹×{1}.", "👭 Твоя подруга уже в клубе! Когда она приведёт кого-то — ты получишь {0} день Premium и 🌹×{1}.", "👭 Your friend is in the club! When she brings someone, you'll get {0} day of Premium and 🌹×{1}."],
+  ["👭 Тебе запросила подруга чи друг. Поділись своїм посиланням (🎁 Запросити друзів) — за кожного, хто прийде, ти отримаєш Premium, і людина, що тебе запросила, теж отримає бонус 💝", "👭 Тебя пригласила подруга или друг. Поделись своей ссылкой (🎁 Пригласить друзей) — за каждого, кто придёт, ты получишь Premium, и человек, который тебя пригласил, тоже получит бонус 💝", "👭 A friend invited you. Share your own link (🎁 Invite friends) — you'll get Premium for everyone who joins, and the person who invited you gets a bonus too 💝"],
+  ["👭 Твоя подруга привела нову людину в клуб! Бонус «Приведи подругу»: +{0} день Premium і 🌹×{1} 💝", "👭 Твоя подруга привела нового человека в клуб! Бонус «Приведи подругу»: +{0} день Premium и 🌹×{1} 💝", "👭 Your friend brought someone new to the club! “Bring a friend” bonus: +{0} day of Premium and 🌹×{1} 💝"],
+  ["👭 Приведи подругу: коли подруга, яку ти запросив(ла), сама приведе когось — ти отримаєш {0} день Premium і 🌹×{1}.", "👭 Приведи подругу: когда подруга, которую ты пригласил(а), сама приведёт кого-то — ты получишь {0} день Premium и 🌹×{1}.", "👭 Bring a friend: when a girlfriend you invited brings someone herself, you get {0} day of Premium and 🌹×{1}."],
+  ["Бонусів за подруг: {0}", "Бонусов за подруг: {0}", "Friend bonuses: {0}"],
 ];
 
 const exact = { ru: new Map(), en: new Map() };
