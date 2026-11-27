@@ -50,6 +50,9 @@ const BTN = {
   premium: "💎 Premium",
   invite: "🎁 Запросити друзів",
   confess: "💌 Анонімні зізнання",
+  wall: "🧱 Стіна зізнань",
+  qotd: "🌙 Питання дня",
+  top: "🏆 Рейтинг",
   report: "⚠️ Поскаржитись",
   rules: "📜 Правила",
   help: "❓ Допомога",
@@ -70,6 +73,9 @@ const ACTIONS = {
   [BTN.premium]: "premium",
   [BTN.invite]: "invite",
   [BTN.confess]: "confess",
+  [BTN.wall]: "wall",
+  [BTN.qotd]: "question",
+  [BTN.top]: "top",
   [BTN.report]: "report",
   [BTN.rules]: "rules",
   [BTN.help]: "help",
@@ -215,6 +221,14 @@ function openDatabase() {
   // 🎉 Вечірка о 21:00: в який день уже кликали, і хто не хоче запрошень.
   next.exec("create table if not exists party_log (day text primary key, sent integer not null default 0)");
   next.exec("create table if not exists party_off (id text primary key)");
+  // 🧱 Стіна зізнань і 🌙 відповіді на питання дня — одна таблиця постів із реакціями.
+  next.exec("create table if not exists posts (id text primary key, author_id text not null, kind text not null, day text, text text not null, created_at integer not null, reports integer not null default 0, hidden integer not null default 0, notified integer not null default 0)");
+  next.exec("create index if not exists posts_kind on posts (kind, day, created_at)");
+  next.exec("create table if not exists post_reactions (post_id text not null, user_id text not null, emoji text not null, primary key (post_id, user_id))");
+  next.exec("create table if not exists post_reports (post_id text not null, user_id text not null, primary key (post_id, user_id))");
+  // 🏆 Сезони: очки за активність і переможці.
+  next.exec("create table if not exists season_points (season integer not null, user_id text not null, points integer not null default 0, primary key (season, user_id))");
+  next.exec("create table if not exists season_winners (season integer not null, user_id text not null, place integer not null, primary key (season, place))");
   return next;
 }
 function installCopy(src) {
@@ -271,7 +285,7 @@ function spam(id) {
 const kb = (rows) => ({ keyboard: rows.map((r) => r.map((text) => ({ text }))), resize_keyboard: true, is_persistent: true });
 // «Гра» — звичайна кнопка, а не web_app: Mini App з кнопки клавіатури не отримує initData.
 // Бот відповідає інлайн-кнопкою, яка працює.
-const lobbyKb = () => kb([[BTN.game], [BTN.search], [BTN.confess], [BTN.profile, BTN.premium], [BTN.invite, BTN.settings]]);
+const lobbyKb = () => kb([[BTN.game], [BTN.search], [BTN.confess, BTN.wall], [BTN.qotd, BTN.top], [BTN.profile, BTN.premium], [BTN.invite, BTN.settings]]);
 const chatKb = () => kb([[BTN.next, BTN.stop], [BTN.gift, BTN.reveal], [BTN.report]]);
 const searchKb = () => kb([[BTN.cancel], [BTN.game]]);
 function menuFor(id) {
@@ -769,6 +783,7 @@ async function deliverConfession(id, text) {
   if (sentToday >= CONFESS_PER_DAY) return showLobby(id, "На сьогодні досить зізнань. Повертайся завтра 🙂");
   const cid = code(10);
   run("insert into confessions (id, to_id, from_id, text, created_at) values (?, ?, ?, ?, ?)", cid, to, id, body, nowSec());
+  addPoints(to, 1);
   try {
     await send(to, `💌 Нове анонімне повідомлення:\n\n${body}`, { inline_keyboard: [
       [{ text: "↩️ Відповісти анонімно", callback_data: `conf:reply:${cid}` }],
@@ -859,6 +874,208 @@ async function onHintPaid(id, pay, cid) {
   await sendHint(id, one("select * from confessions where id = ?", cid));
 }
 
+// ---------- 🧱 стіна зізнань, 🌙 питання дня, 🏆 сезони ----------
+const POST_MAX = 300;
+const WALL_PER_DAY = 3;
+const REACTS = ["❤️", "😂", "🔥"];
+const REACT_MILESTONES = [5, 20, 50, 100];
+// Без посилань, юзернеймів і номерів: стіна анонімна, і рекламу сюди не пускаємо.
+const leaksContact = (t) => /(https?:\/\/|t\.me\/|www\.|@[a-z0-9_]{4,}|\+?\d[\d\s\-()]{8,}\d)/i.test(t);
+
+// Сезон триває 14 днів від понеділка 23.11.2026 00:00 за Києвом.
+const SEASON_EPOCH = Date.UTC(2026, 10, 22, 22, 0, 0) / 1000;
+const SEASON_LEN = 14 * 86400;
+const seasonNow = () => Math.floor((nowSec() - SEASON_EPOCH) / SEASON_LEN) + 1;
+const SEASON_PRIZES = [{ place: 1, days: 7, medal: "🥇" }, { place: 2, days: 3, medal: "🥈" }, { place: 3, days: 1, medal: "🥉" }];
+export function addPoints(userId, n) {
+  if (!userId || !n) return;
+  try {
+    run("insert into season_points (season, user_id, points) select ?, ?, ? where exists (select 1 from users where id = ? and adult = 1 and banned = 0) on conflict (season, user_id) do update set points = points + excluded.points", seasonNow(), String(userId), n, String(userId));
+  } catch (err) { console.error("[bot] points", err.message); }
+}
+const crownOf = (userId) => (one("select 1 as x from season_winners where user_id = ? and place = 1", userId) ? "👑 " : "");
+const nickOf = (row) => (String(row?.display_name || row?.first_name || "").trim().slice(0, 16) || `Невідомий #${String(row?.id ?? "").slice(-4)}`);
+
+// Питання дня: те саме для всіх, змінюється опівночі за Києвом.
+const QOTD = [
+  "Що ти зробив(ла) б, якби завтра не треба було йти на роботу чи навчання?",
+  "Яке твоє найбільше «ніколи більше»? 😅",
+  "Що тебе найбільше приваблює в людині з першого погляду?",
+  "Яка пісня описує твій настрій сьогодні? 🎧",
+  "Що б ти сказав(ла) собі 15-річному(ій)?",
+  "Найдивніше місце, де ти засинав(ла)? 😴",
+  "Що для тебе означає «ідеальне побачення»? 💘",
+  "Яку річ ти робиш краще за всіх?",
+  "Що ти востаннє зробив(ла) вперше?",
+  "Без чого ти не уявляєш свого дня? ☕",
+  "Яке твоє guilty pleasure? 🙈",
+  "Яке місто ти хотів(ла) б побачити найбільше? ✈️",
+  "Що тебе може розсмішити навіть у поганий день? 😂",
+  "Яку суперсилу ти обрав(ла) б і чому? 🦸",
+  "Який найкращий комплімент тобі робили? 💌",
+  "Чого ти навчився(лась) цього року?",
+  "Як виглядає твоя ідеальна неділя?",
+  "Що ти ніколи не пробачиш у стосунках?",
+  "Який фільм чи серіал радиш усім? 🎬",
+  "Що б ти зробив(ла) з мільйоном гривень? 💸",
+  "Яка твоя найсмішніша історія з побачення? 😅",
+];
+function qotdToday() {
+  const { day } = kyivNow();
+  const n = Math.floor(Date.UTC(...day.split("-").map((v, i) => (i === 1 ? Number(v) - 1 : Number(v)))) / 86400000);
+  return { day, question: QOTD[n % QOTD.length] };
+}
+
+function postView(id, scope, offset, pid = null) {
+  const where = scope === "q" ? "kind = 'qotd' and day = ?" : "kind = 'wall' and created_at > ?";
+  const arg = scope === "q" ? qotdToday().day : nowSec() - 14 * 86400;
+  const base = `from posts p where ${where} and hidden = 0 and id not in (select post_id from post_reports where user_id = ?)`;
+  const total = one(`select count(*) as n ${base}`, arg, id)?.n ?? 0;
+  if (!total) return null;
+  const i = ((offset % total) + total) % total;
+  // Після реакції показуємо той самий пост, навіть якщо порядок змінився.
+  const post = (pid && one("select * from posts where id = ? and hidden = 0", pid)) || one(`select p.*, (select count(*) from post_reactions r where r.post_id = p.id) as score ${base} order by score desc, created_at desc limit 1 offset ?`, arg, id, i);
+  if (!post) return null;
+  const counts = Object.fromEntries(REACTS.map((e) => [e, one("select count(*) as n from post_reactions where post_id = ? and emoji = ?", post.id, e)?.n ?? 0]));
+  const mine = one("select emoji from post_reactions where post_id = ? and user_id = ?", post.id, id)?.emoji;
+  const hours = Math.max(0, Math.floor((nowSec() - post.created_at) / 3600));
+  const ago = hours < 1 ? "щойно" : hours < 24 ? `${hours} год тому` : `${Math.floor(hours / 24)} дн. тому`;
+  const head = scope === "q" ? `🌙 Відповіді на питання дня · ${i + 1}/${total}\n«${qotdToday().question}»` : `🧱 Стіна зізнань · ${i + 1}/${total}`;
+  const text = `${head}\n\n${post.text}\n\n🕒 ${ago}${post.author_id === id ? " · це твоє" : ""}`;
+  const markup = { inline_keyboard: [
+    REACTS.map((e) => ({ text: `${mine === e ? "✅" : e} ${counts[e]}`, callback_data: `wall:r:${scope}:${i}:${REACTS.indexOf(e)}:${post.id}` })),
+    [{ text: "⏭ Далі", callback_data: `wall:v:${scope}:${i + 1}` }, { text: scope === "q" ? "🌙 Питання" : "✍️ Написати своє", callback_data: scope === "q" ? "wall:qotd" : "wall:new" }],
+    [{ text: "🚩 Поскаржитись", callback_data: `wall:x:${scope}:${i}:0:${post.id}` }],
+  ] };
+  return { text, markup };
+}
+async function editOrSend(id, messageId, text, markup) {
+  const lang = langOf(id);
+  if (messageId) {
+    try { await tg("editMessageText", { chat_id: id, message_id: messageId, text: L(lang, text), reply_markup: localizeMarkup(lang, markup) }); return; }
+    catch (err) { if (/not modified/i.test(err.message)) return; }
+  }
+  await send(id, text, markup);
+}
+async function showWall(id, scope = "w", offset = 0, messageId = null, pid = null) {
+  const me = one("select adult, banned from users where id = ?", id);
+  if (me?.banned) return send(id, "Доступ до бота обмежено.");
+  if (!me?.adult) return showAge(id);
+  if (scope === "q" && !one("select 1 as x from posts where author_id = ? and kind = 'qotd' and day = ?", id, qotdToday().day)) return showQotd(id);
+  const view = postView(id, scope, offset, pid);
+  if (!view) {
+    return scope === "q"
+      ? editOrSend(id, messageId, "🌙 Ти відповів(ла) першим! Інші відповіді з’являться згодом — загляни пізніше 😉", { inline_keyboard: [[{ text: "🧱 Стіна зізнань", callback_data: "wall:v:w:0" }]] })
+      : editOrSend(id, messageId, "🧱 Стіна зізнань поки порожня. Стань першим — напиши анонімне зізнання для всіх 👀", { inline_keyboard: [[{ text: "✍️ Написати своє", callback_data: "wall:new" }]] });
+  }
+  await editOrSend(id, messageId, view.text, view.markup);
+}
+async function showQotd(id) {
+  const me = one("select adult, banned, status from users where id = ?", id);
+  if (me?.banned) return send(id, "Доступ до бота обмежено.");
+  if (!me?.adult) return showAge(id);
+  const { day, question } = qotdToday();
+  const answered = Boolean(one("select 1 as x from posts where author_id = ? and kind = 'qotd' and day = ?", id, day));
+  const n = one("select count(*) as n from posts where kind = 'qotd' and day = ? and hidden = 0", day)?.n ?? 0;
+  if (answered) return send(id, `🌙 Питання дня\n\n${question}\n\nВідповіли: ${n}`, { inline_keyboard: [[{ text: "👀 Відповіді інших", callback_data: "wall:v:q:0" }]] });
+  if (me.status === "chat") return send(id, "Спочатку заверши поточний діалог.");
+  run("update users set pending = 'qotd' where id = ?", id);
+  await send(id, `🌙 Питання дня\n\n${question}\n\nНапиши відповідь — вона буде анонімною. Відповіси — побачиш, що написали інші (уже ${n}) 👀`, cancelKb);
+}
+async function startWallPost(id) {
+  const me = one("select status from users where id = ?", id);
+  if (me?.status === "chat") return send(id, "Спочатку заверши поточний діалог.");
+  const today = one("select count(*) as n from posts where author_id = ? and kind = 'wall' and created_at > ?", id, nowSec() - 86400)?.n ?? 0;
+  if (today >= WALL_PER_DAY) return send(id, "На сьогодні досить постів на стіні. Повертайся завтра 🙂");
+  run("update users set pending = 'wallpost' where id = ?", id);
+  await send(id, "✍️ Напиши анонімне зізнання для всіх: таємницю, думку чи історію. Ніхто не дізнається, що це ти 🤫\n\nБез імен, посилань і номерів.", cancelKb);
+}
+async function savePost(id, kind, text) {
+  run("update users set pending = null where id = ?", id);
+  const body = String(text).trim().slice(0, POST_MAX);
+  if (!body) return showLobby(id);
+  if (leaksContact(body)) {
+    run("update users set pending = ? where id = ?", kind === "qotd" ? "qotd" : "wallpost", id);
+    return send(id, "Без посилань, юзернеймів і номерів — тут усе анонімно 🙂 Напиши ще раз.", cancelKb);
+  }
+  const day = kind === "qotd" ? qotdToday().day : null;
+  if (kind === "qotd" && one("select 1 as x from posts where author_id = ? and kind = 'qotd' and day = ?", id, day)) return showWall(id, "q", 0);
+  run("insert into posts (id, author_id, kind, day, text, created_at) values (?, ?, ?, ?, ?, ?)", code(10), id, kind, day, body, nowSec());
+  addPoints(id, kind === "qotd" ? 2 : 1);
+  if (kind === "qotd") { await send(id, "✅ Відповідь збережено! +2 очки сезону 🏆\nОсь що написали інші:"); return showWall(id, "q", 0); }
+  await send(id, "✅ Опубліковано на стіні! Коли твоє зізнання почнуть вподобувати — я скажу 😉");
+  return showWall(id, "w", 0);
+}
+async function onWallCallback(id, data, cbq) {
+  const queryId = cbq.id;
+  const messageId = cbq.message?.message_id ?? null;
+  const me = ensure(id, cbq.from);
+  if (me.banned || !me.adult) { await tg("answerCallbackQuery", { callback_query_id: queryId }); return me.banned ? send(id, "Доступ до бота обмежено.") : showAge(id); }
+  const [, action, scopeRaw, iRaw, eRaw, pidRaw] = data.split(":");
+  const scope = scopeRaw === "q" ? "q" : "w";
+  if (action === "new") { await tg("answerCallbackQuery", { callback_query_id: queryId }); return startWallPost(id); }
+  if (action === "qotd") { await tg("answerCallbackQuery", { callback_query_id: queryId }); return showQotd(id); }
+  if (action === "v") { await tg("answerCallbackQuery", { callback_query_id: queryId }); return showWall(id, scope, Number(iRaw) || 0, messageId); }
+  if (action === "r") {
+    const pid = String(pidRaw || "").replace(/[^a-f0-9]/g, "").slice(0, 12);
+    const emoji = REACTS[Number(eRaw)];
+    const post = pid && emoji ? one("select * from posts where id = ? and hidden = 0", pid) : null;
+    if (!post) { await tg("answerCallbackQuery", { callback_query_id: queryId }); return showWall(id, scope, 0, messageId); }
+    const prev = one("select emoji from post_reactions where post_id = ? and user_id = ?", pid, id)?.emoji;
+    if (prev === emoji) run("delete from post_reactions where post_id = ? and user_id = ?", pid, id);
+    else run("insert into post_reactions (post_id, user_id, emoji) values (?, ?, ?) on conflict (post_id, user_id) do update set emoji = excluded.emoji", pid, id, emoji);
+    await tg("answerCallbackQuery", { callback_query_id: queryId, text: prev === emoji ? "" : emoji });
+    if (!prev && post.author_id !== id) {
+      addPoints(post.author_id, 1);
+      const total = one("select count(*) as n from post_reactions where post_id = ?", pid)?.n ?? 0;
+      const hit = REACT_MILESTONES.filter((m) => total >= m && post.notified < m).pop();
+      if (hit) {
+        run("update posts set notified = ? where id = ?", hit, pid);
+        const quote = post.text.length > 80 ? post.text.slice(0, 77) + "…" : post.text;
+        try { await send(post.author_id, `🔥 Твій пост зібрав ${hit} реакцій!\n«${quote}»`); } catch (err) { if (!isGone(err)) console.error("[bot] wall notify", err.message); }
+      }
+    }
+    return showWall(id, scope, Number(iRaw) || 0, messageId, pid);
+  }
+  if (action === "x") {
+    const pid = String(pidRaw || "").replace(/[^a-f0-9]/g, "").slice(0, 12);
+    await tg("answerCallbackQuery", { callback_query_id: queryId, text: tr(id, "Скаргу прийнято") });
+    if (pid && run("insert into post_reports (post_id, user_id) values (?, ?) on conflict do nothing", pid, id).changes) {
+      run("update posts set reports = reports + 1, hidden = case when reports + 1 >= 3 then 1 else hidden end where id = ?", pid);
+    }
+    return showWall(id, scope, Number(iRaw) || 0, messageId);
+  }
+  await tg("answerCallbackQuery", { callback_query_id: queryId });
+}
+
+async function showTop(id) {
+  const me = one("select adult, banned from users where id = ?", id);
+  if (me?.banned) return send(id, "Доступ до бота обмежено.");
+  if (!me?.adult) return showAge(id);
+  const season = seasonNow();
+  const left = SEASON_EPOCH + season * SEASON_LEN - nowSec();
+  const rows = q("select sp.user_id, sp.points, u.display_name, u.first_name, u.id from season_points sp join users u on u.id = sp.user_id where sp.season = ? and u.banned = 0 and sp.points > 0 order by sp.points desc, sp.user_id limit 10", season);
+  const medals = ["🥇", "🥈", "🥉"];
+  const lines = rows.map((r, i) => `${medals[i] ?? `${i + 1}.`} ${crownOf(r.user_id)}${nickOf(r)} — ${r.points}`);
+  const mine = one("select points from season_points where season = ? and user_id = ?", season, id)?.points ?? 0;
+  const place = mine ? (one("select count(*) as n from season_points where season = ? and points > ?", season, mine)?.n ?? 0) + 1 : 0;
+  await send(id, `🏆 Сезон ${season} · до кінця ${Math.floor(left / 86400)} дн. ${Math.floor((left % 86400) / 3600)} год\n\n${lines.join("\n") || "Поки ніхто не набрав очок — стань першим!"}\n\nТи: ${place ? `#${place} · ${mine} очок` : "ще без очок"}\n\nОчки дають: ❤️ реакції й 💋 поцілунки в грі, 🎁 подарунки, реакції на стіні, 🌙 відповіді на питання дня, 💞 взаємні симпатії.\nНагороди: 🥇 7 днів Premium, 🥈 3 дні, 🥉 1 день. Переможець отримує корону 👑 біля імені.`);
+}
+// Кінець сезону: нагороджуємо топ-3 минулого сезону (раз, навіть після перезапуску).
+export async function seasonTick() {
+  const prev = seasonNow() - 1;
+  if (prev < 1 || one("select 1 as x from season_winners where season = ?", prev)) return;
+  const top = q("select sp.user_id from season_points sp join users u on u.id = sp.user_id where sp.season = ? and u.banned = 0 and sp.points > 0 order by sp.points desc, sp.user_id limit 3", prev);
+  if (!top.length) { run("insert into season_winners (season, user_id, place) values (?, '', 0) on conflict do nothing", prev); return; }
+  for (const [i, row] of top.entries()) {
+    const prize = SEASON_PRIZES[i];
+    if (!run("insert into season_winners (season, user_id, place) values (?, ?, ?) on conflict do nothing", prev, row.user_id, prize.place).changes) continue;
+    run("update users set premium_until = max(premium_until, ?) + ? where id = ?", nowSec(), prize.days * 86400, row.user_id);
+    try { await send(row.user_id, `${prize.medal} Сезон ${prev} завершено — ти на ${prize.place} місці!\nНагорода: ${prize.days} дн. Premium${prize.place === 1 ? " і корона 👑 біля імені" : ""}. Новий сезон уже почався 🏆`); }
+    catch (err) { if (!isGone(err)) console.error("[bot] season", err.message); }
+  }
+}
+
 async function showRules(id) {
   await send(id, "📜 Правила\n• Лише 18+.\n• Не надсилай контакти, адресу, документи і посилання на свої профілі.\n• Не ображай співрозмовника.\n• «Завершити діалог» або /stop зупиняє розмову.\n• «Наступний» шукає іншу людину.\n• Скарга — кнопка під час діалогу.");
 }
@@ -913,6 +1130,7 @@ async function onLike(id, yes, tok, queryId) {
   }
   await tg("answerCallbackQuery", { callback_query_id: queryId, text: "💞" });
   run("delete from likes where (from_id = ? and to_id = ?) or (from_id = ? and to_id = ?)", id, row.to_id, row.to_id, id);
+  addPoints(id, 3); addPoints(row.to_id, 3);
   const req = code(8);
   run("delete from requests where from_id = ? and to_id = ?", id, row.to_id);
   run("insert into requests (id, from_id, to_id) values (?, ?, ?)", req, id, row.to_id);
@@ -1427,6 +1645,9 @@ async function onCommand(chatId, id, name, args, from) {
   if (name === "premium") { ensure(id, from); return showPremium(id); }
   if (name === "invite") { ensure(id, from); return showInvite(id); }
   if (name === "confess") { ensure(id, from); return showConfess(id); }
+  if (name === "wall") { ensure(id, from); return showWall(id, "w", 0); }
+  if (name === "question" || name === "qotd") { ensure(id, from); return showQotd(id); }
+  if (name === "top" || name === "season") { ensure(id, from); return showTop(id); }
   if (name === "report") { ensure(id, from); return reportPartner(id); }
   if (name === "rules") return showRules(id);
   if (name === "help") return showHelp(id);
@@ -1445,6 +1666,8 @@ async function onText(message, id, text) {
   if (!me.adult) return me.pending === "onb_age" ? onboardAge(id, text) : showAge(id);
   const pending = one("select pending from users where id = ?", id)?.pending;
   if (pending === "confess" && me.status !== "chat") return deliverConfession(id, text);
+  if (pending === "wallpost" && me.status !== "chat") return savePost(id, "wall", text);
+  if (pending === "qotd" && me.status !== "chat") return savePost(id, "qotd", text);
   if (pending?.startsWith("creply:") && me.status !== "chat") return deliverReply(id, pending.slice(7), text);
   // У діалозі текст завжди йде співрозмовнику, а не в анкету.
   if (pending && me.status !== "chat") return savePending(id, pending, ["form_gender", "form_aim", "form_photo", "gender"].includes(pending) ? toUk(text, CHOICE_WORDS) : text);
@@ -1515,6 +1738,7 @@ export async function handleUpdate(update) {
       }
       else if (data.startsWith("lang:")) { ensure(id, from); await setLanguage(id, data.slice(5), queryId); }
       else if (data.startsWith("conf:")) await onConfessCallback(id, data, queryId, from);
+      else if (data.startsWith("wall:")) await onWallCallback(id, data, update.callback_query);
       else if (data.startsWith("like:")) { const [, v, tok] = data.split(":"); ensure(id, from); await onLike(id, v === "y", String(tok || "").replace(/[^a-f0-9]/g, "").slice(0, 12), queryId); }
       else if (data.startsWith("ice:")) { ensure(id, from); await onIcebreaker(id, Number(data.slice(4)), queryId); }
       else if (data === "party:off") { run("insert into party_off (id) values (?) on conflict do nothing", id); await tg("answerCallbackQuery", { callback_query_id: queryId }); await send(id, "🔕 Більше не кличу на вечірки. Увімкнути знову: ⚙️ Налаштування."); }
@@ -1577,7 +1801,7 @@ export async function handleUpdate(update) {
     const me = ensure(id, from);
     if (me.banned) return await send(id, "Доступ до бота обмежено.");
     if (!me.adult) return await showAge(id);
-    if (me.pending === "confess" || me.pending?.startsWith("creply:")) return await send(id, "Поки що можна надіслати лише текст ✍️", cancelKb);
+    if (["confess", "wallpost", "qotd"].includes(me.pending) || me.pending?.startsWith("creply:")) return await send(id, "Поки що можна надіслати лише текст ✍️", cancelKb);
     if (me.status !== "chat") return await showLobby(id, "Фото, голос і стікери можна надсилати лише в діалозі.");
     await relay(message, id);
   } catch (err) { console.error("[bot] message", err.stack || err.message); }
@@ -1586,7 +1810,7 @@ export async function handleUpdate(update) {
 const COMMANDS = [
   ["start", "Почати"], ["game", "Гра в бутилочку"], ["search", "Знайти співрозмовника"], ["next", "Наступний співрозмовник"],
   ["stop", "Завершити діалог"], ["profile", "Мій профіль"], ["form", "Заповнити анкету"], ["photo", "Завантажити фото"],
-  ["premium", "Premium"], ["confess", "Анонімні зізнання"], ["invite", "Запросити друзів"], ["report", "Поскаржитись"], ["rules", "Правила"], ["help", "Допомога"],
+  ["premium", "Premium"], ["confess", "Анонімні зізнання"], ["wall", "Стіна зізнань"], ["question", "Питання дня"], ["top", "Рейтинг сезону"], ["invite", "Запросити друзів"], ["report", "Поскаржитись"], ["rules", "Правила"], ["help", "Допомога"],
   ["settings", "Налаштування"], ["language", "Змінити мову"], ["myid", "Мій Telegram ID"], ["stopnews", "Відписатись від новин"], ["startnews", "Знову отримувати новини"],
 ];
 export const commandList = (lang) => COMMANDS.map(([command, description]) => ({ command, description: L(lang, description) }));
