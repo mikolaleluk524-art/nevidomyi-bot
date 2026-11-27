@@ -294,6 +294,12 @@ if (!one("SELECT 1 FROM settings WHERE key = '_sms_text_v3'")) {
   run("INSERT INTO settings(key, value) VALUES('_sms_text_v3', '1')");
 }
 
+// Одноразово: код підтвердження Google Search Console
+if (!one("SELECT 1 FROM settings WHERE key = '_gverify_v1'")) {
+  run("INSERT INTO settings(key, value) VALUES('googleVerify', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", JSON.stringify("CBo1nGBy6OvK3h_AWJdO_jHr3Reo9xjYNRFyZtsxCu4"));
+  run("INSERT INTO settings(key, value) VALUES('_gverify_v1', '1')");
+}
+
 export function getSettings() {
   const rows = all("SELECT key, value FROM settings WHERE key NOT LIKE '\\_%' ESCAPE '\\'");
   const s = { ...DEFAULT_SETTINGS };
