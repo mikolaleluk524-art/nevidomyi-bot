@@ -8,8 +8,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 const CLAUDE_MODEL = "claude-opus-5-5";
-// Безкоштовні моделі Gemini: перша, що відповість. GEMINI_MODEL у Railway — щоб вказати свою.
-const GEMINI_MODELS = [process.env.GEMINI_MODEL, "gemini-flash-latest", "gemini-2.5-flash"].filter(Boolean);
+// Безкоштовні моделі Gemini: перша, що відповість. Легкі (lite) відповідають швидко й майже завжди,
+// сильніші на безкоштовному плані часто перевантажені (503). GEMINI_MODEL у Railway — щоб поставити свою першою.
+const GEMINI_MODELS = [...new Set([process.env.GEMINI_MODEL, "gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-flash-latest"].filter(Boolean))];
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/";
 
 export const aiProvider = () => (process.env.ANTHROPIC_API_KEY ? "claude" : process.env.GEMINI_API_KEY ? "gemini" : null);
@@ -51,7 +52,7 @@ async function geminiCall(model, prompt, schema, maxTokens, withSchema) {
       contents: [{ role: "user", parts: [{ text: prompt + "\n\nВідповідай лише JSON за цією схемою:\n" + JSON.stringify(schema) }] }],
       generationConfig,
     }),
-    signal: AbortSignal.timeout(60000),
+    signal: AbortSignal.timeout(30000),
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -66,21 +67,21 @@ async function geminiCall(model, prompt, schema, maxTokens, withSchema) {
 }
 
 async function askGemini(prompt, schema, maxTokens) {
-  let last;
+  const errors = [];
   for (const model of GEMINI_MODELS) {
     for (const withSchema of [true, false]) {
       try {
         return await geminiCall(model, prompt, schema, maxTokens, withSchema);
       } catch (err) {
-        last = err;
+        errors.push(`${model}: ${err.message}`);
         if (err.status === 401 || err.status === 403) throw new Error("ключ GEMINI_API_KEY не підходить");
-        if (err.status === 429) throw new Error("Gemini: вичерпано безкоштовний ліміт, спробуй пізніше");
-        if (err.status === 404) break; // такої моделі немає — пробуємо наступну
-        // 400 зі схемою — повторюємо без схеми; інші помилки — теж ще одна спроба
+        // 400 зі схемою — повторюємо ту саму модель без схеми; решта (перевантаження, ліміт,
+        // моделі немає, поганий JSON) — одразу наступна модель.
+        if (!(withSchema && err.status === 400)) break;
       }
     }
   }
-  throw last;
+  throw new Error("Gemini не відповів:\n  " + errors.join("\n  "));
 }
 
 /** Повертає { source: "claude" | "gemini", data } або кидає помилку. */
