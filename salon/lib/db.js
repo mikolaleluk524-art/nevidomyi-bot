@@ -250,7 +250,7 @@ export const DEFAULT_SETTINGS = {
   smsHour: 19, // о котрій надсилати (за Києвом)
   smsSender: "Magiya", // підпис відправника, зареєстрований у TurboSMS
   smsChannel: "viber+sms", // viber | viber+sms (Viber, а якщо не дійшло — SMS) | sms
-  smsText: "Добрий вечір, {імʼя}! Це помічниця Марини, «Магія краси». Нагадуємо: завтра о {час} — {процедура}. Кушніренка 7а, оф. 507. Чекаємо на вас! 💅 Наш сайт: {сайт}",
+  smsText: "Доброго вечора, шановний клієнте! Нагадуємо, що завтра о {час} вас чекають за адресою: Кушніренка 7а, 5 поверх, офіс 507. Магія краси: {сайт}",
   giftAmounts: "500, 800, 1000, 1500, 2000", // номінали подарункових сертифікатів
   giftMonths: 6, // термін дії сертифіката, місяців
   cashbackPercent: 5, // кешбек бонусами з кожного візиту
@@ -286,6 +286,12 @@ if (!one("SELECT 1 FROM settings WHERE key = '_sms_sender_v1'")) {
   run("INSERT INTO settings(key, value) VALUES('smsSender', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", JSON.stringify("MarinaManik"));
   run("INSERT INTO settings(key, value) VALUES('smsChannel', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", JSON.stringify("sms"));
   run("INSERT INTO settings(key, value) VALUES('_sms_sender_v1', '1')");
+}
+
+// Одноразово: новий текст нагадування — без імен клієнток (як записала майстер, клієнтці бачити не треба)
+if (!one("SELECT 1 FROM settings WHERE key = '_sms_text_v2'")) {
+  run("INSERT INTO settings(key, value) VALUES('smsText', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", JSON.stringify(DEFAULT_SETTINGS.smsText));
+  run("INSERT INTO settings(key, value) VALUES('_sms_text_v2', '1')");
 }
 
 export function getSettings() {
