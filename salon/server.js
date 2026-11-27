@@ -17,6 +17,7 @@ import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { all, db, getSecret, getSettings, integrity, one, run, setSecret, setSettings, UPLOAD_DIR } from "./lib/db.js";
 import { backupPath, listBackups, runBackups, startBackups } from "./lib/backup.js";
+import { lastSms, realPhone, sendSms, smsBalance, smsLog, smsOn, smsText, smsTick, smsTomorrowPreview } from "./lib/sms.js";
 import { readTemplate, renderIndex, robots, sitemap } from "./lib/seo.js";
 import { botInfo, linkCode, ownerChats, removeChat, startTelegram, telegramOn } from "./lib/telegram.js";
 import { addDays, hm, humanDate, isDate, kyivNow, kyivToUtc, toMin } from "./lib/time.js";
@@ -521,7 +522,7 @@ async function adminApi(req, res, p, m, q) {
        WHERE b.date BETWEEN ? AND ? AND b.status != 'expired' ORDER BY b.date, b.start`,
       from,
       to
-    ).map((b) => ({ ...publicBooking(b), clientName: b.client_name, clientPhone: b.client_phone, clientNote: b.client_note, comment: b.comment, visits: b.visits, noShows: b.no_shows, source: b.source, clientId: b.client_id }));
+    ).map((b) => ({ ...publicBooking(b), clientName: b.client_name, clientPhone: b.client_phone, clientNote: b.client_note, comment: b.comment, visits: b.visits, noShows: b.no_shows, source: b.source, clientId: b.client_id, smsSent: Boolean(b.sms_sent), sms: lastSms(b.id) || null }));
     const blocks = all("SELECT * FROM blocks WHERE date BETWEEN ? AND ? ORDER BY date, start", from, to);
     return send(res, 200, { from, to, bookings: rows, blocks });
   }
@@ -575,6 +576,18 @@ async function adminApi(req, res, p, m, q) {
       backups: listBackups().slice(0, 20),
     });
   }
+  if (m === "GET" && p === "/api/admin/sms") {
+    return send(res, 200, { on: smsOn(), balance: await smsBalance(), tomorrow: smsTomorrowPreview(), log: smsLog(20) });
+  }
+  if (m === "POST" && p === "/api/admin/sms/test") {
+    const body = await json(req);
+    const phone = realPhone(normPhone(body.phone) || "");
+    if (!phone) throw new HttpError(400, "Вкажіть номер телефону");
+    const s = getSettings();
+    const text = smsText({ client_name: "Марина", date: addDays(kyivNow().date, 1), start: 11 * 60, service_name: "Покриття гель-лаком" }, s);
+    return send(res, 200, await sendSms(phone, text));
+  }
+
   if (m === "GET" && p === "/api/admin/telegram") {
     if (!telegramOn()) return send(res, 200, { on: false });
     const bot = await botInfo();
@@ -837,6 +850,19 @@ async function adminApi(req, res, p, m, q) {
     const body = await json(req);
     const id = Number(cm[1]);
     if (typeof body.note === "string") run("UPDATE clients SET note = ? WHERE id = ?", body.note.slice(0, 1000), id);
+    if (typeof body.name === "string" && body.name.trim()) run("UPDATE clients SET name = ? WHERE id = ?", body.name.trim().slice(0, 80), id);
+    if (typeof body.phone === "string") {
+      const phone = normPhone(body.phone);
+      if (!phone) throw new HttpError(400, "Перевірте номер телефону");
+      const other = one("SELECT id FROM clients WHERE phone = ? AND id != ?", phone, id);
+      if (other) {
+        // Такий номер уже є в іншої клієнтки — обʼєднуємо: записи переходять до неї
+        run("UPDATE bookings SET client_id = ? WHERE client_id = ?", other.id, id);
+        run("UPDATE reviews SET client_id = ? WHERE client_id = ?", other.id, id);
+        return send(res, 200, { ok: true, merged: other.id });
+      }
+      run("UPDATE clients SET phone = ? WHERE id = ?", phone, id);
+    }
     if (["", "never", "always"].includes(body.prepayRule)) run("UPDATE clients SET prepay_rule = ? WHERE id = ?", body.prepayRule, id);
     if (Number(body.bonusDelta)) addBonus(id, Math.trunc(Number(body.bonusDelta)), body.reason || "Коригування від майстра");
     return send(res, 200, { ok: true });
@@ -1065,6 +1091,7 @@ function serveFile(res, f) {
 // ---------- фонові задачі: нагадування, згорання броней ----------
 async function tick() {
   const now = Date.now();
+  await smsTick().catch((e) => console.error("[sms tick]", e.message));
   // Неоплачені броні звільняють час через PENDING_MINUTES хв.
   // pay_until > 0 — передоплату попросила майстер, у клієнтки є кілька годин; інакше — 20 хв.
   for (const b of all(

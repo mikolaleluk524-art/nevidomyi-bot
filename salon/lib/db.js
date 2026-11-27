@@ -195,6 +195,7 @@ for (const [table, col, def] of [
   ["services", "addon", "INTEGER DEFAULT 0"], // 1 = доповнення до основної послуги (френч, ремонт)
   ["services", "price_from", "INTEGER DEFAULT 0"], // 1 = показувати ціну як «від …»
   ["clients", "prepay_rule", "TEXT DEFAULT ''"], // '' = автоматично, never = без передоплати, always = завжди з передоплатою
+  ["bookings", "sms_sent", "INTEGER DEFAULT 0"], // SMS-нагадування напередодні вже надіслано
   ["bookings", "pay_until", "INTEGER DEFAULT 0"], // до коли треба сплатити передоплату (після рішення майстра)
 ]) {
   if (!db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
@@ -244,6 +245,10 @@ export const DEFAULT_SETTINGS = {
   cancelHours: 24, // безкоштовне скасування не пізніше ніж за N годин
   refBonus: 0, // «Приведи подругу» вимкнено (власниця вирішила не давати знижок за запрошення)
   refDiscount: 0,
+  smsEnabled: 1, // SMS-нагадування клієнткам увечері перед візитом
+  smsHour: 19, // о котрій надсилати (за Києвом)
+  smsSender: "Magiya", // підпис відправника, зареєстрований у TurboSMS
+  smsText: "Добрий вечір, {імʼя}! Це помічниця Марини, «Магія краси». Нагадуємо: завтра о {час} — {процедура}. Кушніренка 7а, оф. 507. Чекаємо на вас! 💅",
   giftAmounts: "500, 800, 1000, 1500, 2000", // номінали подарункових сертифікатів
   giftMonths: 6, // термін дії сертифіката, місяців
   cashbackPercent: 5, // кешбек бонусами з кожного візиту

@@ -172,7 +172,10 @@ async function bookings(box) {
             <div class="row wrap" style="margin-top:8px">
               <a class="btn sm line" href="tel:${esc(tel(b.clientPhone))}">📞</a>
               <a class="btn sm line" href="viber://chat?number=${esc(tel(b.clientPhone).replace("+", "%2B"))}">Viber</a>
-              ${b.source === "zoshyt" ? '<span class="badge mute">з зошита</span>' : ""}
+              ${b.clientPhone.includes(" #") ? `<button class="btn sm" data-phone="${b.clientId}" data-name="${esc(b.clientName)}">📱 Вписати номер</button>` : `<button class="btn sm line" data-phone="${b.clientId}" data-name="${esc(b.clientName)}" title="Змінити номер">✏️</button>`}
+            </div>
+            ${b.status === "confirmed" && b.date >= today() ? `<div class="small" style="margin-top:6px">${b.clientPhone.includes(" #") ? "⚠️ Немає номера — SMS-нагадування не прийде" : b.sms ? (b.sms.ok ? "✉️ SMS-нагадування надіслано" : `⚠️ SMS не надіслано: ${esc(b.sms.info)}`) : b.smsSent ? "" : "✉️ SMS-нагадування прийде напередодні ввечері"}</div>` : ""}
+            <div class="row wrap" style="margin-top:8px">
               ${b.status === "request" ? `
                 <button class="btn sm" data-dec="confirm" data-id="${b.id}">✓ Без передоплати</button>
                 <button class="btn sm ghost" data-dec="prepay" data-id="${b.id}">💳 З передоплатою</button>
@@ -221,10 +224,30 @@ async function bookings(box) {
     }
     route();
   }));
+  box.querySelectorAll("[data-phone]").forEach((b) => (b.onclick = () => phoneForm(b.dataset.phone, b.dataset.name)));
   box.querySelectorAll("[data-unblock]").forEach((b) => (b.onclick = async () => {
     await api(`/api/admin/blocks/${b.dataset.unblock}`, { method: "DELETE" });
     route();
   }));
+}
+
+function phoneForm(clientId, name) {
+  sheet(`<h2>Номер телефону</h2><p class="small muted">${esc(name)} — на цей номер прийде SMS-нагадування ввечері перед візитом.</p>
+    <label class="f"><span>Імʼя</span><input id="pn" value="${esc(name)}"></label>
+    <label class="f"><span>Телефон</span><input id="pp" type="tel" inputmode="tel" value="+380" autofocus></label>
+    <div class="err" id="perr"></div>
+    <button class="btn block" style="margin-top:14px" id="psave">Зберегти</button>`, (el, close) => {
+    $("#psave", el).onclick = async () => {
+      try {
+        const r = await api(`/api/admin/clients/${clientId}`, { body: { name: $("#pn", el).value, phone: $("#pp", el).value } });
+        close();
+        toast(r.merged ? "Ця клієнтка вже була в базі — записи обʼєднано ✓" : "Номер збережено ✓");
+        route();
+      } catch (e) {
+        $("#perr", el).textContent = e.message;
+      }
+    };
+  });
 }
 
 function manualBooking() {
@@ -466,7 +489,7 @@ async function clients(box, q = "") {
   box.innerHTML = `<input id="cq" placeholder="🔍 Імʼя або телефон" value="${esc(q)}">
     <div class="stack" style="margin-top:12px">${list.map((c) => `<div class="card">
       <div class="row between"><b>${esc(c.name)}</b><span class="badge">💎 ${c.bonus}</span></div>
-      <div class="small"><a href="tel:${esc(tel(c.phone))}">${esc(tel(c.phone))}</a>${c.phone.includes(" #") ? ' <span class="badge mute">з зошита — номер уточнити</span>' : ""} · візитів: ${c.visits}${c.last_visit ? ` · останній ${c.last_visit}` : ""}</div>
+      <div class="small"><a href="tel:${esc(tel(c.phone))}">${esc(tel(c.phone))}</a>${c.phone.includes(" #") ? ' <span class="badge mute">з зошита — номер уточнити</span>' : ""} <button class="btn sm line" data-cphone="${c.id}" data-name="${esc(c.name)}">✏️</button> · візитів: ${c.visits}${c.last_visit ? ` · останній ${c.last_visit}` : ""}</div>
       <div class="small muted">${c.referred_by_name ? `привела: ${esc(c.referred_by_name)} · ` : ""}${c.invited ? `запросила: ${c.invited} · ` : ""}${c.birthday ? `🎂 ${c.birthday.slice(5)} · ` : ""}${c.src ? `QR: ${esc(c.src)}` : ""}</div>
       <label class="f"><span>Нотатка (бачите лише ви)</span><input data-note="${c.id}" value="${esc(c.note)}" placeholder="Алергія, улюблений колір…"></label>
       ${onlinePay ? `<label class="f"><span>Передоплата</span><select data-rule="${c.id}">
@@ -480,6 +503,7 @@ async function clients(box, q = "") {
     clearTimeout(t);
     t = setTimeout(() => clients(box, e.target.value).then(() => $("#cq").focus()), 400);
   };
+  box.querySelectorAll("[data-cphone]").forEach((b) => (b.onclick = () => phoneForm(b.dataset.cphone, b.dataset.name)));
   box.querySelectorAll("[data-rule]").forEach((sel) => (sel.onchange = async () => {
     await api(`/api/admin/clients/${sel.dataset.rule}`, { body: { prepayRule: sel.value } });
     toast("Збережено");
@@ -633,6 +657,8 @@ async function settings(box) {
       ${f("googleVerify", "Код підтвердження Google")}
       <button class="btn ghost block" style="margin-top:10px" id="save2">Зберегти</button></section>
 
+    <section class="section card" id="smsbox"><h3>✉️ SMS-нагадування</h3><div class="spinner"></div></section>
+
     <section class="section card" id="tgbox"><h3>📒 Telegram-зошит</h3><div class="spinner"></div></section>
 
     <section class="section card" id="safety"><h3>🛡 Збереження записів</h3><div class="spinner"></div></section>
@@ -668,6 +694,7 @@ async function settings(box) {
   $("#push").onclick = adminPush;
   renderSafety();
   renderTelegram();
+  renderSms(s);
   $("#bsend").onclick = async () => {
     if (!$("#bt").value.trim()) return toast("Вкажіть заголовок");
     if (!confirm("Надіслати всім клієнткам?")) return;
@@ -718,6 +745,45 @@ async function settings(box) {
   } catch {
     $("#map").remove();
   }
+}
+
+async function renderSms(s) {
+  const box = $("#smsbox");
+  const d = await api("/api/admin/sms");
+  const f = (k, label, type = "text") => `<label class="f"><span>${label}</span>${type === "area" ? `<textarea data-k2="${k}" style="min-height:120px">${esc(s[k])}</textarea>` : `<input data-k2="${k}" type="${type}" value="${esc(s[k])}">`}</label>`;
+  box.innerHTML = `<h3>✉️ SMS-нагадування</h3>
+    <p class="small">${d.on ? `✅ TurboSMS підключено${d.balance !== null ? ` · баланс: <b>${esc(d.balance)}</b> грн` : ""}` : "⚪ Ще не підключено — потрібен акаунт TurboSMS (див. інструкцію від розробника)"}</p>
+    <p class="small muted">Щовечора кожна клієнтка, записана на завтра, отримує SMS на свій номер. Клієнткам без номера (з паперового зошита) SMS не приходить — впишіть номер у записі кнопкою «📱».</p>
+    <label class="check"><input type="checkbox" id="smsEn" ${s.smsEnabled ? "checked" : ""}> Надсилати нагадування</label>
+    <div class="two">${f("smsHour", "О котрій годині (19 = 19:00)", "number")}${f("smsSender", "Підпис відправника")}</div>
+    ${f("smsText", "Текст повідомлення", "area")}
+    <p class="small muted">Підставляється автоматично: {імʼя}, {дата}, {час}, {процедура}, {адреса}, {телефон}. Одна SMS кирилицею — 70 символів, довший текст ділиться на кілька SMS (і коштує дорожче). Зараз: <b id="smsLen"></b>.</p>
+    <button class="btn ghost block" id="smsSave" style="margin-top:8px">Зберегти</button>
+    <div class="row" style="margin-top:10px"><input id="smsPhone" type="tel" placeholder="Ваш номер для перевірки" value="+380"><button class="btn" id="smsTest">Тест</button></div>
+    ${d.tomorrow.length ? `<h3 style="margin-top:14px">Завтра отримають</h3>${d.tomorrow.map((t) => `<div class="small" style="padding:4px 0;border-bottom:1px solid var(--line)">${t.time} <b>${esc(t.name)}</b> — ${t.phone ? (t.sent ? "✓ надіслано" : "прийде о " + s.smsHour + ":00") : "⚠️ немає номера"}</div>`).join("")}` : ""}
+    ${d.log.length ? `<details style="margin-top:12px"><summary class="small">Останні SMS (${d.log.length})</summary>${d.log.map((l) => `<div class="small" style="padding:4px 0;border-bottom:1px solid var(--line)">${l.ok ? "✓" : "⚠️"} ${new Date(l.created_at).toLocaleString("uk-UA")} · +${esc(l.phone)} · ${esc(l.info)}</div>`).join("")}</details>` : ""}`;
+  const len = () => {
+    const sample = $('[data-k2="smsText"]').value.replace("{імʼя}", "Олена").replace("{дата}", "28 листопада").replace("{час}", "11:00").replace("{процедура}", "покриття гель-лаком").replace("{адреса}", [s.address, s.cabinet].join(", ")).replace("{телефон}", "0666230824");
+    const n = sample.length;
+    $("#smsLen").textContent = `${n} символів ≈ ${n <= 70 ? 1 : Math.ceil(n / 67)} SMS`;
+  };
+  $('[data-k2="smsText"]').oninput = len;
+  len();
+  $("#smsSave").onclick = async () => {
+    const body = { smsEnabled: $("#smsEn").checked ? 1 : 0 };
+    box.querySelectorAll("[data-k2]").forEach((i) => (body[i.dataset.k2] = i.value));
+    await api("/api/admin/settings", { body });
+    toast("Збережено ✓");
+  };
+  $("#smsTest").onclick = async () => {
+    try {
+      const r = await api("/api/admin/sms/test", { body: { phone: $("#smsPhone").value } });
+      toast(r.ok ? "Тестову SMS надіслано ✓" : `Не вдалося: ${r.info}`, 5000);
+      renderSms(s);
+    } catch (e) {
+      toast(e.message, 4000);
+    }
+  };
 }
 
 async function renderTelegram() {
