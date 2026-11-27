@@ -281,6 +281,13 @@ if (!one("SELECT 1 FROM settings WHERE key = '_sms_site_v1'")) {
   run("INSERT INTO settings(key, value) VALUES('_sms_site_v1', '1')");
 }
 
+// Одноразово: підпис MarinaManik (заявку подано в TurboSMS); поки не активний — сайт сам шле від TAXI
+if (!one("SELECT 1 FROM settings WHERE key = '_sms_sender_v1'")) {
+  run("INSERT INTO settings(key, value) VALUES('smsSender', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", JSON.stringify("MarinaManik"));
+  run("INSERT INTO settings(key, value) VALUES('smsChannel', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", JSON.stringify("sms"));
+  run("INSERT INTO settings(key, value) VALUES('_sms_sender_v1', '1')");
+}
+
 export function getSettings() {
   const rows = all("SELECT key, value FROM settings WHERE key NOT LIKE '\\_%' ESCAPE '\\'");
   const s = { ...DEFAULT_SETTINGS };

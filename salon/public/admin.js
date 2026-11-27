@@ -772,7 +772,7 @@ async function renderSms(s) {
       <option value="viber+sms" ${s.smsChannel === "viber+sms" ? "selected" : ""}>Viber, а якщо немає Viber — SMS (рекомендовано)</option>
       <option value="viber" ${s.smsChannel === "viber" ? "selected" : ""}>Лише Viber</option>
       <option value="sms" ${s.smsChannel === "sms" ? "selected" : ""}>Лише SMS</option></select></label>
-    <div class="two">${f("smsHour", "О котрій годині (19 = 19:00)", "number")}${f("smsSender", "Підпис відправника (поки затверджено лише TAXI)")}</div>
+    <div class="two">${f("smsHour", "О котрій годині (19 = 19:00)", "number")}${f("smsSender", "Підпис відправника (поки не активний — йде від TAXI)")}</div>
     ${f("smsText", "Текст повідомлення", "area")}
     <p class="small muted">Підставляється автоматично: {імʼя}, {дата}, {час}, {процедура}, {адреса}, {телефон}, {сайт} — посилання на сайт. Одна SMS кирилицею — 70 символів, довший текст ділиться на кілька SMS (і коштує дорожче). Зараз: <b id="smsLen"></b>.</p>
     <button class="btn ghost block" id="smsSave" style="margin-top:8px">Зберегти</button>
