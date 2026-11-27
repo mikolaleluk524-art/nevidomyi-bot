@@ -1513,7 +1513,8 @@ export function broadcastAll(texts) {
       const body = String(texts[lang] || texts.uk || "").trim();
       if (!body) { broadcastStatus.failed++; continue; }
       const footer = "\n\n" + L(lang, "Щоб відписатись від новин: /stopnews");
-      try { await tgRetry("sendMessage", { chat_id: row.id, text: body.slice(0, 4096 - footer.length) + footer }); broadcastStatus.sent++; }
+      // Разом з новиною оновлюємо меню: нові кнопки з'являються одразу, без /start.
+      try { await tgRetry("sendMessage", { chat_id: row.id, text: body.slice(0, 4096 - footer.length) + footer, reply_markup: localizeMarkup(lang, menuFor(row.id)) }); broadcastStatus.sent++; }
       catch (err) { if (isGone(err)) broadcastStatus.blocked++; else broadcastStatus.failed++; }
       await new Promise((r) => setTimeout(r, 50));
     }
