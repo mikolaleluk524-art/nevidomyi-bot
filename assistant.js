@@ -2,14 +2,14 @@
  * 🤖 Помічник у моніторі власника: пропонує новини для розсилки й «прикольні оновлення» —
  * події, які власник запускає однією кнопкою (💖 подвійні серця, 🌹 троянда всім).
  *
- * Тексти пише Claude (потрібна змінна ANTHROPIC_API_KEY на Railway). Без ключа або якщо
- * API недоступний — ідеї з готових шаблонів, тож монітор працює завжди.
+ * Тексти пише ШІ: Claude (ANTHROPIC_API_KEY) або безкоштовний Gemini від Google (GEMINI_API_KEY).
+ * Без ключа або якщо ШІ недоступний — ідеї з готових шаблонів, тож монітор працює завжди.
  * Кожна новина — трьома мовами: розсилка шле кожному його мовою.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { aiEnabled, askJSON, logAIError } from "./llm.js";
 
-const MODEL = "claude-opus-5-5";
+export { aiEnabled };
 const CACHE_MS = 6 * 60 * 60 * 1000; // нові ідеї — раз на 6 годин або за кнопкою «Інші ідеї»
 let cache = null;
 let lastTitles = [];
@@ -63,7 +63,7 @@ const TEMPLATES = [
     en: "👀 Wondering who's on the other side?\nTap “Who's this?” during a chat to see your partner's gender, age and city. Names and contacts stay hidden.\n/search" },
 ];
 
-// Додаткові шаблони: більше різноманіття, поки немає ключа Claude.
+// Додаткові шаблони: більше різноманіття, поки немає ключа ШІ.
 TEMPLATES.push(
   { kind: "event", event: "double_hearts", title: "💖 Вечір кохання",
     uk: "💖 Вечір кохання в 🍾 Бутилочці!\nЦілу годину кожен поцілунок, реакція й подарунок дають подвійні ❤. Хто стане королем чи королевою столу 👑?\n/game",
@@ -166,30 +166,15 @@ ${Object.entries(EVENTS).map(([k, v]) => `- ${k}: ${v}`).join("\n")}
 - title — 2–5 слів українською з емоджі, для власника.`;
 }
 
-async function fromClaude(ctx) {
-  const client = new Anthropic();
-  const request = {
-    model: MODEL,
-    max_tokens: 4000,
-    output_config: { effort: "low", format: { type: "json_schema", schema: SCHEMA } },
-    messages: [{ role: "user", content: prompt(ctx) }],
-  };
-  let response;
-  try {
-    // Якщо модель відмовить, сервер сам спробує запасну модель.
-    response = await client.beta.messages.create({ ...request, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" });
-  } catch (err) {
-    if (!(err instanceof Anthropic.BadRequestError)) throw err;
-    response = await client.messages.create(request);
-  }
-  if (response.stop_reason === "refusal") throw new Error("refusal");
-  const text = response.content.find((b) => b.type === "text")?.text ?? "";
-  const items = JSON.parse(text).items.filter((i) => i.uk && i.ru && i.en).slice(0, 6);
+async function fromAI(ctx) {
+  const { source, data } = await askJSON(prompt(ctx), SCHEMA, 4000);
+  const items = (data.items || []).filter((i) => i.uk && i.ru && i.en)
+    .map((i) => ({ ...i, kind: i.kind === "event" ? "event" : "news", event: EVENTS[i.event] ? i.event : "none", title: i.title || "💡 Ідея" }))
+    .map((i) => (i.kind === "event" && i.event === "none" ? { ...i, kind: "news" } : i))
+    .slice(0, 6);
   if (!items.length) throw new Error("empty");
-  return items;
+  return { source, items };
 }
-
-export const aiEnabled = () => Boolean(process.env.ANTHROPIC_API_KEY);
 
 export async function getSuggestions(ctx, refresh = false) {
   if (!refresh && cache && Date.now() - cache.at < CACHE_MS) return cache;
@@ -197,14 +182,9 @@ export async function getSuggestions(ctx, refresh = false) {
   let source = "templates";
   if (aiEnabled()) {
     try {
-      items = await fromClaude(ctx);
-      source = "claude";
+      ({ source, items } = await fromAI(ctx));
     } catch (err) {
-      if (err instanceof Anthropic.AuthenticationError) console.error("[assistant] ключ ANTHROPIC_API_KEY не підходить");
-      else if (err instanceof Anthropic.RateLimitError) console.error("[assistant] ліміт запитів, беру шаблони");
-      else if (err instanceof Anthropic.APIConnectionError) console.error("[assistant] немає з'єднання з API, беру шаблони");
-      else if (err instanceof Anthropic.APIError) console.error(`[assistant] API ${err.status}: ${err.message}`);
-      else console.error("[assistant]", err.message);
+      logAIError("assistant", err);
     }
   }
   if (!items) items = fromTemplates(ctx);

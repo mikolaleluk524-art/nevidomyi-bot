@@ -4,14 +4,13 @@
  *    скільки людей прийшло, пройшли вік, заплатили і скільки зірок принесли;
  *  - набір для реклами: готові пости під формати (канал знайомств, гумор, відео, сторіс);
  *  - лист адміну каналу з пропозицією взаємного піару або платної реклами.
- * Тексти пише Claude (ANTHROPIC_API_KEY), без ключа — шаблони.
+ * Тексти пише ШІ (Claude або безкоштовний Gemini, див. llm.js), без ключа — шаблони.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { aiEnabled, askJSON, logAIError } from "./llm.js";
 import { DatabaseSync } from "node:sqlite";
 import { BOT_USERNAME, DB_PATH } from "./src/bot.js";
 
-const MODEL = "claude-opus-5-5";
 
 function withDb(fn, readOnly = false) {
   const db = new DatabaseSync(DB_PATH, { readOnly });
@@ -152,31 +151,7 @@ const pickOne = (list) => list[Math.floor(Math.random() * list.length)];
 
 const fill = (text, vars) => text.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "");
 
-async function ask(prompt, schema) {
-  const client = new Anthropic();
-  const request = {
-    model: MODEL,
-    max_tokens: 6000,
-    output_config: { effort: "low", format: { type: "json_schema", schema } },
-    messages: [{ role: "user", content: prompt }],
-  };
-  let response;
-  try {
-    response = await client.beta.messages.create({ ...request, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" });
-  } catch (err) {
-    if (!(err instanceof Anthropic.BadRequestError)) throw err;
-    response = await client.messages.create(request);
-  }
-  if (response.stop_reason === "refusal") throw new Error("refusal");
-  return JSON.parse(response.content.find((b) => b.type === "text")?.text ?? "");
-}
-
-function logError(where, err) {
-  if (err instanceof Anthropic.AuthenticationError) console.error(`[promo] ${where}: ключ ANTHROPIC_API_KEY не підходить`);
-  else if (err instanceof Anthropic.APIConnectionError) console.error(`[promo] ${where}: немає з'єднання з API`);
-  else if (err instanceof Anthropic.APIError) console.error(`[promo] ${where}: API ${err.status}: ${err.message}`);
-  else console.error(`[promo] ${where}:`, err.message);
-}
+const logError = (where, err) => logAIError(`promo: ${where}`, err);
 
 const LANG_SCHEMA = { type: "string" };
 const PROMO_SCHEMA = {
@@ -198,9 +173,9 @@ const PROMO_SCHEMA = {
 
 // Набір для реклами: по одному тексту на кожен формат, трьома мовами, з посиланням кампанії.
 export async function promoKit(link, note) {
-  if (process.env.ANTHROPIC_API_KEY) {
+  if (aiEnabled()) {
     try {
-      const out = await ask(`Ти — маркетолог Telegram-бота «Невідомий». Що вміє бот: ${FEATURES}.
+      const { source, data: out } = await askJSON(`Ти — маркетолог Telegram-бота «Невідомий». Що вміє бот: ${FEATURES}.
 Напиши рекламні тексти — по одному на кожен формат:
 ${Object.entries(FORMATS).map(([k, v]) => `- ${k}: ${v}`).join("\n")}
 ${note ? `Побажання власника: ${note}\n` : ""}Вимоги:
@@ -208,9 +183,9 @@ ${note ? `Побажання власника: ${note}\n` : ""}Вимоги:
 - живо, з гачком у першому рядку, 1–4 емоджі; позначка 18+;
 - лише правда про функції бота, без вигаданих цифр, знижок і обіцянок;
 - без відвертого сексуального змісту, без натяків на неповнолітніх;
-- uk — українською, ru — російською, en — англійською, однакові за змістом.`, PROMO_SCHEMA);
+- uk — українською, ru — російською, en — англійською, однакові за змістом.`, PROMO_SCHEMA, 6000);
       const items = (out.items || []).filter((i) => FORMATS[i.format] && i.uk && i.ru && i.en);
-      if (items.length) return { source: "claude", items: items.map((i) => ({ ...i, title: FORMATS[i.format] })) };
+      if (items.length) return { source, items: items.map((i) => ({ ...i, title: FORMATS[i.format] })) };
     } catch (err) {
       logError("набір для реклами", err);
     }
@@ -232,13 +207,13 @@ export async function outreachLetter({ channel, topic, offer, lang, me }) {
   const vars = { channel: String(channel || "").slice(0, 80), me: String(me || "").slice(0, 40) || "—" };
   const kind = offer === "paid" ? "paid" : "swap";
   const l = LANG_NAMES[lang] ? lang : "uk";
-  if (process.env.ANTHROPIC_API_KEY) {
+  if (aiEnabled()) {
     try {
-      const out = await ask(`Напиши ${LANG_NAMES[l]} коротке ввічливе повідомлення адміну Telegram-каналу «${vars.channel}»${topic ? ` (тема каналу: ${String(topic).slice(0, 120)})` : ""}.
+      const { source, data: out } = await askJSON(`Напиши ${LANG_NAMES[l]} коротке ввічливе повідомлення адміну Telegram-каналу «${vars.channel}»${topic ? ` (тема каналу: ${String(topic).slice(0, 120)})` : ""}.
 Від кого: ${vars.me !== "—" ? vars.me + ", " : ""}власник Telegram-бота «Невідомий» (${FEATURES}).
 Мета: ${kind === "paid" ? "дізнатися вартість і умови платної реклами в каналі" : "запропонувати взаємний піар: пост про їхній канал у розсилці бота в обмін на пост про бота в каналі"}.
-Вимоги: 4–7 рядків; звернення без лестощів, конкретно, з повагою до каналу; згадай, чому аудиторії канал і бот підходять одне одному${topic ? " (з огляду на тему каналу)" : ""}; без вигаданих цифр про бота; без тиску; закінчи запитанням про умови.`, LETTER_SCHEMA);
-      if (out.text) return { source: "claude", text: out.text };
+Вимоги: 4–7 рядків; звернення без лестощів, конкретно, з повагою до каналу; згадай, чому аудиторії канал і бот підходять одне одному${topic ? " (з огляду на тему каналу)" : ""}; без вигаданих цифр про бота; без тиску; закінчи запитанням про умови.`, LETTER_SCHEMA, 2000);
+      if (out.text) return { source, text: out.text };
     } catch (err) {
       logError("лист адміну", err);
     }
