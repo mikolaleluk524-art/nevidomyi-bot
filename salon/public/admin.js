@@ -751,10 +751,14 @@ async function renderSms(s) {
   const box = $("#smsbox");
   const d = await api("/api/admin/sms");
   const f = (k, label, type = "text") => `<label class="f"><span>${label}</span>${type === "area" ? `<textarea data-k2="${k}" style="min-height:120px">${esc(s[k])}</textarea>` : `<input data-k2="${k}" type="${type}" value="${esc(s[k])}">`}</label>`;
-  box.innerHTML = `<h3>✉️ SMS-нагадування</h3>
+  box.innerHTML = `<h3>✉️ Нагадування у Viber / SMS</h3>
     <p class="small">${d.on ? `✅ TurboSMS підключено${d.balance !== null ? ` · баланс: <b>${esc(d.balance)}</b> грн` : ""}` : "⚪ Ще не підключено — потрібен акаунт TurboSMS (див. інструкцію від розробника)"}</p>
     <p class="small muted">Щовечора кожна клієнтка, записана на завтра, отримує SMS на свій номер. Клієнткам без номера (з паперового зошита) SMS не приходить — впишіть номер у записі кнопкою «📱».</p>
     <label class="check"><input type="checkbox" id="smsEn" ${s.smsEnabled ? "checked" : ""}> Надсилати нагадування</label>
+    <label class="f"><span>Куди надсилати</span><select data-k2="smsChannel">
+      <option value="viber+sms" ${s.smsChannel === "viber+sms" ? "selected" : ""}>Viber, а якщо немає Viber — SMS (рекомендовано)</option>
+      <option value="viber" ${s.smsChannel === "viber" ? "selected" : ""}>Лише Viber</option>
+      <option value="sms" ${s.smsChannel === "sms" ? "selected" : ""}>Лише SMS</option></select></label>
     <div class="two">${f("smsHour", "О котрій годині (19 = 19:00)", "number")}${f("smsSender", "Підпис відправника")}</div>
     ${f("smsText", "Текст повідомлення", "area")}
     <p class="small muted">Підставляється автоматично: {імʼя}, {дата}, {час}, {процедура}, {адреса}, {телефон}. Одна SMS кирилицею — 70 символів, довший текст ділиться на кілька SMS (і коштує дорожче). Зараз: <b id="smsLen"></b>.</p>

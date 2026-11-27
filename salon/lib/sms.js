@@ -54,7 +54,12 @@ export async function sendSms(phone, text, bookingId = null) {
     const res = await fetch("https://api.turbosms.ua/message/send.json", {
       method: "POST",
       headers: { "content-type": "application/json", Authorization: `Bearer ${token()}` },
-      body: JSON.stringify({ recipients: [phone], sms: { sender: s.smsSender || "Magiya", text } }),
+      // Канал: viber (лише Viber), viber+sms (Viber, а якщо не доставлено — SMS), sms
+      body: JSON.stringify({
+        recipients: [phone],
+        ...(s.smsChannel !== "sms" ? { viber: { sender: s.smsSender || "Magiya", text, ttl: 3600 } } : {}),
+        ...(s.smsChannel !== "viber" ? { sms: { sender: s.smsSender || "Magiya", text } } : {}),
+      }),
     });
     const data = await res.json().catch(() => ({}));
     const r = data.response_result?.[0];
