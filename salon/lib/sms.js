@@ -30,6 +30,9 @@ export function realPhone(p) {
 // «Покриття гель-лаком» → «покриття гель-лаком»; запис без процедури — «процедуру»
 const serviceText = (name) => (!name || name.startsWith("Запис із зошита") ? "процедуру" : name[0].toLowerCase() + name.slice(1));
 
+// Адреса сайту для посилання в повідомленні (клієнтка натискає — відкривається сайт, звідти можна встановити застосунок)
+const siteUrl = () => (process.env.PUBLIC_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : "https://magiia-krasy.up.railway.app")).replace(/\/$/, ""); // без зайвих символів — щоб нагадування вміщалося в 3 SMS
+
 export function smsText(b, s = getSettings()) {
   const parts = String(b.client_name || "").split(" ");
   const first = parts[0].endsWith(".") ? parts.join(" ") : parts[0];
@@ -41,6 +44,7 @@ export function smsText(b, s = getSettings()) {
     .replaceAll("{процедура}", serviceText(b.service_name))
     .replaceAll("{адреса}", [s.address, s.cabinet].filter(Boolean).join(", "))
     .replaceAll("{телефон}", s.phone.replace(/^\+38/, ""))
+    .replaceAll("{сайт}", siteUrl())
     .replace(/\s+/g, " ")
     .trim();
 }

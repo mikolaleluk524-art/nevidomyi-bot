@@ -250,7 +250,7 @@ export const DEFAULT_SETTINGS = {
   smsHour: 19, // о котрій надсилати (за Києвом)
   smsSender: "Magiya", // підпис відправника, зареєстрований у TurboSMS
   smsChannel: "viber+sms", // viber | viber+sms (Viber, а якщо не дійшло — SMS) | sms
-  smsText: "Добрий вечір, {імʼя}! Це помічниця Марини, «Магія краси». Нагадуємо: завтра о {час} — {процедура}. Кушніренка 7а, оф. 507. Чекаємо на вас! 💅",
+  smsText: "Добрий вечір, {імʼя}! Це помічниця Марини, «Магія краси». Нагадуємо: завтра о {час} — {процедура}. Кушніренка 7а, оф. 507. Чекаємо на вас! 💅 Наш сайт: {сайт}",
   giftAmounts: "500, 800, 1000, 1500, 2000", // номінали подарункових сертифікатів
   giftMonths: 6, // термін дії сертифіката, місяців
   cashbackPercent: 5, // кешбек бонусами з кожного візиту
@@ -269,6 +269,16 @@ if (!one("SELECT 1 FROM settings WHERE key = '_ref_off_v1'")) {
 if (!one("SELECT 1 FROM settings WHERE key = '_booking_days_v1'")) {
   run("DELETE FROM settings WHERE key = 'bookingDays'");
   run("INSERT INTO settings(key, value) VALUES('_booking_days_v1', '1')");
+}
+
+// Одноразово: додаємо посилання на сайт у текст нагадування (і якщо текст уже змінювали — дописуємо в кінець)
+if (!one("SELECT 1 FROM settings WHERE key = '_sms_site_v1'")) {
+  const r = one("SELECT value FROM settings WHERE key = 'smsText'");
+  if (r) {
+    const t = JSON.parse(r.value);
+    if (!t.includes("{сайт}")) run("UPDATE settings SET value = ? WHERE key = 'smsText'", JSON.stringify(t.trim() + " Наш сайт: {сайт}"));
+  }
+  run("INSERT INTO settings(key, value) VALUES('_sms_site_v1', '1')");
 }
 
 export function getSettings() {
