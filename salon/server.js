@@ -1169,6 +1169,8 @@ setInterval(async () => {
 // ---------- сервер ----------
 startBackups();
 startTelegram();
+// Перевірка підключення TurboSMS при старті (видно в журналі Railway)
+if (smsOn()) smsBalance().then((b) => console.log(b !== null ? `[sms] TurboSMS підключено, баланс: ${b} грн` : "[sms] TurboSMS: токен не прийнято або сервіс недоступний"));
 if (integrity !== "ok") notifyOwner({ title: "⚠️ Перевірка бази", body: `Перевірка цілісності: ${integrity}. Є резервні копії — напишіть розробнику.` }).catch(() => {});
 
 // Коректне завершення при оновленні: дописуємо все на диск і закриваємо базу.
