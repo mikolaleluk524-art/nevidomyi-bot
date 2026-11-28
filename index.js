@@ -20,6 +20,7 @@ import {
   partyTick,
   publishCommands,
   seasonTick,
+  staleTick,
   setLiveSource,
   tg,
 } from "./src/bot.js";
@@ -166,6 +167,9 @@ function listen() {
   setInterval(() => { partyTick((type) => setGameEvent(type, 1)).catch((err) => console.error("[bot] party", err.message)); }, 30_000).unref();
   // 🏆 Кінець сезону: нагороди топ-3 (перевірка щохвилини, нагороджує раз).
   setInterval(() => { seasonTick().catch((err) => console.error("[bot] season", err.message)); }, 60_000).unref();
+  // Прибирання завислих пошуків і мовчазних діалогів (щоб новачків не з'єднувало з тими, хто вже пішов).
+  setInterval(() => { try { staleTick(); } catch (err) { console.error("[bot] stale", err.message); } }, 5 * 60_000).unref();
+  try { staleTick(); } catch (err) { console.error("[bot] stale", err.message); }
   setMonitorSource(() => ({ beatAgo: Date.now() - beat, startedAt, game: gameStats(), events: gameEvents(), memoryMb: Math.round(process.memoryUsage().rss / 1048576) }));
   server.listen(port, "0.0.0.0", () => {
     console.info(`[bot] health + admin + bottle game :${port}`);

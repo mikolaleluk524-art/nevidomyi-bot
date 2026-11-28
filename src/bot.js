@@ -497,6 +497,20 @@ function photoOf(userId) {
   return one("select bytes from photos where user_id = ? order by created_at desc limit 1", userId)?.bytes ?? null;
 }
 
+// Хто шукає довше за 30 хв без жодної дії — вже пішов: з ним не з'єднуємо (інакше новачок пише в порожнечу).
+const SEARCH_FRESH = 30 * 60;
+const CHAT_STALE = 6 * 3600;
+// Прибирання «завислих»: пошук без дій 30 хв → лобі; діалог, де обоє мовчать 6 год → завершено.
+export function staleTick() {
+  const now = nowSec();
+  const searches = run("update users set status = 'lobby', partner_id = null, ai_chat = 0 where status = 'search' and coalesce(last_seen, 0) < ?", now - SEARCH_FRESH).changes;
+  const pairs = q("select a.id as a, a.partner_id as b from users a join users b on b.id = a.partner_id where a.status = 'chat' and b.status = 'chat' and b.partner_id = a.id and a.id < b.id and coalesce(a.last_seen, 0) < ? and coalesce(b.last_seen, 0) < ?", now - CHAT_STALE, now - CHAT_STALE);
+  for (const p of pairs) run("update users set status = 'lobby', partner_id = null where id in (?, ?)", p.a, p.b);
+  // Діалог з людиною, якої вже немає в діалозі (зламана пара), теж закриваємо.
+  const broken = run("update users set status = 'lobby', partner_id = null where status = 'chat' and (partner_id is null or partner_id not in (select id from users where status = 'chat'))").changes;
+  if (searches || pairs.length || broken) console.info(`[bot] прибрано: пошук ${searches}, мовчазні діалоги ${pairs.length}, зламані ${broken}`);
+}
+
 async function enqueue(id, mode) {
   const result = await withLock(() => {
     const me = ensure(id);
@@ -517,7 +531,7 @@ async function enqueue(id, mode) {
       const min = row.age_min ?? 18;
       const max = row.age_max ?? 99;
       const place = row.look_city ?? "";
-      const cand = one(`select id from users where status = 'search' and id <> ? and adult = 1 and banned = 0 and gender is not null and profile_age is not null and city is not null and (? = 'Будь-хто' or gender = ?) and profile_age >= ? and profile_age <= ? and lower(city) = lower(?) and search_mode = 'dating' and ((look_gender is null or look_gender = 'Будь-хто' or look_gender = ?) and ? >= coalesce(age_min, 18) and ? <= coalesce(age_max, 99) and lower(?) = lower(coalesce(look_city, city))) order by case when id = ? then 1 else 0 end, random() limit 1`, id, look, look, min, max, place, row.gender ?? "", row.profile_age ?? 0, row.profile_age ?? 0, row.city ?? "", me.last_partner_id);
+      const cand = one(`select id from users where status = 'search' and id <> ? and adult = 1 and banned = 0 and last_seen > ${nowSec() - SEARCH_FRESH} and gender is not null and profile_age is not null and city is not null and (? = 'Будь-хто' or gender = ?) and profile_age >= ? and profile_age <= ? and lower(city) = lower(?) and search_mode = 'dating' and ((look_gender is null or look_gender = 'Будь-хто' or look_gender = ?) and ? >= coalesce(age_min, 18) and ? <= coalesce(age_max, 99) and lower(?) = lower(coalesce(look_city, city))) order by case when id = ? then 1 else 0 end, random() limit 1`, id, look, look, min, max, place, row.gender ?? "", row.profile_age ?? 0, row.profile_age ?? 0, row.city ?? "", me.last_partner_id);
       if (!cand) return { kind: "waiting", mode: "dating" };
       run("update users set status = 'chat', partner_id = ?, last_partner_id = ?, priority = 0, pending = null where id = ?", id, id, cand.id);
       run("update users set status = 'chat', partner_id = ?, last_partner_id = ?, priority = 0, pending = null where id = ?", cand.id, cand.id, id);
@@ -526,7 +540,7 @@ async function enqueue(id, mode) {
     // Випадковий чат і ⚡ швидкі побачення — окремі черги з однаковою логікою.
     const queue = want === "speed" ? "speed" : "random";
     if (row?.status !== "search" || (row.search_mode ?? "random") !== queue) run("update users set status = 'search', partner_id = null, priority = 0, search_mode = ? where id = ?", queue, id);
-    const cand = one(`select id from users where status = 'search' and id <> ? and adult = 1 and banned = 0 and coalesce(search_mode, 'random') = ? order by case when id = ? then 1 else 0 end, random() limit 1`, id, queue, me.last_partner_id);
+    const cand = one(`select id from users where status = 'search' and id <> ? and adult = 1 and banned = 0 and last_seen > ${nowSec() - SEARCH_FRESH} and coalesce(search_mode, 'random') = ? order by case when id = ? then 1 else 0 end, random() limit 1`, id, queue, me.last_partner_id);
     if (!cand) return { kind: "waiting", mode: queue };
     run("update users set status = 'chat', partner_id = ?, last_partner_id = ?, priority = 0, pending = null where id = ?", id, id, cand.id);
     run("update users set status = 'chat', partner_id = ?, last_partner_id = ?, priority = 0, pending = null where id = ?", cand.id, cand.id, id);
