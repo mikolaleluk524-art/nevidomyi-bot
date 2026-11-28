@@ -460,6 +460,8 @@ async function onboardAge(id, text) {
   // Одразу в гру — там уже хтось є (або боти), щоб людина не губилась у меню.
   const friend = one("select join_with from users where id = ? and join_at > ?", id, nowSec() - 3600)?.join_with;
   await send(id, friend ? "🍾 Друг уже чекає тебе за столом:" : "🍾 Почни з гри — стіл уже чекає:", { inline_keyboard: [[{ text: friend ? "🍾 Сісти за стіл" : "🍾 Грати зараз", web_app: { url: GAME_URL } }]] });
+  // Одразу показуємо вірусну функцію: своє посилання для зізнань і сторіз одним натиском.
+  await send(id, "💌 І ще: хочеш дізнатися, що про тебе думають насправді?\nВиклади своє анонімне посилання в сторіз — друзі напишуть тобі зізнання, а ти не дізнаєшся, хто це 👀", { inline_keyboard: [[storyKb], [{ text: "💌 Моє посилання", callback_data: "conf:mine" }]] });
 }
 // Живі цифри для першого екрана: людина бачить, що тут уже щось відбувається.
 let liveSource = () => ({ players: 0 });
@@ -896,6 +898,7 @@ async function onConfessCallback(id, data, queryId, from) {
   const cid = String(cidRaw || "").replace(/[^a-f0-9]/g, "").slice(0, 12);
   if (action === "cancel") { run("update users set pending = null where id = ?", id); return showLobby(id); }
   if (action === "story") return sendStoryCard(id);
+  if (action === "mine") return showConfess(id);
   if (action === "more") return me.confess_to ? askConfess(id, me.confess_to) : showConfess(id);
   const c = cid ? one("select * from confessions where id = ?", cid) : null;
   if (!c || c.to_id !== id) return send(id, "Це повідомлення вже недоступне.");

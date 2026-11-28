@@ -645,6 +645,10 @@ const ENTRIES = [
   ["💌 Написати анонімно", "💌 Написать анонимно", "💌 Message anonymously"],
   ["🍾 Сісти за стіл у грі", "🍾 Сесть за стол в игре", "🍾 Join their game table"],
   ["🍾 Тебе вже чекають за столом:", "🍾 Тебя уже ждут за столом:", "🍾 They're waiting for you at the table:"],
+  // 💌 Онбординг: зізнання
+  ["💌 І ще: хочеш дізнатися, що про тебе думають насправді?", "💌 И ещё: хочешь узнать, что о тебе думают на самом деле?", "💌 One more thing: want to know what people really think of you?"],
+  ["Виклади своє анонімне посилання в сторіз — друзі напишуть тобі зізнання, а ти не дізнаєшся, хто це 👀", "Выложи свою анонимную ссылку в сторис — друзья напишут тебе признания, а ты не узнаешь, кто это 👀", "Post your anonymous link to your Story — friends will send you confessions and you won't know who 👀"],
+  ["💌 Моє посилання", "💌 Моя ссылка", "💌 My link"],
 ];
 
 const exact = { ru: new Map(), en: new Map() };
