@@ -345,6 +345,10 @@ const I18N = { ru: {}, en: {} };
   ["📨 Покликати друга за стіл", "📨 Позвать друга за стол", "📨 Invite a friend to your table"],
   ["Покликати друга за стіл", "Позвать друга за стол", "Invite a friend to your table"],
   ["Сідай до мене за стіл у бутилочку 🍾", "Садись ко мне за стол в бутылочку 🍾", "Join my table in Spin the Bottle 🍾"],
+  ["👑 Корона твоя!", "👑 Корона твоя!", "👑 The crown is yours!"],
+  ["💋 Ось це момент!", "💋 Вот это момент!", "💋 What a moment!"],
+  ["Похвались у сторіз — друзі зможуть сісти за твій стіл, а ти отримаєш 3 години Premium і 🌹 за кожного.", "Похвастайся в сторис — друзья смогут сесть за твой стол, а ты получишь 3 часа Premium и 🌹 за каждого.", "Show it off in your Story — friends can join your table, and you get 3 hours of Premium and a 🌹 for each."],
+  ["📲 Викласти в сторіз", "📲 Выложить в сторис", "📲 Post to Story"],
   ["Грати з друзями веселіше 🎉", "С друзьями играть веселее 🎉", "It's more fun with friends 🎉"],
   ["Поклич друга за свій стіл: він сяде поруч, а ти отримаєш 3 години Premium і 🌹.", "Позови друга за свой стол: он сядет рядом, а ты получишь 3 часа Premium и 🌹.", "Invite a friend to your table: they'll sit next to you, and you'll get 3 hours of Premium and a 🌹."],
   ["📨 Покликати друга", "📨 Позвать друга", "📨 Invite a friend"],
@@ -627,13 +631,16 @@ function showOver(title, text, buttons, before) {
 const hideOver = () => $("over").classList.add("hidden");
 
 // Після яскравого моменту — запросити друга (не частіше разу на день).
-function inviteNudge() {
+// 📲 Сторіз із гри: відкриваємо сторінку сторіз у цьому ж застосунку (initData зберігається).
+const storyMoment = (m) => { location.href = "/story.html?kind=game&m=" + (m === "crown" ? "crown" : "kiss"); };
+function inviteNudge(moment = "kiss") {
   const today = new Date().toDateString();
   if (store.get("nudge") === today) return;
   setTimeout(() => {
     if (!$("over").classList.contains("hidden") || !$("sheet").classList.contains("hidden")) return;
     store.set("nudge", today);
-    showOver(T("Грати з друзями веселіше 🎉"), T("Поклич друга за свій стіл: він сяде поруч, а ти отримаєш 3 години Premium і 🌹."), [
+    showOver(moment === "crown" ? T("👑 Корона твоя!") : T("💋 Ось це момент!"), T("Похвались у сторіз — друзі зможуть сісти за твій стіл, а ти отримаєш 3 години Premium і 🌹 за кожного."), [
+      [T("📲 Викласти в сторіз"), () => { hideOver(); storyMoment(moment); }],
       [T("📨 Покликати друга"), () => { hideOver(); share(); }],
       [T("Пізніше"), hideOver],
     ]);
@@ -795,6 +802,7 @@ $("tabMore").addEventListener("click", () => {
   const item = (em, label, note, fn) => { const b = h("button"); b.append(h("b", "", em), h("span", "", label), h("i", "", note || "")); b.addEventListener("click", fn); menu.appendChild(b); };
   item("🎯", T("На кого покаже пляшка"), S.wallet.aims > 0 ? T("безкоштовно ×{0}", S.wallet.aims) : "5⭐", pickAimTarget);
   item("📨", T("Покликати друга за стіл"), T("+Premium"), () => { closeSheet(); share(); });
+  item("📲", T("Викласти в сторіз"), T("+Premium"), () => { closeSheet(); storyMoment("kiss"); });
   item("❓", T("Як грати"), "", () => { closeSheet(); showHowTo(); });
   openSheet(T("Ще"), "", [menu]);
 });
@@ -951,7 +959,7 @@ function handle(m) {
     if (m.to >= 0) {
       addFeed(T("👑 {0} виконав(ла) бажання {1} і отримує Корону бажань!", nameOf(m.to), nameOf(m.from)), m.to === S.seat);
       fly(m.to, "👑");
-      if (m.to === S.seat) { buzz("notificationOccurred", "success"); inviteNudge(); }
+      if (m.to === S.seat) { buzz("notificationOccurred", "success"); inviteNudge("crown"); }
     } else addFeed(T("✨ Бажання {0} ніхто не виконав — зірки повернуто.", nameOf(m.from)), m.from === S.seat);
   } else if (m.type === "event") {
     S.doubleUntil = Date.now() + Math.max(0, m.doubleUntil - m.now);

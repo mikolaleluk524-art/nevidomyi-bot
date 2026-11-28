@@ -24,6 +24,7 @@
   <button id="go" disabled>⏳</button>
   <p id="hint"></p>
   <a class="alt" id="dl" style="display:none" download="story.jpg">⬇️</a>
+  <a class="alt" id="back" style="display:none" href="/bottle.html">←</a>
 <script>
 const tg = window.Telegram?.WebApp;
 try { tg.ready(); tg.expand(); } catch (e) {}
@@ -32,7 +33,16 @@ const T = {
   ru: { title: "📲 Твоя сторис", wait: "⏳ Готовлю картинку…", go: "📲 Выложить в сторис", h1: "Напиши мне", h2: "анонимно", sub: ["Я не узнаю, кто ты.", "Признание, комплимент или вопрос"], box1: "Открой @nevidomyi_chat_bot", box2: "и введи мой код:", foot: "🌙 Невідомий · анонимные признания 18+", caption: "Напиши мне анонимно 👀", widget: "Напиши анонимно", premium: "Ссылка в сторис будет кликабельной 💜", plain: "Друзья откроют бота и введут твой код с картинки. Кликабельную ссылку в сторис Telegram даёт только с Premium.", old: "Твой Telegram не умеет выкладывать сторис из приложения. Обнови Telegram или сохрани картинку и выложи вручную.", save: "⬇️ Сохранить картинку", fail: "Не удалось подготовить картинку. Закрой и открой ещё раз.", done: "Готово! Жди признаний 💌" },
   en: { title: "📲 Your Story", wait: "⏳ Preparing the picture…", go: "📲 Post to Story", h1: "Message me", h2: "anonymously", sub: ["I won't know who you are.", "A confession, a compliment or a question"], box1: "Open @nevidomyi_chat_bot", box2: "and enter my code:", foot: "🌙 Nevidomyi · anonymous confessions 18+", caption: "Message me anonymously 👀", widget: "Message anonymously", premium: "The link in your Story will be clickable 💜", plain: "Friends open the bot and enter your code from the picture. Telegram only allows clickable Story links with Premium.", old: "Your Telegram can't post Stories from apps. Update Telegram or save the picture and post it manually.", save: "⬇️ Save picture", fail: "Couldn't prepare the picture. Close and open again.", done: "Done! Wait for confessions 💌" },
 };
-let L = T.uk, ready = null;
+// Сторіз із гри: ?kind=game&m=kiss|crown — інший заголовок, посилання «сісти за мій стіл».
+const Q = new URLSearchParams(location.search);
+const KIND = Q.get("kind") === "game" ? "game" : "confess";
+const MOMENT = Q.get("m") === "crown" ? "crown" : "kiss";
+const G = {
+  uk: { kiss: ["Мене поцілували", "у бутилочці 💋"], crown: ["У мене корона", "за столом 👑"], sub: ["Сідай за мій стіл —", "пляшка вже крутиться 🍾"], caption: "Сідай до мене за стіл у бутилочку 🍾", widget: "Сісти за стіл", back: "← Назад у гру", done: "Готово! Чекай друзів за столом 🍾" },
+  ru: { kiss: ["Меня поцеловали", "в бутылочке 💋"], crown: ["У меня корона", "за столом 👑"], sub: ["Садись за мой стол —", "бутылочка уже крутится 🍾"], caption: "Садись ко мне за стол в бутылочку 🍾", widget: "Сесть за стол", back: "← Назад в игру", done: "Готово! Жди друзей за столом 🍾" },
+  en: { kiss: ["I got kissed", "in Spin the Bottle 💋"], crown: ["I've got the crown", "at the table 👑"], sub: ["Join my table —", "the bottle is spinning 🍾"], caption: "Join my table in Spin the Bottle 🍾", widget: "Join the table", back: "← Back to the game", done: "Done! Wait for friends at your table 🍾" },
+};
+let L = T.uk, ready = null, curLang = "uk";
 const $ = (id) => document.getElementById(id);
 const user = tg?.initDataUnsafe?.user || {};
 
@@ -47,11 +57,14 @@ function draw(code) {
   x.textAlign = "center"; x.textBaseline = "middle";
   const emoji = (e, px, ex, ey, rot = 0) => { x.save(); x.translate(ex, ey); x.rotate(rot); x.font = `${px}px ${F}`; x.fillText(e, 0, 0); x.restore(); };
   emoji("💌", 90, 170, 200, -0.3); emoji("🤫", 90, 920, 470, 0.25); emoji("👀", 90, 180, 1560, 0.15); emoji("💜", 90, 900, 1540, -0.2);
-  emoji("🎭", 230, 540, 390);
-  x.fillStyle = "#fff"; x.font = `900 118px ${F}`; x.fillText(L.h1, 540, 640);
-  const tg2 = x.createLinearGradient(260, 0, 820, 0); tg2.addColorStop(0, "#ff6fae"); tg2.addColorStop(1, "#ffb36b");
-  x.fillStyle = tg2; x.font = `900 ${L.h2.length > 9 ? 104 : 118}px ${F}`; x.fillText(L.h2, 540, 770);
-  x.fillStyle = "#eadcff"; x.font = `700 46px ${F}`; x.fillText(L.sub[0], 540, 930); x.fillText(L.sub[1], 540, 995);
+  const game = KIND === "game" ? (G[curLang] || G.uk) : null;
+  const h1 = game ? game[MOMENT][0] : L.h1, h2 = game ? game[MOMENT][1] : L.h2, sub = game ? game.sub : L.sub;
+  emoji(game ? (MOMENT === "crown" ? "👑" : "🍾") : "🎭", 230, 540, 390);
+  const fit = (t, max, size) => { x.font = `900 ${size}px ${F}`; while (x.measureText(t).width > max && size > 60) { size -= 4; x.font = `900 ${size}px ${F}`; } };
+  x.fillStyle = "#fff"; fit(h1, 960, 118); x.fillText(h1, 540, 640);
+  const tg2 = x.createLinearGradient(160, 0, 920, 0); tg2.addColorStop(0, "#ff6fae"); tg2.addColorStop(1, "#ffb36b");
+  x.fillStyle = tg2; fit(h2, 960, 118); x.fillText(h2, 540, 770);
+  x.fillStyle = "#eadcff"; x.font = `700 46px ${F}`; x.fillText(sub[0], 540, 930); x.fillText(sub[1], 540, 995);
   // Біла картка з кодом.
   const bx = 120, by = 1120, bw = 840, bh = 330, r = 44;
   x.fillStyle = "#ffffff"; x.beginPath(); x.roundRect(bx, by, bw, bh, r); x.fill();
@@ -65,13 +78,14 @@ async function prepare() {
   const res = await fetch("/story/me", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ initData: tg?.initData || "" }) });
   if (!res.ok) throw new Error("me " + res.status);
   const me = await res.json();
-  L = T[me.lang] || T.uk;
+  L = T[me.lang] || T.uk; curLang = T[me.lang] ? me.lang : "uk";
+  if (KIND === "game") { $("back").textContent = (G[curLang] || G.uk).back; $("back").style.display = ""; }
   $("title").textContent = L.title; $("go").textContent = L.wait;
   const canvas = draw(me.code);
   const blob = await new Promise((r) => canvas.toBlob(r, "image/jpeg", 0.9));
   $("preview").src = URL.createObjectURL(blob);
   $("dl").href = $("preview").src; $("dl").textContent = L.save;
-  const up = await fetch("/story/upload", { method: "POST", headers: { "x-init-data": tg?.initData || "", "content-type": "image/jpeg" }, body: blob });
+  const up = await fetch("/story/upload", { method: "POST", headers: { "x-init-data": tg?.initData || "", "x-story-kind": KIND, "content-type": "image/jpeg" }, body: blob });
   if (!up.ok) throw new Error("upload " + up.status);
   const { url, link } = await up.json();
   ready = { url, link };
@@ -83,10 +97,11 @@ async function prepare() {
 
 $("go").onclick = () => {
   if (!ready) return;
-  const params = { text: `${L.caption}\n${ready.link}`.slice(0, user.is_premium ? 2048 : 200) };
-  if (user.is_premium) params.widget_link = { url: ready.link, name: L.widget };
+  const g = KIND === "game" ? (G[curLang] || G.uk) : null;
+  const params = { text: `${g ? g.caption : L.caption}\n${ready.link}`.slice(0, user.is_premium ? 2048 : 200) };
+  if (user.is_premium) params.widget_link = { url: ready.link, name: g ? g.widget : L.widget };
   try { tg.HapticFeedback?.impactOccurred("medium"); } catch (e) {}
-  try { tg.shareToStory(ready.url, params); $("hint").textContent = L.done; }
+  try { tg.shareToStory(ready.url, params); $("hint").textContent = g ? g.done : L.done; }
   catch (e) { $("hint").textContent = L.old; $("dl").style.display = ""; }
 };
 

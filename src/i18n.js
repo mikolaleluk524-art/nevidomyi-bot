@@ -640,6 +640,27 @@ const ENTRIES = [
   ["«Скасувати пошук» — вийти.", "«Отменить поиск» — выйти.", "“Cancel search” to leave."],
   ["🤖 На сьогодні я вже наговорився 😅 Продовжую шукати тобі живу людину — а поки загляни в 🍾 гру чи на 🧱 стіну зізнань.", "🤖 На сегодня я уже наговорился 😅 Продолжаю искать тебе живого человека — а пока загляни в 🍾 игру или на 🧱 стену признаний.", "🤖 I've talked enough for today 😅 I'm still looking for a real person — meanwhile check out the 🍾 game or the 🧱 confession wall."],
   ["🤖 Щось я задумався… Напиши ще раз 🙂", "🤖 Что-то я задумался… Напиши ещё раз 🙂", "🤖 I got lost in thought… Write again 🙂"],
+  // 🎭 Код зі сторіз
+  ["🎭 Це код {0}. Що робимо?", "🎭 Это код {0}. Что делаем?", "🎭 That's {0}'s code. What do you want to do?"],
+  ["💌 Написати анонімно", "💌 Написать анонимно", "💌 Message anonymously"],
+  ["🍾 Сісти за стіл у грі", "🍾 Сесть за стол в игре", "🍾 Join their game table"],
+  ["🍾 Тебе вже чекають за столом:", "🍾 Тебя уже ждут за столом:", "🍾 They're waiting for you at the table:"],
+  // 💌 Онбординг: зізнання
+  ["💌 І ще: хочеш дізнатися, що про тебе думають насправді?", "💌 И ещё: хочешь узнать, что о тебе думают на самом деле?", "💌 One more thing: want to know what people really think of you?"],
+  ["Виклади своє анонімне посилання в сторіз — друзі напишуть тобі зізнання, а ти не дізнаєшся, хто це 👀", "Выложи свою анонимную ссылку в сторис — друзья напишут тебе признания, а ты не узнаешь, кто это 👀", "Post your anonymous link to your Story — friends will send you confessions and you won't know who 👀"],
+  ["💌 Моє посилання", "💌 Моя ссылка", "💌 My link"],
+  // 👋 З поверненням
+  ["👋 З поверненням! Поки тебе не було:", "👋 С возвращением! Пока тебя не было:", "👋 Welcome back! While you were away:"],
+  ["💌 тобі написали анонімно: {0} — /confess", "💌 тебе написали анонимно: {0} — /confess", "💌 anonymous messages for you: {0} — /confess"],
+  ["🧱 нових постів на стіні: {0} — /wall", "🧱 новых постов на стене: {0} — /wall", "🧱 new wall posts: {0} — /wall"],
+  ["🌙 нове питання дня — /question", "🌙 новый вопрос дня — /question", "🌙 a new question of the day — /question"],
+  ["🎉 вечірка сьогодні о 21:00", "🎉 вечеринка сегодня в 21:00", "🎉 party tonight at 21:00"],
+  // 👋 Перший екран
+  ["👋 Привіт! Це «Невідомий» — нічний клуб у Telegram 🌙", "👋 Привет! Это «Невідомий» — ночной клуб в Telegram 🌙", "👋 Hi! This is Nevidomyi — a night club in Telegram 🌙"],
+  ["🍾 гра в бутилочку · 💌 анонімні зізнання · 💬 чат без імен", "🍾 игра в бутылочку · 💌 анонимные признания · 💬 чат без имён", "🍾 Spin the Bottle · 💌 anonymous confessions · 💬 chat without names"],
+  ["🔥 За добу в клубі: {0}", "🔥 За сутки в клубе: {0}", "🔥 In the club today: {0}"],
+  ["Два питання — і ти всередині. Хто ти?", "Два вопроса — и ты внутри. Кто ты?", "Two questions and you're in. Who are you?"],
+  ["🛡 Не надсилай контакти, адресу й фото документів.", "🛡 Не отправляй контакты, адрес и фото документов.", "🛡 Don't share contacts, your address or photos of documents."],
 ];
 
 const exact = { ru: new Map(), en: new Map() };

@@ -17,7 +17,7 @@ const DIR = join(dirname(DB_PATH), "stories");
 const MAX_BYTES = 3_000_000;
 mkdirSync(DIR, { recursive: true });
 
-const tokenOf = (id, code) => createHash("sha256").update(`${id}:${code}:story`).digest("hex").slice(0, 20);
+const tokenOf = (id, code, kind) => createHash("sha256").update(`${id}:${code}:story:${kind}`).digest("hex").slice(0, 20);
 const json = (res, status, body) => { res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
 
 function readBody(req, limit) {
@@ -49,7 +49,7 @@ export function storyRoutes(req, res) {
     readBody(req, 20_000).then((buf) => {
       const { initData } = JSON.parse(buf.toString("utf8") || "{}");
       const me = who(initData);
-      json(res, 200, { code: me.code, link: me.link, lang: me.lang });
+      json(res, 200, { code: me.code, link: me.link, tableLink: me.tableLink, lang: me.lang });
     }).catch((err) => json(res, 403, { error: err.message }));
     return true;
   }
@@ -58,10 +58,11 @@ export function storyRoutes(req, res) {
       const me = who(String(req.headers["x-init-data"] || ""));
       // Лише JPEG (починається з FF D8 FF).
       if (buf.length < 1000 || buf[0] !== 0xff || buf[1] !== 0xd8 || buf[2] !== 0xff) throw new Error("bad_image");
-      const token = tokenOf(me.id, me.code);
+      const kind = req.headers["x-story-kind"] === "game" ? "game" : "confess";
+      const token = tokenOf(me.id, me.code, kind);
       writeFileSync(join(DIR, `${token}.jpg`), buf);
       const host = process.env.RAILWAY_PUBLIC_DOMAIN || req.headers.host;
-      json(res, 200, { url: `https://${host}/story/img/${token}.jpg?v=${Date.now()}`, link: me.link });
+      json(res, 200, { url: `https://${host}/story/img/${token}.jpg?v=${Date.now()}`, link: kind === "game" ? me.tableLink : me.link });
     }).catch((err) => json(res, err.message === "too_big" ? 413 : 400, { error: err.message }));
     return true;
   }
