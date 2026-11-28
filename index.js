@@ -26,6 +26,7 @@ import {
 import { adminRoutes, setMonitorSource } from "./admin.js";
 import { attachBottleGame, gameEvents, gameStats, setGameEvent } from "./game-server.js";
 import { handleGiftUpdate, publishGiftCommand } from "./gifts.js";
+import { storyRoutes } from "./story.js";
 
 const DASHBOARD = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "dashboard.html"), "utf8");
 const BOTTLE_GAME = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "bottle.html"), "utf8");
@@ -138,6 +139,8 @@ function listen() {
       res.end(MONITOR_MANIFEST);
       return;
     }
+    // 📲 Сторіз однією кнопкою (сторінка, завантаження картинки, сама картинка).
+    if (req.url.startsWith("/story")) { if (storyRoutes(req, res)) return; }
     if (req.url === "/story-confess.jpg") {
       res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "max-age=86400" });
       res.end(STORY_CONFESS);

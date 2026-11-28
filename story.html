@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Сторіз · Невідомий</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root { --bg: #160b2e; --card: #24124d; --text: #fff; --muted: #cbb9f0; --accent1: #ff5fa2; --accent2: #ff8a5c; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { background: var(--bg); color: var(--text); font-family: -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif; }
+  body { min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); gap: 14px; }
+  #preview { width: min(62vw, 300px); aspect-ratio: 9 / 16; border-radius: 18px; background: var(--card); box-shadow: 0 16px 40px #0009; object-fit: cover; }
+  h1 { font-size: 20px; text-align: center; }
+  p { color: var(--muted); font-size: 14px; text-align: center; line-height: 1.4; max-width: 360px; }
+  button { width: 100%; max-width: 360px; padding: 16px; border: 0; border-radius: 16px; font-size: 17px; font-weight: 800; color: #fff; background: linear-gradient(90deg, var(--accent1), var(--accent2)); box-shadow: 0 10px 24px #0007; }
+  button:disabled { opacity: .5; }
+  a.alt { color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+  <h1 id="title">📲 Твоя сторіз</h1>
+  <img id="preview" alt="">
+  <button id="go" disabled>⏳</button>
+  <p id="hint"></p>
+  <a class="alt" id="dl" style="display:none" download="story.jpg">⬇️</a>
+<script>
+const tg = window.Telegram?.WebApp;
+try { tg.ready(); tg.expand(); } catch (e) {}
+const T = {
+  uk: { title: "📲 Твоя сторіз", wait: "⏳ Готую картинку…", go: "📲 Викласти в сторіз", h1: "Напиши мені", h2: "анонімно", sub: ["Я не дізнаюсь, хто ти.", "Зізнання, комплімент чи питання"], box1: "Відкрий @nevidomyi_chat_bot", box2: "і введи мій код:", foot: "🌙 Невідомий · анонімні зізнання 18+", caption: "Напиши мені анонімно 👀", widget: "Напиши анонімно", premium: "Посилання в сторіз буде клікабельним 💜", plain: "Друзі відкриють бота і введуть твій код з картинки. Клікабельне посилання в сторіз Telegram дає лише з Premium.", old: "Твій Telegram не вміє викладати сторіз із застосунку. Онови Telegram або збережи картинку й виклади вручну.", save: "⬇️ Зберегти картинку", fail: "Не вдалося підготувати картинку. Закрий і відкрий ще раз.", done: "Готово! Чекай на зізнання 💌" },
+  ru: { title: "📲 Твоя сторис", wait: "⏳ Готовлю картинку…", go: "📲 Выложить в сторис", h1: "Напиши мне", h2: "анонимно", sub: ["Я не узнаю, кто ты.", "Признание, комплимент или вопрос"], box1: "Открой @nevidomyi_chat_bot", box2: "и введи мой код:", foot: "🌙 Невідомий · анонимные признания 18+", caption: "Напиши мне анонимно 👀", widget: "Напиши анонимно", premium: "Ссылка в сторис будет кликабельной 💜", plain: "Друзья откроют бота и введут твой код с картинки. Кликабельную ссылку в сторис Telegram даёт только с Premium.", old: "Твой Telegram не умеет выкладывать сторис из приложения. Обнови Telegram или сохрани картинку и выложи вручную.", save: "⬇️ Сохранить картинку", fail: "Не удалось подготовить картинку. Закрой и открой ещё раз.", done: "Готово! Жди признаний 💌" },
+  en: { title: "📲 Your Story", wait: "⏳ Preparing the picture…", go: "📲 Post to Story", h1: "Message me", h2: "anonymously", sub: ["I won't know who you are.", "A confession, a compliment or a question"], box1: "Open @nevidomyi_chat_bot", box2: "and enter my code:", foot: "🌙 Nevidomyi · anonymous confessions 18+", caption: "Message me anonymously 👀", widget: "Message anonymously", premium: "The link in your Story will be clickable 💜", plain: "Friends open the bot and enter your code from the picture. Telegram only allows clickable Story links with Premium.", old: "Your Telegram can't post Stories from apps. Update Telegram or save the picture and post it manually.", save: "⬇️ Save picture", fail: "Couldn't prepare the picture. Close and open again.", done: "Done! Wait for confessions 💌" },
+};
+let L = T.uk, ready = null;
+const $ = (id) => document.getElementById(id);
+const user = tg?.initDataUnsafe?.user || {};
+
+function draw(code) {
+  const c = document.createElement("canvas");
+  c.width = 1080; c.height = 1920;
+  const x = c.getContext("2d");
+  const F = '-apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif';
+  const g = x.createRadialGradient(540, 560, 60, 540, 700, 1300);
+  g.addColorStop(0, "#7a2fc9"); g.addColorStop(0.5, "#2c1260"); g.addColorStop(1, "#0f0820");
+  x.fillStyle = g; x.fillRect(0, 0, 1080, 1920);
+  x.textAlign = "center"; x.textBaseline = "middle";
+  const emoji = (e, px, ex, ey, rot = 0) => { x.save(); x.translate(ex, ey); x.rotate(rot); x.font = `${px}px ${F}`; x.fillText(e, 0, 0); x.restore(); };
+  emoji("💌", 90, 170, 200, -0.3); emoji("🤫", 90, 920, 470, 0.25); emoji("👀", 90, 180, 1560, 0.15); emoji("💜", 90, 900, 1540, -0.2);
+  emoji("🎭", 230, 540, 390);
+  x.fillStyle = "#fff"; x.font = `900 118px ${F}`; x.fillText(L.h1, 540, 640);
+  const tg2 = x.createLinearGradient(260, 0, 820, 0); tg2.addColorStop(0, "#ff6fae"); tg2.addColorStop(1, "#ffb36b");
+  x.fillStyle = tg2; x.font = `900 ${L.h2.length > 9 ? 104 : 118}px ${F}`; x.fillText(L.h2, 540, 770);
+  x.fillStyle = "#eadcff"; x.font = `700 46px ${F}`; x.fillText(L.sub[0], 540, 930); x.fillText(L.sub[1], 540, 995);
+  // Біла картка з кодом.
+  const bx = 120, by = 1120, bw = 840, bh = 330, r = 44;
+  x.fillStyle = "#ffffff"; x.beginPath(); x.roundRect(bx, by, bw, bh, r); x.fill();
+  x.fillStyle = "#4a2a8a"; x.font = `800 44px ${F}`; x.fillText(L.box1, 540, by + 70); x.fillText(L.box2, 540, by + 130);
+  x.fillStyle = "#24124d"; x.font = `900 96px ui-monospace, Menlo, Consolas, monospace`; x.fillText(code, 540, by + 240);
+  x.fillStyle = "#d8c8ff"; x.font = `800 38px ${F}`; x.fillText(L.foot, 540, 1790);
+  return c;
+}
+
+async function prepare() {
+  const res = await fetch("/story/me", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ initData: tg?.initData || "" }) });
+  if (!res.ok) throw new Error("me " + res.status);
+  const me = await res.json();
+  L = T[me.lang] || T.uk;
+  $("title").textContent = L.title; $("go").textContent = L.wait;
+  const canvas = draw(me.code);
+  const blob = await new Promise((r) => canvas.toBlob(r, "image/jpeg", 0.9));
+  $("preview").src = URL.createObjectURL(blob);
+  $("dl").href = $("preview").src; $("dl").textContent = L.save;
+  const up = await fetch("/story/upload", { method: "POST", headers: { "x-init-data": tg?.initData || "", "content-type": "image/jpeg" }, body: blob });
+  if (!up.ok) throw new Error("upload " + up.status);
+  const { url, link } = await up.json();
+  ready = { url, link };
+  const canShare = typeof tg?.shareToStory === "function" && tg.isVersionAtLeast?.("7.8");
+  $("go").textContent = L.go; $("go").disabled = !canShare;
+  $("hint").textContent = canShare ? (user.is_premium ? L.premium : L.plain) : L.old;
+  if (!canShare) $("dl").style.display = "";
+}
+
+$("go").onclick = () => {
+  if (!ready) return;
+  const params = { text: `${L.caption}\n${ready.link}`.slice(0, user.is_premium ? 2048 : 200) };
+  if (user.is_premium) params.widget_link = { url: ready.link, name: L.widget };
+  try { tg.HapticFeedback?.impactOccurred("medium"); } catch (e) {}
+  try { tg.shareToStory(ready.url, params); $("hint").textContent = L.done; }
+  catch (e) { $("hint").textContent = L.old; $("dl").style.display = ""; }
+};
+
+prepare().catch((e) => { console.error(e); $("go").textContent = "⚠️"; $("hint").textContent = L.fail; $("dl").style.display = $("preview").src ? "" : "none"; });
+</script>
+</body>
+</html>
