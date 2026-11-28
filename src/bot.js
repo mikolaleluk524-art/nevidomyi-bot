@@ -7,6 +7,7 @@ import { readFile, writeFile, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { L, LANGS, LANG_NAMES, guessLang, localizeMarkup, toUk } from "./i18n.js";
+import { chatReply } from "../llm.js";
 
 // Секрети — лише зі змінних середовища, не в коді.
 // trim(): пробіл чи перенос рядка, скопійований разом із токеном, Telegram API
@@ -225,6 +226,9 @@ function openDatabase() {
   next.exec("create table if not exists like_notify (user_id text primary key, at integer not null)");
   // 👭 «Приведи подругу»: бонус за подругу видається один раз — коли вона сама когось приведе.
   next.exec("create table if not exists friend_bonus (user_id text not null, friend_id text not null, created_at integer not null, primary key (user_id, friend_id))");
+  // 🤖 ШІ-співрозмовник, поки людина чекає в пошуку (лічильник повідомлень на добу).
+  if (!next.prepare("pragma table_info(users)").all().some((c) => c.name === "ai_chat")) next.exec("alter table users add column ai_chat integer not null default 0");
+  next.exec("create table if not exists ai_usage (user_id text not null, day text not null, n integer not null default 0, primary key (user_id, day))");
   // 🧱 Стіна зізнань і 🌙 відповіді на питання дня — одна таблиця постів із реакціями.
   next.exec("create table if not exists posts (id text primary key, author_id text not null, kind text not null, day text, text text not null, created_at integer not null, reports integer not null default 0, hidden integer not null default 0, notified integer not null default 0)");
   next.exec("create index if not exists posts_kind on posts (kind, day, created_at)");
@@ -529,6 +533,12 @@ async function enqueue(id, mode) {
   if (result.kind === "needprofile") { await continueDating(id); return "needprofile"; }
   if (result.kind === "needpay") { await send(id, "Пошук за віком, статтю і містом лише з Premium. Випадковий — безкоштовний."); await showPremium(id); return "needpay"; }
   if (result.kind === "matched") {
+    for (const who of [id, result.other]) {
+      if (run("update users set ai_chat = 0 where id = ? and ai_chat = 1", who).changes) {
+        aiHistory.delete(who);
+        try { await send(who, "👤 Знайшлась жива людина! Розмову з 🤖 ШІ завершено."); } catch {}
+      }
+    }
     if (result.mode === "dating") {
       const mine = one("select * from users where id = ?", id);
       const theirs = one("select * from users where id = ?", result.other);
@@ -552,6 +562,9 @@ async function enqueue(id, mode) {
   }
   if (result.kind === "waiting") {
     await send(id, result.mode === "dating" ? "Шукаю анкету за віком, статтю і містом. Якщо зараз нікого немає — зачекай." : result.mode === "speed" ? "⚡ Шукаю пару для швидкого побачення. Щойно хтось з’явиться — почнемо!" : "Шукаю випадкову людину. Це безкоштовно. Якщо черга порожня — зачекай.");
+    if (process.env.GEMINI_API_KEY && !one("select ai_chat from users where id = ?", id)?.ai_chat) {
+      await send(id, "🤖 Поки чекаєш — хочеш поговорити з ШІ-співрозмовником? Щойно з’явиться жива людина, я одразу тебе з’єднаю.", { inline_keyboard: [[{ text: "🤖 Поговорити з ШІ", callback_data: "ai:on" }]] });
+    }
     return "waiting";
   }
   return result.kind;
@@ -575,6 +588,7 @@ async function disconnect(id, mode) {
     }
     return { kind: "lobby" };
   });
+  if (run("update users set ai_chat = 0 where id = ? and ai_chat = 1", id).changes) aiHistory.delete(id);
   if (outcome.kind === "cancelled") { await showLobby(id, "Пошук скасовано."); return; }
   if (outcome.kind === "left") {
     if (mode === "timeup") {
@@ -1254,6 +1268,60 @@ async function onLikesPaid(id, pay) {
   await revealLikes(id);
 }
 
+// 🤖 ШІ-співрозмовник: розмовляє з людиною, поки вона в черзі пошуку. Завжди підписаний «🤖».
+// Людина лишається в черзі: щойно з’явиться жива людина — enqueue з’єднає, а ШІ-чат закриється.
+const AI_PER_DAY = 40;
+const aiHistory = new Map(); // id → [{ role, text }]
+const aiBusy = new Set();
+const AI_LANG = { uk: "українською", ru: "російською", en: "англійською" };
+function aiSystem(id) {
+  const me = one("select gender, profile_age from users where id = ?", id);
+  return `Ти — 🤖 ШІ-співрозмовник у Telegram-боті «Невідомий» (анонімний чат 18+, гра в бутилочку, анонімні зізнання). Ти розмовляєш з людиною, поки вона чекає на живого співрозмовника.
+Правила:
+- Завжди чесно кажи, що ти ШІ, якщо питають. Ніколи не вдавай людину, не вигадуй собі тіло, фото, місто чи зустрічі.
+- Пиши ${AI_LANG[langOf(id)] || "українською"}, коротко: 1–3 речення, живо, тепло, з гумором, 0–2 емоджі. Став зустрічні запитання, щоб розмова йшла.
+- Легкий флірт можна, але без відвертого сексуального змісту і без грубощів.
+- Не проси й не давай контакти, номери, адреси, посилання.
+- Якщо людина каже, що їй менше 18 — ввічливо скажи, що бот лише для 18+, і не продовжуй тему.
+- Якщо людині погано або йдеться про небезпеку для життя — підтримай і порадь звернутися до близьких або на лінію допомоги (в Україні: 7333 — Lifeline Ukraine).
+- Іноді (не частіше разу на 5 повідомлень) доречно згадай функції бота: 🍾 гра в бутилочку, 💌 анонімні зізнання, 🧱 стіна зізнань.
+Про співрозмовника: стать — ${me?.gender || "невідомо"}, вік — ${me?.profile_age || "невідомо"}.`;
+}
+async function aiStart(id) {
+  const me = one("select status, ai_chat from users where id = ?", id);
+  if (me?.status !== "search") return send(id, "Це працює, поки ти шукаєш співрозмовника. Натисни «Знайти співрозмовника».");
+  run("update users set ai_chat = 1 where id = ?", id);
+  aiHistory.set(id, []);
+  await send(id, "🤖 Привіт! Я ШІ-співрозмовник — поговорю з тобою, поки шукаю живу людину. Можеш писати що завгодно 🙂\n\n«Скасувати пошук» — вийти.");
+}
+async function aiTalk(id, text) {
+  if (aiBusy.has(id)) return;
+  const { day } = kyivNow();
+  const used = one("select n from ai_usage where user_id = ? and day = ?", id, day)?.n ?? 0;
+  if (used >= AI_PER_DAY) {
+    run("update users set ai_chat = 0 where id = ?", id);
+    aiHistory.delete(id);
+    return send(id, "🤖 На сьогодні я вже наговорився 😅 Продовжую шукати тобі живу людину — а поки загляни в 🍾 гру чи на 🧱 стіну зізнань.");
+  }
+  run("insert into ai_usage (user_id, day, n) values (?, ?, 1) on conflict (user_id, day) do update set n = n + 1", id, day);
+  const hist = aiHistory.get(id) ?? [];
+  hist.push({ role: "user", text: String(text).slice(0, 800) });
+  aiBusy.add(id);
+  try { await tg("sendChatAction", { chat_id: id, action: "typing" }); } catch {}
+  let answer;
+  try { answer = await chatReply(aiSystem(id), hist.slice(-16)); }
+  catch (err) { console.error("[bot] ai", err.message); answer = null; }
+  finally { aiBusy.delete(id); }
+  // Поки ШІ думав, людину могли з’єднати з живим співрозмовником.
+  if (!one("select ai_chat from users where id = ?", id)?.ai_chat) return;
+  if (!answer) { hist.pop(); return send(id, "🤖 Щось я задумався… Напиши ще раз 🙂"); }
+  answer = answer.replace(/^🤖\s*/, "").slice(0, 1500);
+  hist.push({ role: "model", text: answer });
+  aiHistory.set(id, hist.slice(-20));
+  // Відповідь ШІ не перекладаємо — вона вже мовою людини.
+  await tgRetry("sendMessage", { chat_id: id, text: `🤖 ${answer}` });
+}
+
 // 💡 Підказки для першого повідомлення: натиснув — питання пішло співрозмовнику.
 const ICEBREAKERS = [
   "Яка твоя найдивніша звичка? 😅",
@@ -1823,6 +1891,7 @@ async function onText(message, id, text) {
   // У діалозі текст завжди йде співрозмовнику, а не в анкету.
   if (pending && me.status !== "chat") return savePending(id, pending, ["form_gender", "form_aim", "form_photo", "gender"].includes(pending) ? toUk(text, CHOICE_WORDS) : text);
   if (me.status === "chat") return relay(message, id);
+  if (me.status === "search" && me.ai_chat) return aiTalk(id, text);
   if (me.status === "search") return send(id, "Пошук ще триває. «Завершити діалог» скасовує його.");
   // Код зі сторіз друга (10 символів) — одразу пишемо йому анонімно.
   const typed = text.trim().toLowerCase().replace(/^код[:\s]*/i, "").replace(/^c_/, "");
@@ -1896,6 +1965,7 @@ export async function handleUpdate(update) {
       else if (data.startsWith("lang:")) { ensure(id, from); await setLanguage(id, data.slice(5), queryId); }
       else if (data.startsWith("conf:")) await onConfessCallback(id, data, queryId, from);
       else if (data.startsWith("wall:")) await onWallCallback(id, data, update.callback_query);
+      else if (data === "ai:on") { await tg("answerCallbackQuery", { callback_query_id: queryId }); ensure(id, from); await aiStart(id); }
       else if (data.startsWith("likes:")) { ensure(id, from); await onLikesCallback(id, data, queryId); }
       else if (data.startsWith("like:")) { const [, v, tok] = data.split(":"); ensure(id, from); await onLike(id, v === "y", String(tok || "").replace(/[^a-f0-9]/g, "").slice(0, 12), queryId); }
       else if (data.startsWith("ice:")) { ensure(id, from); await onIcebreaker(id, Number(data.slice(4)), queryId); }

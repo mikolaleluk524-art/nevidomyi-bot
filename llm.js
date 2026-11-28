@@ -84,6 +84,39 @@ async function askGemini(prompt, schema, maxTokens) {
   throw new Error("Gemini не відповів:\n  " + errors.join("\n  "));
 }
 
+/**
+ * Звичайна розмова (для 🤖 ШІ-співрозмовника): system — інструкція, history — [{ role: "user"|"model", text }].
+ * Лише Gemini (безкоштовно). Повертає текст відповіді або кидає помилку.
+ */
+export async function chatReply(system, history, maxTokens = 400) {
+  if (!process.env.GEMINI_API_KEY) throw new Error("немає ключа ШІ");
+  const errors = [];
+  for (const model of GEMINI_MODELS) {
+    try {
+      const res = await fetch(`${GEMINI_URL}${model}:generateContent`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: history.map((m) => ({ role: m.role === "model" ? "model" : "user", parts: [{ text: m.text }] })),
+          generationConfig: { maxOutputTokens: maxTokens, temperature: 1 },
+        }),
+        signal: AbortSignal.timeout(20000),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        errors.push(`${model}: ${res.status} ${body?.error?.message || ""}`);
+        if (res.status === 401 || res.status === 403) break;
+        continue;
+      }
+      const text = (body.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("").trim();
+      if (text) return text;
+      errors.push(`${model}: порожня відповідь (${body.candidates?.[0]?.finishReason || body.promptFeedback?.blockReason || "?"})`);
+    } catch (err) { errors.push(`${model}: ${err.message}`); }
+  }
+  throw new Error("Gemini не відповів: " + errors.join("; "));
+}
+
 /** Повертає { source: "claude" | "gemini", data } або кидає помилку. */
 export async function askJSON(prompt, schema, maxTokens = 4000) {
   const provider = aiProvider();
