@@ -640,6 +640,11 @@ const ENTRIES = [
   ["«Скасувати пошук» — вийти.", "«Отменить поиск» — выйти.", "“Cancel search” to leave."],
   ["🤖 На сьогодні я вже наговорився 😅 Продовжую шукати тобі живу людину — а поки загляни в 🍾 гру чи на 🧱 стіну зізнань.", "🤖 На сегодня я уже наговорился 😅 Продолжаю искать тебе живого человека — а пока загляни в 🍾 игру или на 🧱 стену признаний.", "🤖 I've talked enough for today 😅 I'm still looking for a real person — meanwhile check out the 🍾 game or the 🧱 confession wall."],
   ["🤖 Щось я задумався… Напиши ще раз 🙂", "🤖 Что-то я задумался… Напиши ещё раз 🙂", "🤖 I got lost in thought… Write again 🙂"],
+  // 🎭 Код зі сторіз
+  ["🎭 Це код {0}. Що робимо?", "🎭 Это код {0}. Что делаем?", "🎭 That's {0}'s code. What do you want to do?"],
+  ["💌 Написати анонімно", "💌 Написать анонимно", "💌 Message anonymously"],
+  ["🍾 Сісти за стіл у грі", "🍾 Сесть за стол в игре", "🍾 Join their game table"],
+  ["🍾 Тебе вже чекають за столом:", "🍾 Тебя уже ждут за столом:", "🍾 They're waiting for you at the table:"],
 ];
 
 const exact = { ru: new Map(), en: new Map() };

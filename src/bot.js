@@ -792,7 +792,7 @@ const storyKb = { text: "📲 Викласти в сторіз", web_app: { url:
 export function storyInfo(id) {
   const me = one("select invite_code, adult, banned, lang, language_code from users where id = ?", String(id));
   if (!me || !me.adult || me.banned) return null;
-  return { code: me.invite_code, link: confessLink(me.invite_code), lang: LANGS.includes(me.lang) ? me.lang : guessLang(me.language_code) };
+  return { code: me.invite_code, link: confessLink(me.invite_code), tableLink: `https://t.me/${BOT_USERNAME}?start=t_${me.invite_code}`, lang: LANGS.includes(me.lang) ? me.lang : guessLang(me.language_code) };
 }
 const nameFor = (row) => (String(row?.first_name || "").trim().slice(0, 32) || "Ця людина");
 const cancelKb = { inline_keyboard: [[{ text: "✖️ Скасувати", callback_data: "conf:cancel" }]] };
@@ -1896,8 +1896,12 @@ async function onText(message, id, text) {
   // Код зі сторіз друга (10 символів) — одразу пишемо йому анонімно.
   const typed = text.trim().toLowerCase().replace(/^код[:\s]*/i, "").replace(/^c_/, "");
   if (/^[a-f0-9]{10}$/.test(typed)) {
-    const owner = one("select id from users where invite_code = ?", typed);
-    if (owner) return askConfess(id, owner.id);
+    const owner = one("select id, first_name from users where invite_code = ?", typed);
+    if (owner && owner.id === id) return showConfess(id);
+    if (owner) return send(id, `🎭 Це код ${nameFor(owner)}. Що робимо?`, { inline_keyboard: [
+      [{ text: "💌 Написати анонімно", callback_data: `code:c:${typed}` }],
+      [{ text: "🍾 Сісти за стіл у грі", callback_data: `code:t:${typed}` }],
+    ] });
   }
   await showLobby(id);
 }
@@ -1965,6 +1969,15 @@ export async function handleUpdate(update) {
       else if (data.startsWith("lang:")) { ensure(id, from); await setLanguage(id, data.slice(5), queryId); }
       else if (data.startsWith("conf:")) await onConfessCallback(id, data, queryId, from);
       else if (data.startsWith("wall:")) await onWallCallback(id, data, update.callback_query);
+      else if (data.startsWith("code:")) {
+        await tg("answerCallbackQuery", { callback_query_id: queryId });
+        const [, what, c] = data.split(":");
+        const owner = one("select id from users where invite_code = ?", String(c || "").replace(/[^a-f0-9]/g, "").slice(0, 10));
+        const me = ensure(id, from);
+        if (!owner || me.banned || !me.adult) await showLobby(id);
+        else if (what === "c") await askConfess(id, owner.id);
+        else { run("update users set join_with = ?, join_at = ? where id = ?", owner.id, nowSec(), id); await send(id, "🍾 Тебе вже чекають за столом:", { inline_keyboard: [[{ text: "🍾 Сісти за стіл", web_app: { url: GAME_URL } }]] }); }
+      }
       else if (data === "ai:on") { await tg("answerCallbackQuery", { callback_query_id: queryId }); ensure(id, from); await aiStart(id); }
       else if (data.startsWith("likes:")) { ensure(id, from); await onLikesCallback(id, data, queryId); }
       else if (data.startsWith("like:")) { const [, v, tok] = data.split(":"); ensure(id, from); await onLike(id, v === "y", String(tok || "").replace(/[^a-f0-9]/g, "").slice(0, 12), queryId); }
