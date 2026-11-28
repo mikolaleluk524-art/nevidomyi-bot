@@ -1,0 +1,16 @@
+{
+  "name": "salon",
+  "private": true,
+  "type": "module",
+  "description": "Застосунок б'юті-салону: онлайн-запис, передоплата, нагадування, маршрут, роботи, відгуки, бонуси",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node --experimental-sqlite server.js",
+    "dev": "DATA_DIR=./data node --experimental-sqlite --watch server.js"
+  },
+  "dependencies": {
+    "web-push": "3.6.7"
+  }
+}
