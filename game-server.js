@@ -155,7 +155,7 @@ function ed25519For(params, botId) {
 
 const verifyEd25519 = (params) => ed25519For(params, OUR_BOT_ID);
 
-function verifyInitData(raw) {
+export function verifyInitData(raw) {
   if (!raw || !BOT_TOKEN) throw new Error("Відкрий гру через Telegram.");
   const params = new URLSearchParams(raw);
   const hash = params.get("hash");

@@ -772,6 +772,14 @@ const HINT_STARS = 10;
 const CONFESS_MAX = 600;
 const CONFESS_PER_DAY = 30;
 const confessLink = (inviteCode) => `https://t.me/${BOT_USERNAME}?start=c_${inviteCode}`;
+// 📲 Сторіз однією кнопкою: міні-застосунок малює картинку з кодом і викладає її через Telegram.
+const STORY_URL = `https://${PUBLIC_DOMAIN}/story.html`;
+const storyKb = { text: "📲 Викласти в сторіз", web_app: { url: STORY_URL } };
+export function storyInfo(id) {
+  const me = one("select invite_code, adult, banned, lang, language_code from users where id = ?", String(id));
+  if (!me || !me.adult || me.banned) return null;
+  return { code: me.invite_code, link: confessLink(me.invite_code), lang: LANGS.includes(me.lang) ? me.lang : guessLang(me.language_code) };
+}
 const nameFor = (row) => (String(row?.first_name || "").trim().slice(0, 32) || "Ця людина");
 const cancelKb = { inline_keyboard: [[{ text: "✖️ Скасувати", callback_data: "conf:cancel" }]] };
 
@@ -783,8 +791,9 @@ async function showConfess(id) {
   const total = one("select count(*) as n from confessions where to_id = ?", id)?.n ?? 0;
   const share = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(tr(id, "Напиши мені анонімно 👀 Я не дізнаюсь, хто ти"))}`;
   await send(id, `💌 Анонімні зізнання\n\nВиклади своє посилання в сторіз, біо чи канал — і люди зможуть анонімно написати тобі, що насправді про тебе думають 👀\n\n${link}\n\nОтримано зізнань: ${total}`, { inline_keyboard: [
+    [storyKb],
     [{ text: "📨 Поділитися посиланням", url: share }],
-    [{ text: "📸 Картинка для сторіз", callback_data: "conf:story" }],
+    [{ text: "📸 Картинка для сторіз вручну", callback_data: "conf:story" }],
   ] });
 }
 
@@ -837,6 +846,7 @@ async function deliverConfession(id, text) {
   const share = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(tr(id, "Напиши мені анонімно 👀 Я не дізнаюсь, хто ти"))}`;
   await send(id, `✅ Надіслано анонімно!\n\nХочеш, щоб і тобі писали? Ось твоє посилання — виклади його в сторіз чи біо:\n${link}`, { inline_keyboard: [
     [{ text: "✍️ Написати ще", callback_data: "conf:more" }],
+    [storyKb],
     [{ text: "📨 Поділитися своїм посиланням", url: share }],
   ] });
 }
@@ -1814,6 +1824,12 @@ async function onText(message, id, text) {
   if (pending && me.status !== "chat") return savePending(id, pending, ["form_gender", "form_aim", "form_photo", "gender"].includes(pending) ? toUk(text, CHOICE_WORDS) : text);
   if (me.status === "chat") return relay(message, id);
   if (me.status === "search") return send(id, "Пошук ще триває. «Завершити діалог» скасовує його.");
+  // Код зі сторіз друга (10 символів) — одразу пишемо йому анонімно.
+  const typed = text.trim().toLowerCase().replace(/^код[:\s]*/i, "").replace(/^c_/, "");
+  if (/^[a-f0-9]{10}$/.test(typed)) {
+    const owner = one("select id from users where invite_code = ?", typed);
+    if (owner) return askConfess(id, owner.id);
+  }
   await showLobby(id);
 }
 
