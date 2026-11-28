@@ -443,7 +443,9 @@ async function showAge(chatId) {
   if (me?.profile_age && me.profile_age < 18) return send(chatId, "Вибач, бот лише для людей від 18 років. Повертайся, коли виповниться 18.", { remove_keyboard: true });
   if (!me?.gender) {
     run("update users set pending = 'onb_gender' where id = ?", id);
-    return send(chatId, "Невідомий — анонімний чат.\n\nСпіврозмовник не бачить твоє ім’я, юзернейм і номер. Не надсилай контакти, адресу чи фото документів.\n\nХто ти?", kbGender);
+    // Перший екран: коротко, що тут цікавого, і одне питання. Довгий текст про правила відлякував.
+    const online = Math.max(1, one("select count(*) as n from users where adult = 1 and last_seen > ?", nowSec() - 24 * 3600)?.n ?? 1);
+    return send(chatId, `👋 Привіт! Це «Невідомий» — нічний клуб у Telegram 🌙\n\n🍾 гра в бутилочку · 💌 анонімні зізнання · 💬 чат без імен\n🔥 За добу в клубі: ${online}\n\nДва питання — і ти всередині. Хто ти?`, kbGender);
   }
   run("update users set pending = 'onb_age' where id = ?", id);
   await send(chatId, "Скільки тобі років? Натисни своє число.", kbAgeGrid);
@@ -583,7 +585,7 @@ async function enqueue(id, mode) {
     } else {
       const text = result.mode === "speed"
         ? "⚡ Швидке побачення! У вас 3 хвилини.\n\nПотім кожен вирішить: ❤️ чи 👋. Взаємна симпатія відкриє чат без обмежень."
-        : "Співрозмовника знайдено. Пиши — я передам повідомлення без твого імені.\n\n«Наступний» шукає когось іншого. «Завершити діалог» зупиняє розмову.";
+        : "Співрозмовника знайдено. Пиши — я передам повідомлення без твого імені.\n\n«Наступний» шукає когось іншого. «Завершити діалог» зупиняє розмову.\n🛡 Не надсилай контакти, адресу й фото документів.";
       await send(id, text);
       try { await send(result.other, text); }
       catch (err) { if (isGone(err)) { await disconnect(id, "gone"); return "matched"; } }

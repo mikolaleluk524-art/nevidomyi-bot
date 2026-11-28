@@ -655,6 +655,12 @@ const ENTRIES = [
   ["🧱 нових постів на стіні: {0} — /wall", "🧱 новых постов на стене: {0} — /wall", "🧱 new wall posts: {0} — /wall"],
   ["🌙 нове питання дня — /question", "🌙 новый вопрос дня — /question", "🌙 a new question of the day — /question"],
   ["🎉 вечірка сьогодні о 21:00", "🎉 вечеринка сегодня в 21:00", "🎉 party tonight at 21:00"],
+  // 👋 Перший екран
+  ["👋 Привіт! Це «Невідомий» — нічний клуб у Telegram 🌙", "👋 Привет! Это «Невідомий» — ночной клуб в Telegram 🌙", "👋 Hi! This is Nevidomyi — a night club in Telegram 🌙"],
+  ["🍾 гра в бутилочку · 💌 анонімні зізнання · 💬 чат без імен", "🍾 игра в бутылочку · 💌 анонимные признания · 💬 чат без имён", "🍾 Spin the Bottle · 💌 anonymous confessions · 💬 chat without names"],
+  ["🔥 За добу в клубі: {0}", "🔥 За сутки в клубе: {0}", "🔥 In the club today: {0}"],
+  ["Два питання — і ти всередині. Хто ти?", "Два вопроса — и ты внутри. Кто ты?", "Two questions and you're in. Who are you?"],
+  ["🛡 Не надсилай контакти, адресу й фото документів.", "🛡 Не отправляй контакты, адрес и фото документов.", "🛡 Don't share contacts, your address or photos of documents."],
 ];
 
 const exact = { ru: new Map(), en: new Map() };
