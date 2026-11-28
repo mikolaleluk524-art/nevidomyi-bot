@@ -218,7 +218,7 @@ async function bookings(box) {
     if (ask && !confirm(ask)) return;
     try {
       await api(`/api/admin/bookings/${b.dataset.id}`, { body });
-      toast(st === "done" ? "Візит зараховано, бонуси нараховано 💎" : st === "confirmed" ? "Запис повернено ✓" : "Готово");
+      toast(st === "done" ? "Візит зараховано ✓" : st === "confirmed" ? "Запис повернено ✓" : "Готово");
     } catch (e) {
       toast(e.message, 4000);
     }
@@ -488,15 +488,14 @@ async function clients(box, q = "") {
   const list = await api(`/api/admin/clients?q=${encodeURIComponent(q)}`);
   box.innerHTML = `<input id="cq" placeholder="🔍 Імʼя або телефон" value="${esc(q)}">
     <div class="stack" style="margin-top:12px">${list.map((c) => `<div class="card">
-      <div class="row between"><b>${esc(c.name)}</b><span class="badge">💎 ${c.bonus}</span></div>
-      <div class="small"><a href="tel:${esc(tel(c.phone))}">${esc(tel(c.phone))}</a>${c.phone.includes(" #") ? ' <span class="badge mute">з зошита — номер уточнити</span>' : ""} <button class="btn sm line" data-cphone="${c.id}" data-name="${esc(c.name)}">✏️</button>${c.viber ? ' <span class="badge ok">💜 Viber</span>' : ""} · візитів: ${c.visits}${c.last_visit ? ` · останній ${c.last_visit}` : ""}</div>
+      <b>${esc(c.name)}</b>
+      <div class="small"><a href="tel:${esc(tel(c.phone))}">${esc(tel(c.phone))}</a>${c.phone.includes(" #") ? ' <span class="badge mute">з зошита — номер уточнити</span>' : ""} <button class="btn sm line" data-cphone="${c.id}" data-name="${esc(c.name)}">✏️</button> · візитів: ${c.visits}${c.last_visit ? ` · останній ${c.last_visit}` : ""}</div>
       <div class="small muted">${c.referred_by_name ? `привела: ${esc(c.referred_by_name)} · ` : ""}${c.invited ? `запросила: ${c.invited} · ` : ""}${c.birthday ? `🎂 ${c.birthday.slice(5)} · ` : ""}${c.src ? `QR: ${esc(c.src)}` : ""}</div>
       <label class="f"><span>Нотатка (бачите лише ви)</span><input data-note="${c.id}" value="${esc(c.note)}" placeholder="Алергія, улюблений колір…"></label>
       ${onlinePay ? `<label class="f"><span>Передоплата</span><select data-rule="${c.id}">
         <option value="" ${!c.prepay_rule ? "selected" : ""}>Автоматично (постійна — без, нова — за налаштуваннями)</option>
         <option value="never" ${c.prepay_rule === "never" ? "selected" : ""}>Завжди без передоплати</option>
         <option value="always" ${c.prepay_rule === "always" ? "selected" : ""}>Завжди з передоплатою</option></select></label>` : ""}
-      <div class="row" style="margin-top:8px"><button class="btn sm ghost" data-bonus="${c.id}">± Бонуси</button>${c.viber ? "" : `<button class="btn sm ghost" data-vlink="${c.id}" data-name="${esc(c.name)}">💜 Посилання на Viber</button>`}</div>
     </div>`).join("") || '<div class="empty">Нікого не знайдено</div>'}</div>`;
   let t;
   $("#cq").oninput = (e) => {
@@ -657,10 +656,9 @@ async function settings(box) {
       <div class="two">${f("slotStep", "Крок запису, хв", "number")}${f("minNoticeHours", "Запис мінімум за, год", "number")}</div>
       ${f("bookingDays", "Запис наперед, днів", "number")}
       ${s.onlinePay ? `<p class="small" style="margin-top:10px">Оплата: <b>${{ liqpay: "LiqPay підключено ✓", mono: "monobank підключено ✓" }[stats.payments] || "тестовий режим"}</b>${stats.payments === "demo" ? ". Щоб увімкнути справжню передоплату — зареєструйте магазин на liqpay.ua і додайте ключі в Railway: <code>LIQPAY_PUBLIC_KEY</code> і <code>LIQPAY_PRIVATE_KEY</code>." : ""}</p>` : ""}</div>
-    <div class="card"><h3>Бонуси і сертифікати</h3>
+    <div class="card"><h3>Подарункові сертифікати</h3>
       <div class="two">${f("giftAmounts", "Номінали сертифікатів, грн", "text")}${f("giftMonths", "Термін дії, місяців", "number")}</div>
-      <div class="two">${f("cashbackPercent", "Кешбек з візиту, %", "number")}${f("maxBonusPercent", "Макс. оплата бонусами, %", "number")}</div>
-      ${f("birthdayDiscount", "Знижка в тиждень дня народження, %", "number")}</div>
+</div>
     <button class="btn block big" id="save" style="margin-top:14px">Зберегти</button>
 
     <section class="section card"><h3>🔎 Google</h3>

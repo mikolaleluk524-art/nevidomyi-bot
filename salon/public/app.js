@@ -505,7 +505,6 @@ async function renderConfirm(back) {
       <label class="f"><span>Ваше імʼя</span><input id="name" autocomplete="name" value="${esc(me?.name || store.get("name") || "")}" placeholder="Олена"></label>
       <label class="f"><span>Телефон</span><input id="phone" type="tel" autocomplete="tel" inputmode="tel" value="${esc(me?.phone || store.get("phone") || "+380")}"></label>
       <label class="f"><span>Побажання (необовʼязково)</span><textarea id="comment" placeholder="Напр.: хочу нюдовий відтінок"></textarea></label>
-      ${me?.bonus > 0 ? `<label class="check"><input type="checkbox" id="useBonus"> Списати бонуси (є ${me.bonus})</label>` : ""}
     </div>
     <div class="card"><div class="sum" id="sum"><div class="spinner"></div></div></div>
     <p class="small muted" style="margin-top:12px">${esc(st.rules)} Безкоштовне скасування — не пізніше ніж за ${st.cancelHours} год.</p>
@@ -716,10 +715,7 @@ async function me() {
   const upcoming = m.bookings.filter((b) => ["confirmed", "pending", "request"].includes(b.status) && b.startUtc > Date.now() - 3600_000).reverse();
   const past = m.bookings.filter((b) => !upcoming.includes(b));
   view.innerHTML = `
-    <div class="bonus-card">
-      <div class="row between"><div><div class="small" style="opacity:.8">Вітаємо, ${esc(m.name.split(" ")[0])}</div><div class="val">${m.bonus}</div><div class="small" style="opacity:.8">бонусів · 1 бонус = 1 грн</div></div><div style="font-size:44px">💎</div></div>
-      <div class="small" style="margin-top:10px;opacity:.85">Кешбек ${s.cashbackPercent}% з кожного візиту. Бонусами можна оплатити до ${s.maxBonusPercent}% послуги.</div>
-    </div>
+    <h2 style="margin-top:6px">Вітаємо, ${esc(m.name.split(" ")[0])} 💛</h2>
 
     ${m.viber?.link ? (m.viber.linked
       ? `<div class="card row" style="margin-top:14px"><span style="font-size:26px">💜</span><div class="grow"><b>Нагадування у Viber увімкнені</b><div class="small muted">Напередодні візиту напишемо вам у Viber</div></div></div>`
@@ -759,16 +755,14 @@ async function me() {
       <h3>Мої дані</h3>
       <label class="f"><span>Імʼя</span><input id="pname" value="${esc(m.name)}"></label>
       <label class="f"><span>Телефон</span><input value="${esc(m.phone)}" disabled></label>
-      <label class="f"><span>День народження ${s.birthdayDiscount ? `— знижка ${s.birthdayDiscount}% у святковий тиждень 🎂` : ""}</span><input id="pbd" type="date" value="${esc(m.birthday)}" ${m.birthday ? "disabled" : ""}></label>
       <button class="btn ghost block" style="margin-top:12px" id="psave">Зберегти</button>
     </section>
 
-    ${m.bonusLog.length ? `<section class="section"><h3>Рух бонусів</h3><div class="card">${m.bonusLog.map((l) => `<div class="row between small" style="padding:4px 0"><span class="grow">${esc(l.reason)}</span><b style="color:${l.delta > 0 ? "var(--ok)" : "var(--bad)"}">${l.delta > 0 ? "+" : ""}${l.delta}</b></div>`).join("")}</div></section>` : ""}
   `;
   $("#push")?.addEventListener("click", async () => (await enablePush()) && me());
   $("#psave").onclick = async () => {
     try {
-      await api("/api/me", { body: { name: $("#pname").value, birthday: $("#pbd").value } });
+      await api("/api/me", { body: { name: $("#pname").value, birthday: ($("#pbd")?.value || "") } });
       toast("Збережено");
       me();
     } catch (e) {

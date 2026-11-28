@@ -253,9 +253,9 @@ export const DEFAULT_SETTINGS = {
   smsText: "Доброго вечора! Завтра о {час} чекаємо вас: Кушніренка 7а, оф.507", // 65 символів = 1 SMS (найдешевше)
   giftAmounts: "500, 800, 1000, 1500, 2000", // номінали подарункових сертифікатів
   giftMonths: 6, // термін дії сертифіката, місяців
-  cashbackPercent: 5, // кешбек бонусами з кожного візиту
-  maxBonusPercent: 50, // якою частиною вартості можна оплатити бонусами
-  birthdayDiscount: 10, // % знижки в тиждень дня народження
+  cashbackPercent: 0, // кешбек бонусами з кожного візиту
+  maxBonusPercent: 0, // якою частиною вартості можна оплатити бонусами
+  birthdayDiscount: 0, // % знижки в тиждень дня народження
   rules: "Будь ласка, приходьте за 5 хвилин до початку. Якщо запізнюєтесь більше ніж на 15 хвилин — запис може бути перенесено.",
 };
 
@@ -304,6 +304,14 @@ if (!one("SELECT 1 FROM settings WHERE key = '_gverify_v1'")) {
 if (!one("SELECT 1 FROM settings WHERE key = '_gverify_v2'")) {
   run("INSERT INTO settings(key, value) VALUES('googleVerify', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", JSON.stringify("BDmMIIBUS8FBYF1-i87kakrmuK_wvRtFQVaglABAqEg"));
   run("INSERT INTO settings(key, value) VALUES('_gverify_v2', '1')");
+}
+
+// Одноразово: прибираємо всі бонуси й знижки (кешбек, оплата бонусами, знижка на день народження)
+if (!one("SELECT 1 FROM settings WHERE key = '_no_discounts_v1'")) {
+  for (const k of ["cashbackPercent", "maxBonusPercent", "birthdayDiscount", "refBonus", "refDiscount"])
+    run("INSERT INTO settings(key, value) VALUES(?, '0') ON CONFLICT(key) DO UPDATE SET value = '0'", k);
+  run("UPDATE clients SET bonus = 0");
+  run("INSERT INTO settings(key, value) VALUES('_no_discounts_v1', '1')");
 }
 
 export function getSettings() {
