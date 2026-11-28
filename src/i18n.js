@@ -649,6 +649,12 @@ const ENTRIES = [
   ["💌 І ще: хочеш дізнатися, що про тебе думають насправді?", "💌 И ещё: хочешь узнать, что о тебе думают на самом деле?", "💌 One more thing: want to know what people really think of you?"],
   ["Виклади своє анонімне посилання в сторіз — друзі напишуть тобі зізнання, а ти не дізнаєшся, хто це 👀", "Выложи свою анонимную ссылку в сторис — друзья напишут тебе признания, а ты не узнаешь, кто это 👀", "Post your anonymous link to your Story — friends will send you confessions and you won't know who 👀"],
   ["💌 Моє посилання", "💌 Моя ссылка", "💌 My link"],
+  // 👋 З поверненням
+  ["👋 З поверненням! Поки тебе не було:", "👋 С возвращением! Пока тебя не было:", "👋 Welcome back! While you were away:"],
+  ["💌 тобі написали анонімно: {0} — /confess", "💌 тебе написали анонимно: {0} — /confess", "💌 anonymous messages for you: {0} — /confess"],
+  ["🧱 нових постів на стіні: {0} — /wall", "🧱 новых постов на стене: {0} — /wall", "🧱 new wall posts: {0} — /wall"],
+  ["🌙 нове питання дня — /question", "🌙 новый вопрос дня — /question", "🌙 a new question of the day — /question"],
+  ["🎉 вечірка сьогодні о 21:00", "🎉 вечеринка сегодня в 21:00", "🎉 party tonight at 21:00"],
 ];
 
 const exact = { ru: new Map(), en: new Map() };

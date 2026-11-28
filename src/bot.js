@@ -229,6 +229,8 @@ function openDatabase() {
   // 🤖 ШІ-співрозмовник, поки людина чекає в пошуку (лічильник повідомлень на добу).
   if (!next.prepare("pragma table_info(users)").all().some((c) => c.name === "ai_chat")) next.exec("alter table users add column ai_chat integer not null default 0");
   next.exec("create table if not exists ai_usage (user_id text not null, day text not null, n integer not null default 0, primary key (user_id, day))");
+  // 👋 «Поки тебе не було»: позначка, що людина повернулась після 3+ днів відсутності.
+  if (!next.prepare("pragma table_info(users)").all().some((c) => c.name === "welcome_back")) next.exec("alter table users add column welcome_back integer not null default 0");
   // 🧱 Стіна зізнань і 🌙 відповіді на питання дня — одна таблиця постів із реакціями.
   next.exec("create table if not exists posts (id text primary key, author_id text not null, kind text not null, day text, text text not null, created_at integer not null, reports integer not null default 0, hidden integer not null default 0, notified integer not null default 0)");
   next.exec("create index if not exists posts_kind on posts (kind, day, created_at)");
@@ -420,6 +422,8 @@ function ensure(id, from) {
     // Коди випадкові: у посиланні більше не зашифровано Telegram ID.
     run("insert into users (id, invite_code, public_code, created_at, last_seen) values (?, ?, ?, ?, ?)", id, code(10), code(10), nowSec(), nowSec());
   }
+  // Повернувся після 3+ днів — наступний екран лобі покаже, що нового.
+  if (existing?.adult && Number(existing.last_seen) && Number(existing.last_seen) < nowSec() - 3 * 86400) run("update users set welcome_back = 1 where id = ?", id);
   if (from) {
     run("update users set first_name = coalesce(?, first_name), username = ?, language_code = coalesce(?, language_code), last_seen = ? where id = ?", from.first_name ?? null, from.username ?? null, from.language_code ?? null, nowSec(), id);
   } else {
@@ -474,12 +478,25 @@ function liveLine() {
   try { players = Number(liveSource().players) || 0; } catch {}
   return `🔥 Зараз у клубі: ${Math.max(online, 1)} · за столами: ${players} · 💌 зізнань за добу: ${confessions}`;
 }
+// Що нового, поки людини не було: пости на стіні, отримані зізнання, питання дня, вечірка.
+function welcomeBack(id) {
+  const week = nowSec() - 7 * 86400;
+  const wall = one("select count(*) as n from posts where kind = 'wall' and hidden = 0 and created_at > ?", week)?.n ?? 0;
+  const mine = one("select count(*) as n from confessions where to_id = ? and created_at > ?", id, week)?.n ?? 0;
+  const lines = ["👋 З поверненням! Поки тебе не було:"];
+  if (mine) lines.push(`💌 тобі написали анонімно: ${mine} — /confess`);
+  if (wall) lines.push(`🧱 нових постів на стіні: ${wall} — /wall`);
+  lines.push(`🌙 нове питання дня — /question`);
+  lines.push(`🎉 вечірка сьогодні о 21:00`);
+  return lines.join("\n");
+}
 async function showLobby(chatId, lead) {
   let text = lead;
   if (!text) {
     text = liveLine();
     const n = likesCount(String(chatId));
     if (n) text += `\n💘 Тебе вподобали: ${n} — /likes`;
+    if (run("update users set welcome_back = 0 where id = ? and welcome_back = 1", String(chatId)).changes) text = welcomeBack(String(chatId)) + "\n\n" + text;
   }
   await send(chatId, text, menuFor(chatId));
 }
