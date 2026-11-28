@@ -747,7 +747,7 @@ async function me() {
         <div class="muted small">${esc(b.when)}</div>
         <div class="row wrap" style="margin-top:8px">
           <a class="btn sm ghost" href="#/book?service=${b.serviceId}&master=${b.masterId}">🔁 Записатись знову</a>
-          ${b.status === "done" && !b.reviewed ? `<button class="btn sm line" data-review="${b.id}">⭐ Відгук</button>` : ""}
+          ${b.status === "done" && b.fbToken && !b.feedback ? `<a class="btn sm" href="#/feedback/${b.fbToken}">😊 Оцінити візит</a>` : ""}
         </div>
       </div>`).join("")}</section>` : ""}
 
@@ -1041,6 +1041,51 @@ async function giftView(code) {
   };
 }
 
+// ================= Опитування після візиту =================
+async function feedbackPage(token) {
+  setTab("me");
+  header("Як пройшов візит?", () => (location.hash = "#/"));
+  const d = await api(`/api/feedback/${encodeURIComponent(token)}`);
+  if (d.answered) {
+    view.innerHTML = `<div class="empty"><div class="ic">💛</div><h2>Дякуємо!</h2><p>Ви вже оцінили цей візит.</p><a class="btn" href="#/book">Записатися знову</a></div>`;
+    return;
+  }
+  const dt = new Date(d.date + "T12:00").toLocaleDateString("uk-UA", { day: "numeric", month: "long" });
+  const ans = {};
+  view.innerHTML = `
+    <div class="card center"><div class="small muted">${esc(dt)}, ${esc(d.time)} · ${esc(d.master)}</div><b>${esc(d.service.startsWith("Запис із зошита") ? "Ваш візит" : d.service)}</b></div>
+    ${d.questions.map((q, i) => `<div class="card fbq" data-q="${q.id}">
+      <b>${i + 1}. ${esc(q.q)}</b>
+      <div class="fbopts">${q.options.map(([e, t]) => `<button class="fbo" data-e="${esc(e)}"><span>${e}</span><small>${esc(t)}</small></button>`).join("")}</div>
+    </div>`).join("")}
+    <div class="card">
+      <b>Що можна зробити ще краще? <span class="muted small">(необовʼязково)</span></b>
+      <textarea id="fbtext" placeholder="Напишіть кілька слів…" style="margin-top:8px"></textarea>
+      <label class="check"><input type="checkbox" id="fbpub"> Можна показати мій відгук на сайті</label>
+      <label class="f hidden" id="fbnamew"><span>Як підписати відгук</span><input id="fbname" placeholder="Напр.: Олена"></label>
+    </div>
+    <div class="err" id="fberr"></div>
+    <button class="btn block big" id="fbsend" style="margin-top:12px">Надіслати</button>`;
+  view.querySelectorAll(".fbq").forEach((card) =>
+    card.querySelectorAll(".fbo").forEach((b) => (b.onclick = () => {
+      ans[card.dataset.q] = b.dataset.e;
+      card.querySelectorAll(".fbo").forEach((x) => x.classList.toggle("on", x === b));
+    }))
+  );
+  $("#fbpub").onchange = (e) => $("#fbnamew").classList.toggle("hidden", !e.target.checked);
+  $("#fbsend").onclick = async () => {
+    $("#fberr").textContent = "";
+    if (!ans.result) return ($("#fberr").textContent = "Оберіть, будь ласка, смайлик у першому питанні");
+    try {
+      await api(`/api/feedback/${encodeURIComponent(token)}`, { body: { answers: ans, text: $("#fbtext").value, publish: $("#fbpub").checked, publicName: $("#fbname").value } });
+      meCache = null;
+      view.innerHTML = `<div class="empty"><div class="ic">${ans.result}</div><h2>Дякуємо за відповідь!</h2><p>Марина Олександрівна обовʼязково прочитає 💛</p><a class="btn" href="#/book">Записатися знову</a></div>`;
+    } catch (e) {
+      $("#fberr").textContent = e.message;
+    }
+  };
+}
+
 // ================= Роутер =================
 const routes = [
   [/^\/?$/, home],
@@ -1051,6 +1096,7 @@ const routes = [
   [/^\/me$/, me],
   [/^\/map$/, () => visit(null)],
   [/^\/gift$/, giftBuy],
+  [/^\/feedback\/([\w-]{6,40})$/, (m) => feedbackPage(m[1])],
   [/^\/gift\/([A-Za-z0-9-]+)$/, (m) => giftView(m[1])],
   [/^\/visit\/(\d+)$/, (m) => visit(m[1])],
   [/^\/paid\/(\d+)$/, (m) => paid(m[1])],

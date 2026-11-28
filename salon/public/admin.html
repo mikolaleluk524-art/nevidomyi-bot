@@ -45,6 +45,10 @@
     .theme.on { border-color: var(--accent); }
     .theme .sw { display: flex; gap: 4px; justify-content: center; align-items: center; height: 46px; border-radius: 12px; margin-bottom: 4px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
     .theme .sw i { width: 18px; height: 18px; border-radius: 50%; }
+    .rate-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 6px; }
+    .rt { border: 1.5px solid var(--line); background: var(--card); color: var(--ink); border-radius: 12px; padding: 6px 2px; display: flex; flex-direction: column; align-items: center; font: 600 10px var(--sans); cursor: pointer; }
+    .rt span { font-size: 22px; }
+    .rt.on { border-color: var(--accent); background: var(--accent-soft); }
     nav.bar { display: none; }
     body { padding-bottom: 30px; }
   </style>

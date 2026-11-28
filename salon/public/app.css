@@ -282,3 +282,10 @@ nav.bar a.cta .ic { background: var(--accent); width: 46px; height: 46px; border
 .chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .thumb.shot { width: 120px; height: 213px; }
 .grid.shots .ph { aspect-ratio: 9 / 16; }
+
+/* Опитування після візиту */
+.fbq b { display: block; margin-bottom: 10px; }
+.fbopts { display: flex; gap: 6px; }
+.fbo { flex: 1 1 0; min-width: 0; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); border-radius: 14px; padding: 8px 4px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; font: 600 11px var(--sans); }
+.fbo span { font-size: 28px; line-height: 1.1; }
+.fbo.on { border-color: var(--accent); background: var(--accent-soft); }

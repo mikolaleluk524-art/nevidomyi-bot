@@ -91,6 +91,9 @@ const TABS = [
   ["qr", "🔳 QR-постери"],
   ["settings", "⚙️ Салон"],
 ];
+// Рейтинг клієнтки (бачить лише майстер)
+const RATINGS = [["😍", "Улюблена"], ["🙂", "Приємна"], ["😐", "Звичайна"], ["⏰", "Запізнюється"], ["😤", "Складна"], ["🚫", "Не записувати"]];
+const ratingLabel = (e) => (RATINGS.find((r) => r[0] === e) || [e, ""])[1];
 let services = [];
 let onlinePay = false; // онлайн-оплата (передоплата, продаж сертифікатів) — поки вимкнена
 let masters = [];
@@ -164,11 +167,13 @@ async function bookings(box) {
         <div class="card bk ${b.status}">
           <div class="t">${b.time}<small>${b.duration} хв</small></div>
           <div class="grow">
-            <b>${esc(b.clientName)}</b> ${b.visits ? `<span class="badge mute">${b.visits} віз.</span>` : '<span class="badge">нова</span>'}
+            <b>${esc(b.clientName)}</b> ${b.clientRating ? `<span title="${esc(ratingLabel(b.clientRating))}">${b.clientRating}</span>` : ""} ${b.visits ? `<span class="badge mute">${b.visits} віз.</span>` : '<span class="badge">нова</span>'}
+            ${b.feedback ? `<div class="small" style="margin-top:2px">Оцінка клієнтки: <span style="font-size:16px">${Object.values(b.feedback.answers).join(" ")}</span>${b.feedback.text ? ` · 💬 ${esc(b.feedback.text)}` : ""}</div>` : ""}
             <div class="small">${esc(b.service)}${masters.length > 1 ? " · " + esc(b.master) : ""}</div>
             <div class="small muted">${b.price ? money(b.price - b.discount - b.bonusUsed) : "ціну уточнити"}${b.paid ? ` · передоплата ${money(b.paid)} ✓` : ""}${b.bonusUsed ? ` · бонуси −${b.bonusUsed}` : ""}${b.discount ? ` · знижка −${b.discount}` : ""} · ${STATUS[b.status]}</div>
             ${b.comment ? `<div class="small" style="margin-top:4px">💬 ${esc(b.comment)}</div>` : ""}
             ${b.clientNote ? `<div class="small muted">📝 ${esc(b.clientNote)}</div>` : ""}
+            ${b.status === "done" && !b.feedback ? `<div class="row wrap" style="margin-top:8px"><button class="btn sm ghost" data-fb="${b.id}">💬 Надіслати опитування</button></div>` : ""}
             <div class="row wrap" style="margin-top:8px">
               <a class="btn sm line" href="tel:${esc(tel(b.clientPhone))}">📞</a>
               <a class="btn sm line" href="viber://chat?number=${esc(tel(b.clientPhone).replace("+", "%2B"))}">Viber</a>
@@ -223,6 +228,16 @@ async function bookings(box) {
       toast(e.message, 4000);
     }
     route();
+  }));
+  box.querySelectorAll("[data-fb]").forEach((b) => (b.onclick = async () => {
+    const { link } = await api(`/api/admin/bookings/${b.dataset.fb}/feedback-link`);
+    const text = `Дякую, що завітали до «Магії краси»! 💛 Оцініть, будь ласка, візит — це 20 секунд: ${link}`;
+    if (navigator.share) {
+      try { await navigator.share({ text }); } catch {}
+    } else {
+      await navigator.clipboard?.writeText(text);
+      toast("Текст із посиланням скопійовано — надішліть клієнтці у Viber чи Telegram", 4000);
+    }
   }));
   box.querySelectorAll("[data-phone]").forEach((b) => (b.onclick = () => phoneForm(b.dataset.phone, b.dataset.name)));
   box.querySelectorAll("[data-unblock]").forEach((b) => (b.onclick = async () => {
@@ -465,8 +480,18 @@ async function photos(box) {
 
 // ---------- відгуки ----------
 async function reviews(box) {
-  const list = await api("/api/admin/reviews");
-  box.innerHTML = list.length ? list.map((r) => `<div class="card" style="margin-top:10px">
+  const [list, fb] = await Promise.all([api("/api/admin/reviews"), api("/api/admin/feedback")]);
+  const avg = fb.list.length ? (fb.list.reduce((s, f) => s + f.mood, 0) / fb.list.length).toFixed(1) : null;
+  const fbHtml = `<section class="card"><h3>😊 Оцінки візитів</h3>
+    ${fb.list.length ? `<p class="small muted">Середня оцінка: <b>${avg} / 5</b> · відповідей: ${fb.list.length}. Ці оцінки бачите лише ви.</p>
+      ${fb.list.map((f) => `<div style="padding:8px 0;border-bottom:1px solid var(--line)">
+        <div class="row between"><b>${esc(f.client_name)}</b><span class="small muted">${f.date.slice(8)}.${f.date.slice(5, 7)}</span></div>
+        <div style="font-size:20px;margin-top:2px">${fb.questions.map((q) => f.answers[q.id] ? `<span title="${esc(q.q)}">${f.answers[q.id]}</span>` : "").join(" ")}</div>
+        ${f.text ? `<div class="small">💬 ${esc(f.text)}</div>` : ""}</div>`).join("")}`
+    : `<p class="small muted">Поки немає. Після візиту клієнтка з застосунком отримає прохання оцінити візит, а іншим натисніть «💬 Надіслати опитування» біля запису в розділі «Записи».</p>`}
+    <details style="margin-top:8px"><summary class="small">Питання опитування</summary>${fb.questions.map((q, i) => `<div class="small" style="padding:3px 0">${i + 1}. ${esc(q.q)} ${q.options.map((o) => o[0]).join(" ")}</div>`).join("")}<div class="small">7. Що можна зробити ще краще? (текст)</div></details>
+  </section><h3 style="margin-top:16px">⭐ Публічні відгуки на сайті</h3>`;
+  box.innerHTML = fbHtml + (list.length ? list.map((r) => `<div class="card" style="margin-top:10px">
     <div class="row between"><b>${esc(r.name)} · <span class="stars">${"★".repeat(r.rating)}</span></b><span class="badge ${r.status === "approved" ? "ok" : r.status === "pending" ? "warn" : "mute"}">${{ approved: "опубліковано", pending: "новий", hidden: "приховано" }[r.status]}</span></div>
     <div class="small muted">${esc(r.service)} · ${new Date(r.created_at).toLocaleDateString("uk-UA")}</div>
     <p style="margin-top:6px">${esc(r.text) || "<i class='muted'>без тексту</i>"}</p>
@@ -475,7 +500,7 @@ async function reviews(box) {
       ${r.status !== "approved" ? `<button class="btn sm" data-st="approved" data-id="${r.id}">Опублікувати</button>` : ""}
       ${r.status !== "hidden" ? `<button class="btn sm line" data-st="hidden" data-id="${r.id}">Приховати</button>` : ""}
       <button class="btn sm ghost" data-st="" data-id="${r.id}">Зберегти відповідь</button>
-    </div></div>`).join("") : '<div class="empty"><div class="ic">⭐</div>Відгуків поки немає. Клієнтки отримають прохання залишити відгук через кілька годин після візиту.</div>';
+    </div></div>`).join("") : '<div class="empty"><div class="ic">⭐</div>Публічних відгуків поки немає. Клієнтка може погодитися показати свій відгук на сайті, коли оцінює візит.</div>');
   box.querySelectorAll("[data-id]").forEach((b) => (b.onclick = async () => {
     await api(`/api/admin/reviews/${b.dataset.id}`, { body: { status: b.dataset.st || undefined, reply: $(`[data-reply="${b.dataset.id}"]`).value } });
     toast("Готово");
@@ -488,7 +513,9 @@ async function clients(box, q = "") {
   const list = await api(`/api/admin/clients?q=${encodeURIComponent(q)}`);
   box.innerHTML = `<input id="cq" placeholder="🔍 Імʼя або телефон" value="${esc(q)}">
     <div class="stack" style="margin-top:12px">${list.map((c) => `<div class="card">
-      <b>${esc(c.name)}</b>
+      <div class="row between"><b>${esc(c.name)} ${c.rating || ""}</b>${c.avg_mood ? `<span class="small muted">оцінює візити: ${c.avg_mood} / 5</span>` : ""}</div>
+      <div class="small muted" style="margin-top:6px">Ваш рейтинг клієнтки (бачите лише ви):</div>
+      <div class="rate-row">${RATINGS.map(([e, t]) => `<button class="rt ${c.rating === e ? "on" : ""}" data-rate="${c.id}" data-e="${e}" title="${t}"><span>${e}</span><small>${t}</small></button>`).join("")}</div>
       <div class="small"><a href="tel:${esc(tel(c.phone))}">${esc(tel(c.phone))}</a>${c.phone.includes(" #") ? ' <span class="badge mute">з зошита — номер уточнити</span>' : ""} <button class="btn sm line" data-cphone="${c.id}" data-name="${esc(c.name)}">✏️</button> · візитів: ${c.visits}${c.last_visit ? ` · останній ${c.last_visit}` : ""}</div>
       <div class="small muted">${c.referred_by_name ? `привела: ${esc(c.referred_by_name)} · ` : ""}${c.invited ? `запросила: ${c.invited} · ` : ""}${c.birthday ? `🎂 ${c.birthday.slice(5)} · ` : ""}${c.src ? `QR: ${esc(c.src)}` : ""}</div>
       <label class="f"><span>Нотатка (бачите лише ви)</span><input data-note="${c.id}" value="${esc(c.note)}" placeholder="Алергія, улюблений колір…"></label>
@@ -512,6 +539,12 @@ async function clients(box, q = "") {
       await navigator.clipboard?.writeText(text);
       toast("Посилання скопійовано — надішліть його клієнтці");
     }
+  }));
+  box.querySelectorAll("[data-rate]").forEach((b) => (b.onclick = async () => {
+    const same = b.classList.contains("on");
+    await api(`/api/admin/clients/${b.dataset.rate}`, { body: { rating: same ? "" : b.dataset.e } });
+    b.parentElement.querySelectorAll(".rt").forEach((x) => x.classList.toggle("on", !same && x === b));
+    toast(same ? "Рейтинг прибрано" : `Збережено: ${b.dataset.e} ${ratingLabel(b.dataset.e)}`);
   }));
   box.querySelectorAll("[data-cphone]").forEach((b) => (b.onclick = () => phoneForm(b.dataset.cphone, b.dataset.name)));
   box.querySelectorAll("[data-rule]").forEach((sel) => (sel.onchange = async () => {

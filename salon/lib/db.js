@@ -196,6 +196,8 @@ for (const [table, col, def] of [
   ["services", "price_from", "INTEGER DEFAULT 0"], // 1 = показувати ціну як «від …»
   ["clients", "prepay_rule", "TEXT DEFAULT ''"], // '' = автоматично, never = без передоплати, always = завжди з передоплатою
   ["bookings", "sms_sent", "INTEGER DEFAULT 0"],
+  ["clients", "rating", "TEXT DEFAULT ''"], // рейтинг клієнтки від майстра (смайлик), бачить лише майстер
+  ["bookings", "fb_token", "TEXT"], // посилання на опитування після візиту
   ["clients", "viber_id", "TEXT"], // id клієнтки у Viber-боті (якщо підписалася) // SMS-нагадування напередодні вже надіслано
   ["bookings", "pay_until", "INTEGER DEFAULT 0"], // до коли треба сплатити передоплату (після рішення майстра)
 ]) {

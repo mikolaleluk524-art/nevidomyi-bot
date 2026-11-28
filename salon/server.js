@@ -19,6 +19,7 @@ import { all, db, getSecret, getSettings, integrity, one, run, setSecret, setSet
 import { backupPath, listBackups, runBackups, startBackups } from "./lib/backup.js";
 import { lastSms, realPhone, sendSms, smsBalance, smsLog, smsOn, smsText, smsTick, smsTomorrowPreview } from "./lib/sms.js";
 import { handleViber, setViberWebhook, verifySignature, viberInfo, viberLink, viberOn } from "./lib/viber.js";
+import { CLIENT_RATINGS, QUESTIONS, feedbackByToken, feedbackFor, feedbackList, feedbackToken, saveFeedback, summary } from "./lib/feedback.js";
 import { readTemplate, renderIndex, robots, sitemap } from "./lib/seo.js";
 import { botInfo, linkCode, ownerChats, removeChat, startTelegram, telegramOn } from "./lib/telegram.js";
 import { addDays, hm, humanDate, isDate, kyivNow, kyivToUtc, toMin } from "./lib/time.js";
@@ -195,7 +196,7 @@ function me(client) {
      JOIN clients c ON c.id = b.client_id JOIN masters m ON m.id = b.master_id
      WHERE b.client_id = ? AND b.status != 'expired' ORDER BY b.start_utc DESC LIMIT 50`,
     client.id
-  ).map(publicBooking);
+  ).map((b) => ({ ...publicBooking(b), fbToken: b.status === "done" ? feedbackToken(b.id) : null, feedback: b.status === "done" ? Boolean(feedbackFor(b.id)) : false }));
   const invited = all("SELECT name, ref_rewarded FROM clients WHERE referred_by = ?", client.id);
   return {
     name: client.name,
@@ -415,6 +416,37 @@ async function api(req, res, url) {
     return send(res, 200, publicGift(g));
   }
 
+  // --- опитування після візиту (за посиланням, без входу) ---
+  const fm = p.match(/^\/api\/feedback\/([\w-]{6,40})$/);
+  if (fm) {
+    const f = feedbackByToken(fm[1]);
+    if (!f) throw new HttpError(404, "Посилання не знайдено");
+    const b = f.booking;
+    if (m === "GET") return send(res, 200, { answered: f.answered, service: b.service_name, date: b.date, time: hm(b.start), master: b.master, questions: QUESTIONS });
+    if (m === "POST") {
+      if (f.answered) return send(res, 200, { ok: true, already: true });
+      rateLimit(req, "fb", 20, 3600_000);
+      const body = await json(req);
+      let r;
+      try {
+        r = saveFeedback(b.id, b.client_id, body.answers, body.text);
+      } catch (e) {
+        throw new HttpError(400, e.message);
+      }
+      const c = one("SELECT name FROM clients WHERE id = ?", b.client_id);
+      // Публічний відгук — лише якщо клієнтка сама погодилась і написала текст
+      if (body.publish && String(body.text || "").trim() && !one("SELECT id FROM reviews WHERE booking_id = ?", b.id)) {
+        run("INSERT INTO reviews(client_id, booking_id, name, service, rating, text, created_at) VALUES(?,?,?,?,?,?,?)", b.client_id, b.id, String(body.publicName || "").trim().slice(0, 40) || "Клієнтка", b.service_name, r.mood, String(body.text).slice(0, 1500), Date.now());
+      }
+      notifyOwner({
+        title: `${r.answers.result} Оцінка візиту: ${c?.name || ""}`,
+        body: `${b.service_name}, ${b.date.slice(8)}.${b.date.slice(5, 7)}\n${summary(r.answers)}${body.text ? `\n💬 ${String(body.text).slice(0, 300)}` : ""}`,
+        url: "/admin#reviews",
+      }).catch(() => {});
+      return send(res, 200, { ok: true, mood: r.mood });
+    }
+  }
+
   if (m === "GET" && p === "/api/me") return send(res, 200, me(client()));
 
   if (m === "POST" && p === "/api/me") {
@@ -529,12 +561,13 @@ async function adminApi(req, res, p, m, q) {
     const rows = all(
       `SELECT b.*, c.name AS client_name, c.phone AS client_phone, c.note AS client_note, m.name AS master_name,
         (SELECT COUNT(*) FROM bookings x WHERE x.client_id = b.client_id AND x.status = 'done') AS visits,
-        (SELECT COUNT(*) FROM bookings x WHERE x.client_id = b.client_id AND x.status = 'no_show') AS no_shows
+        (SELECT COUNT(*) FROM bookings x WHERE x.client_id = b.client_id AND x.status = 'no_show') AS no_shows,
+        c.rating AS client_rating
        FROM bookings b JOIN clients c ON c.id = b.client_id JOIN masters m ON m.id = b.master_id
        WHERE b.date BETWEEN ? AND ? AND b.status != 'expired' ORDER BY b.date, b.start`,
       from,
       to
-    ).map((b) => ({ ...publicBooking(b), clientName: b.client_name, clientPhone: b.client_phone, clientNote: b.client_note, comment: b.comment, visits: b.visits, noShows: b.no_shows, source: b.source, clientId: b.client_id, smsSent: Boolean(b.sms_sent), sms: lastSms(b.id) || null }));
+    ).map((b) => ({ ...publicBooking(b), clientName: b.client_name, clientPhone: b.client_phone, clientNote: b.client_note, comment: b.comment, visits: b.visits, noShows: b.no_shows, source: b.source, clientId: b.client_id, smsSent: Boolean(b.sms_sent), sms: lastSms(b.id) || null, clientRating: b.client_rating || "", feedback: b.status === "done" ? feedbackFor(b.id) : null }));
     const blocks = all("SELECT * FROM blocks WHERE date BETWEEN ? AND ? ORDER BY date, start", from, to);
     return send(res, 200, { from, to, bookings: rows, blocks });
   }
@@ -839,6 +872,9 @@ async function adminApi(req, res, p, m, q) {
   }
 
   if (m === "GET" && p === "/api/admin/reviews") return send(res, 200, all("SELECT * FROM reviews ORDER BY id DESC LIMIT 300"));
+  if (m === "GET" && p === "/api/admin/feedback") return send(res, 200, { questions: QUESTIONS, list: feedbackList() });
+  const fl = p.match(/^\/api\/admin\/bookings\/(\d+)\/feedback-link$/);
+  if (fl && m === "GET") return send(res, 200, { link: `${baseUrl(req)}/#/feedback/${feedbackToken(Number(fl[1]))}` });
   const rm = p.match(/^\/api\/admin\/reviews\/(\d+)$/);
   if (rm && m === "POST") {
     const body = await json(req);
@@ -856,7 +892,8 @@ async function adminApi(req, res, p, m, q) {
       res,
       200,
       all(
-        `SELECT c.id, c.name, c.phone, c.bonus, c.birthday, c.note, c.ref_code, c.src, c.prepay_rule, c.created_at, c.viber_id IS NOT NULL AS viber,
+        `SELECT c.id, c.name, c.phone, c.bonus, c.birthday, c.note, c.ref_code, c.src, c.prepay_rule, c.created_at, c.viber_id IS NOT NULL AS viber, c.rating,
+          (SELECT ROUND(AVG(f.mood), 1) FROM feedback f WHERE f.client_id = c.id) AS avg_mood,
           (SELECT name FROM clients r WHERE r.id = c.referred_by) AS referred_by_name,
           (SELECT COUNT(*) FROM bookings b WHERE b.client_id = c.id AND b.status = 'done') AS visits,
           (SELECT MAX(date) FROM bookings b WHERE b.client_id = c.id AND b.status = 'done') AS last_visit,
@@ -872,6 +909,7 @@ async function adminApi(req, res, p, m, q) {
     const body = await json(req);
     const id = Number(cm[1]);
     if (typeof body.note === "string") run("UPDATE clients SET note = ? WHERE id = ?", body.note.slice(0, 1000), id);
+    if (typeof body.rating === "string" && (body.rating === "" || CLIENT_RATINGS.some(([e]) => e === body.rating))) run("UPDATE clients SET rating = ? WHERE id = ?", body.rating, id);
     if (typeof body.name === "string" && body.name.trim()) run("UPDATE clients SET name = ? WHERE id = ?", body.name.trim().slice(0, 80), id);
     if (typeof body.phone === "string") {
       const phone = normPhone(body.phone);
@@ -1169,8 +1207,8 @@ async function tick() {
     if (b.start_utc < now - 3 * 86400_000) continue;
     await pushClient(b.client_id, {
       title: "Як вам результат? ✨",
-      body: "Залиште коротенький відгук — це дуже допомагає майстру.",
-      url: `/#/review/${b.id}`,
+      body: "Оцініть візит смайликами — це 20 секунд і дуже допомагає Марині 💛",
+      url: `/#/feedback/${feedbackToken(b.id)}`,
     });
   }
 }
